@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="stylesheet" href="bunkkkro.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BunkKro — Can I bunk today?</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- ✨ ADDED: Supabase CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+ 
+<button class="mob-menu" id="mob-menu" onclick="toggleSidebar()">☰</button>
+ 
+<!-- ══════ SIDEBAR ══════ -->
+<div class="sidebar" id="sidebar">
+  <div class="logo">
+    <h1>bunk<span>kro</span></h1>
+    <div class="logo-sub">can i bunk today?</div>
+  </div>
+  <nav>
+    <div class="nav-label">Menu</div>
+    <div class="nav-item active" id="nav-home" onclick="goPage('home')">
+      <div class="nav-dot"></div> Home
+    </div>
+    <div class="nav-item" id="nav-tracker" onclick="goPage('tracker')">
+      <div class="nav-dot"></div> Daily Tracker
+    </div>
+    <div class="nav-label">Subjects</div>
+    <div id="nav-subjects"></div>
+    <div class="nav-add" onclick="openAddModal()">+ Add Subject</div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="target-row">
+      <span>Global Target</span>
+      <div class="target-wrap">
+        <input type="number" id="global-target" min="1" max="100" value="75" onchange="updateGlobalTarget(this.value)">
+        <span class="sym">%</span>
+      </div>
+    </div>
+    <div class="target-hint">default for all subjects</div>
+    <!-- ✨ ADDED: Logout button -->
+    <button class="logout-btn" id="logout-btn" onclick="handleLogout()" style="display:none">🚪 Logout</button>
+  </div>
+</div>
+ 
+<!-- ══════ MAIN ══════ -->
+<div class="main" id="main">
+ 
+  <!-- ░░ HOME ░░ -->
+  <div class="page active" id="page-home">
+    <div class="ph">
+      <h2 id="home-head">Overview</h2>
+      <p id="home-sub"></p>
+    </div>
+    <div class="stats-grid" id="stats-grid"></div>
+    <div id="verdict-wrap"></div>
+    <div class="streak-row" id="streak-row"></div>
+    <div class="subject-cards" id="subject-cards"></div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Class History <span>present vs absent</span></div>
+        <div class="bar-chart" id="bar-chart"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Quick View</div>
+        <div id="quick-view"></div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- ░░ SUBJECT PAGE ░░ -->
+  <div class="page" id="page-subject">
+    <div class="subj-page-header">
+      <button class="back-btn" onclick="goPage('home')">← Back</button>
+      <div>
+        <h2 id="sp-title" style="font-family:'Syne',sans-serif;font-size:1.45rem;font-weight:800"></h2>
+        <p id="sp-meta" style="font-size:.7rem;color:var(--muted);margin-top:2px"></p>
+      </div>
+    </div>
+    <div class="circ-section">
+      <div class="circ-wrap">
+        <svg viewBox="0 0 148 148">
+          <circle class="circ-bg" cx="74" cy="74" r="64"/>
+          <circle class="circ-fill" id="circ-fill" cx="74" cy="74" r="64"/>
+        </svg>
+        <div class="circ-label">
+          <div class="circ-pct" id="circ-pct">--</div>
+          <div class="circ-sub">attendance</div>
+        </div>
+      </div>
+      <div class="circ-info">
+        <h3 id="sp-name"></h3>
+        <p class="circ-roast" id="sp-roast"></p>
+        <div class="chips" id="sp-chips"></div>
+      </div>
+    </div>
+ 
+    <div class="adv-card">
+      <h4>🤖 Bunk Advisor</h4>
+      <div id="adv-pills"></div>
+      <div class="adv-text" id="adv-text"></div>
+    </div>
+ 
+    <div class="adv-card">
+      <h4>🔮 Bunk Simulator <span style="font-size:.6rem;font-weight:400;color:var(--muted);font-family:'DM Mono',monospace">how bad can it get?</span></h4>
+      <div class="sim-ctrl">
+        <span class="sim-lbl">skip</span>
+        <div class="sim-stepper">
+          <button onclick="adjSim(-1)">&#8722;</button>
+          <input type="number" id="sim-input" value="0" min="0" max="999" oninput="updateSim()">
+          <button onclick="adjSim(1)">+</button>
+        </div>
+        <span class="sim-lbl">more classes</span>
+        <button class="sim-reset" onclick="resetSim()">↺ Reset</button>
+      </div>
+      <div id="sim-result"></div>
+    </div>
+ 
+    <div class="edit-card">
+      <h4>
+        ✏️ Update Numbers
+        <span id="mode-label"></span>
+        <button class="mode-toggle" onclick="toggleMode()">Switch Mode</button>
+      </h4>
+      <div id="form-exact" class="edit-grid">
+        <div class="field"><label>Total Classes</label><input type="number" id="inp-total" placeholder="e.g. 40" min="0"></div>
+        <div class="field"><label>Present</label><input type="number" id="inp-present" placeholder="e.g. 30" min="0"></div>
+        <div class="field"><label>Absent</label><input type="number" id="inp-absent" placeholder="auto" readonly></div>
+        <div class="field"><label>Classes / Week</label><input type="number" id="inp-perweek" placeholder="e.g. 3" min="1" max="30"></div>
+        <div class="field" style="grid-column:span 2"><label>Target % <span style="color:var(--muted);font-size:.56rem;text-transform:none;letter-spacing:0">(blank = global)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100"></div>
+      </div>
+      <div id="form-est" style="display:none">
+        <div class="edit-grid">
+          <div class="field"><label>Semester Start</label><input type="date" id="inp-semstart"></div>
+          <div class="field"><label>Classes / Week</label><input type="number" id="inp-est-pw" placeholder="e.g. 3" min="1"></div>
+          <div class="field"><label>Missed Classes</label><input type="number" id="inp-est-absent" placeholder="e.g. 5" min="0"></div>
+          <div class="field"><label>Target %</label><input type="number" id="inp-est-target" placeholder="e.g. 75" min="1" max="100"></div>
+          <div class="field" style="grid-column:span 2">
+            <label>Total Classes This Semester <span style="color:var(--muted);font-size:.56rem;text-transform:none;letter-spacing:0">(full semester count, e.g. 60 — used for end-of-sem projection)</span></label>
+            <input type="number" id="inp-est-semtotal" placeholder="e.g. 60 (optional)" min="0">
+          </div>
+        </div>
+        <div class="est-note" id="est-calc-note">📡 Estimated — calculated from your schedule. Adjust for holidays.</div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:9px;flex-wrap:wrap">
+        <button class="save-btn" onclick="saveSubject()">Save</button>
+        <button class="del-btn" onclick="deleteSubject()">Delete</button>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- ░░ DAILY TRACKER ░░ -->
+  <div class="page" id="page-tracker">
+    <div class="ph">
+      <h2>Daily Tracker 📅</h2>
+      <p id="tracker-date"></p>
+    </div>
+    <div id="tracker-content"></div>
+  </div>
+ 
+</div>
+ 
+<!-- ✨ ADDED: AUTH MODAL -->
+<div class="auth-overlay" id="auth-overlay">
+  <div class="auth-modal">
+    <div class="auth-logo">
+      <h1>bunk<span>kro</span></h1>
+      <p>can i bunk today?</p>
+    </div>
+    <h2 id="auth-title">Login</h2>
+    <p class="auth-sub" id="auth-subtitle">Enter your credentials to continue</p>
+    
+    <div id="auth-error" class="auth-error" style="display:none"></div>
+    <div id="auth-success" class="auth-success" style="display:none"></div>
+    
+    <form id="auth-form" onsubmit="handleAuth(event)">
+      <div class="auth-field">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="your@email.com" required>
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input type="password" id="auth-password" placeholder="••••••••" required minlength="6">
+      </div>
+      <button type="submit" class="auth-btn" id="auth-submit">Login</button>
+    </form>
+    
+    <div class="auth-toggle">
+      <span id="auth-toggle-text">Don't have an account?</span>
+      <button class="auth-link" id="auth-toggle-btn" onclick="toggleAuthMode()">Sign Up</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ AM I COOKED MODAL ══════ -->
+<div class="cooked-overlay" id="cooked-overlay">
+  <div class="cooked-modal">
+    <div class="cooked-big" id="ck-emoji"></div>
+    <div class="cooked-verdict" id="ck-verdict"></div>
+    <div class="cooked-msg" id="ck-msg"></div>
+    <div class="cooked-breakdown" id="ck-breakdown"></div>
+    <button class="cooked-share" onclick="shareVerdict()">📤 Share My Verdict</button>
+    <br>
+    <button class="cooked-close" onclick="closeCooked()">close</button>
+  </div>
+</div>
+ 
+<!-- ══════ ONBOARDING MODAL ══════ -->
+<div class="overlay" id="ob-overlay">
+  <div class="modal">
+    <div class="modal-step active" id="ob-0">
+      <h2>yo, welcome to BunkKro 👋</h2>
+      <p class="sub">Your one-stop app for deciding whether to attend class or disappear. How do you want to set up?</p>
+      <div class="modal-opts">
+        <div class="modal-opt" onclick="selMode('exact')" id="ob-opt-exact">
+          <div class="modal-opt-icon">🎯</div>
+          <div><h4>I know official numbers</h4><p>Got your attendance from the portal? Enter exact numbers.</p></div>
+        </div>
+        <div class="modal-opt" onclick="selMode('estimate')" id="ob-opt-estimate">
+          <div class="modal-opt-icon">⚡</div>
+          <div><h4>Just estimate it</h4><p>Tell us your semester start date + missed classes — we calculate the rest.</p></div>
+        </div>
+      </div>
+      <div class="modal-btns">
+        <button class="btn-pri" onclick="obNext()">Let's go →</button>
+      </div>
+    </div>
+    <div class="modal-step" id="ob-1">
+      <h3 style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;margin-bottom:14px">📆 Quick Setup</h3>
+      <div class="mf"><label>Semester Start Date</label><input type="date" id="ob-sem-start"></div>
+      <div class="mf"><label>Exam Date <span style="color:var(--muted);font-size:.56rem">(optional)</span></label><input type="date" id="ob-exam"></div>
+      <div class="mf"><label>Default Attendance Target %</label><input type="number" id="ob-target" placeholder="75" min="1" max="100"></div>
+      <div class="modal-btns">
+        <button class="btn-sec" onclick="obBack()">← Back</button>
+        <button class="btn-pri" onclick="obNext()">Next →</button>
+      </div>
+    </div>
+    <div class="modal-step" id="ob-2">
+      <h3 id="ob-step2-head" style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;margin-bottom:14px">📚 Add Your Subjects</h3>
+      <div class="subj-rows" id="ob-subj-list"></div>
+      <button class="add-row-btn" onclick="obAddRow()">+ Add Subject</button>
+      <div id="ob-est-note" class="est-note" style="display:none;margin-top:10px">📡 We'll calculate totals from your semester start date.</div>
+      <div class="modal-btns">
+        <button class="btn-sec" onclick="obBack()">← Back</button>
+        <button class="btn-pri" onclick="obFinish()">Launch BunkKro 🚀</button>
+      </div>
+    </div>
+  </div>
+</div>
+ 
+<!-- ══════ ADD SUBJECT MODAL ══════ -->
+<div class="overlay" id="add-overlay">
+  <div class="modal" style="max-width:420px">
+    <h2>Add Subject ➕</h2>
+    <p class="sub">Fill what you know — edit anytime.</p>
+    
+    <div class="modal-opts" style="margin-bottom:14px">
+      <div class="modal-opt" onclick="selAddMode('exact')" id="add-opt-exact" style="padding:10px 14px">
+        <div class="modal-opt-icon" style="font-size:1.1rem">🎯</div>
+        <div><h4 style="font-size:.78rem">Official numbers</h4><p>Total + Present from portal</p></div>
+      </div>
+      <div class="modal-opt" onclick="selAddMode('estimate')" id="add-opt-estimate" style="padding:10px 14px">
+        <div class="modal-opt-icon" style="font-size:1.1rem">⚡</div>
+        <div><h4 style="font-size:.78rem">Estimate it</h4><p>Semester date + missed classes</p></div>
+      </div>
+    </div>
+    
+    <div class="mf"><label>Subject Name</label><input type="text" id="as-name" placeholder="e.g. Maths"></div>
+    
+    <!-- EXACT MODE FIELDS -->
+    <div id="add-exact-fields">
+      <div class="mf"><label>Total Classes</label><input type="number" id="as-total" placeholder="40" min="0"></div>
+      <div class="mf"><label>Present</label><input type="number" id="as-present" placeholder="32" min="0"></div>
+      <div class="mf"><label>Classes / Week</label><input type="number" id="as-perweek" placeholder="3" min="1" max="30"></div>
+    </div>
+    
+    <!-- ESTIMATE MODE FIELDS -->
+    <div id="add-est-fields" style="display:none">
+      <div class="mf"><label>Classes / Week</label><input type="number" id="as-pw" placeholder="3" min="1"></div>
+      <div class="mf"><label>Missed Classes</label><input type="number" id="as-missed" placeholder="5" min="0"></div>
+      <div class="mf">
+        <label>Total Classes This Semester <span style="color:var(--muted);font-size:.56rem">(optional, for end-of-sem projection)</span></label>
+        <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0">
+      </div>
+    </div>
+    
+    <div class="mf">
+      <label>Target % <span style="color:var(--muted);font-size:.56rem">(blank = global)</span></label>
+      <input type="number" id="as-target" placeholder="75" min="1" max="100">
+    </div>
+    
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeAddModal()">Cancel</button>
+      <button class="btn-pri" onclick="confirmAdd()">Add Subject</button>
+    </div>
+  </div>
+</div>
+ 
+<div class="toast" id="toast"></div>
+ 
+
+<script src="bunkke.js"></script>
+</body>
+</html>
