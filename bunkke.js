@@ -39,6 +39,11 @@ try {
   console.error('Supabase initialization error:', error);
 }
 
+if (!window.supabase || !supabaseClient) {
+  toast('Backend not loaded. Refresh.', 'err');
+  throw new Error('Supabase not initialized');
+}
+
 // Auth state
 let currentUser = null;
 let isAuthMode = 'login'; // 'login' or 'signup'
@@ -180,6 +185,35 @@ async function addSubject(subjectData) {
   } catch (error) {
     console.error('Error adding subject:', error);
     toast('Failed to add subject', 'err');
+    return false;
+  }
+}
+
+async function updateSubject(id, updatedData) {
+  if (!currentUser) return false;
+
+  try {
+    const { error } = await supabaseClient
+      .from('Subjects')
+      .update({
+        name: updatedData.name,
+        code: updatedData.code,
+        total: updatedData.total,
+        present: updatedData.present,
+        per_week: updatedData.perWeek,
+        target: updatedData.target,
+        sem_total: updatedData.semTotal,
+        mode: updatedData.mode
+      })
+      .eq('id', id)
+      .eq('user_id', currentUser.id);
+
+    if (error) throw error;
+
+    return true;
+  } catch (err) {
+    console.error('Update error:', err);
+    toast('Failed to update subject', 'err');
     return false;
   }
 }
@@ -364,9 +398,6 @@ function hideAuthMessages() {
   document.getElementById('auth-success').style.display = 'none';
 }
 
-// Initialize auth when page loads
-window.addEventListener('DOMContentLoaded', initAuth);
-
 // NOT RELATED TO SUPABASE DOWN BELOW
 
 const COLORS = ['#c8f135','#ff6b35','#4fc3f7','#ce93d8','#80cbc4','#ffb74d','#f06292','#aed581'];
@@ -439,6 +470,8 @@ let currPage = 'home';
 let editMode = 'exact';
 let addMode = 'exact';
  
+let trackerLog = {};        
+let trackerLocked = false;  
 // ══════════════════════════════════════════════════════
 //  PERSISTENCE
 // ══════════════════════════════════════════════════════
@@ -858,7 +891,9 @@ function fillEditForm(s) {
       <input type="text" id="inp-subject-name" placeholder="e.g. Mathematics" value="${s.name}">
     </div>
   `;
+  if (editCardTitle) {
   editCardTitle.insertAdjacentHTML('afterend', nameFieldHTML);
+  }
   
   // Rest of the form
   document.getElementById('form-exact').style.display = isEst ? 'none' : 'grid';
@@ -931,11 +966,12 @@ async function saveSubject() {
     saveBtn.textContent = 'Saving...'; 
   
   const newName = document.getElementById('inp-subject-name')?.value.trim();
-    if (!newName)
-       {
-        toast('Subject name cannot be empty', 'err');
-        return;
-       }
+    if (!newName) {
+          toast('Subject name cannot be empty', 'err');
+          saveBtn.disabled = false;
+         saveBtn.textContent = 'Save';
+           return;
+          }
   if (newName && newName !== s.name) {
     s.name = newName;
     document.getElementById('sp-title').textContent = newName;
@@ -1247,59 +1283,93 @@ function selAddMode(m) {
 }
 
 async function confirmAdd() {
-  const name = document.getElementById('as-name').value.trim();
-  if (!name) { toast('Subject name required', 'err'); return; }
-  
-  const tRaw = document.getElementById('as-target').value;
-  const target = tRaw ? Math.max(1, Math.min(100, parseInt(tRaw))) : null;
-  
-  let total, present, perWeek, mode;
-  let semTotalAdd = null;
-  
-  if (addMode === 'estimate') {
-    perWeek = parseInt(document.getElementById('as-pw').value) || 3;
-    const missed = parseInt(document.getElementById('as-missed').value) || 0;
-    const stRaw = document.getElementById('as-semtotal').value;
-    semTotalAdd = stRaw ? parseInt(stRaw) : null;
-    total = estimateTotal(perWeek);
-    present = Math.max(0, total - missed);
-    mode = 'estimate';
-  } else {
-    total = parseInt(document.getElementById('as-total').value) || 0;
-    present = parseInt(document.getElementById('as-present').value) || 0;
-    perWeek = parseInt(document.getElementById('as-perweek').value) || 3;
-    mode = 'exact';
+  const submitBtn = document.getElementById('add-submit');
+
+  // 🔒 Prevent spam clicks
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Adding...';
   }
-  
-  const newSubject = {
-    name, 
-    code: name.slice(0, 2).toUpperCase() + '101', 
-    total, 
-    present: Math.min(present, total), 
-    perWeek, 
-    target, 
-    semTotal: semTotalAdd, 
-    mode
-  };
-  
-  const success = await addSubject(newSubject);
-  
-  if (success) {
-    closeAddModal();
-    toast(randToast('add'));
-    
-    // Reset all fields
-    document.getElementById('as-name').value = '';
-    document.getElementById('as-total').value = '';
-    document.getElementById('as-present').value = '';
-    document.getElementById('as-perweek').value = '';
-    document.getElementById('as-pw').value = '';
-    document.getElementById('as-missed').value = '';
-    document.getElementById('as-target').value = '';
-    document.getElementById('as-semtotal').value = '';
+
+  try {
+    const name = document.getElementById('as-name').value.trim();
+
+    if (!name) {
+      toast('Subject name required', 'err');
+      return;
+    }
+
+    const tRaw = document.getElementById('as-target').value;
+    const target = tRaw ? Math.max(1, Math.min(100, parseInt(tRaw))) : null;
+
+    let total, present, perWeek, mode;
+    let semTotalAdd = null;
+
+    if (addMode === 'estimate') {
+      perWeek = parseInt(document.getElementById('as-pw').value) || 3;
+      const missed = parseInt(document.getElementById('as-missed').value) || 0;
+      const stRaw = document.getElementById('as-semtotal').value;
+
+      semTotalAdd = stRaw ? parseInt(stRaw) : null;
+      total = estimateTotal(perWeek);
+      present = Math.max(0, total - missed);
+      mode = 'estimate';
+
+    } else {
+      total = parseInt(document.getElementById('as-total').value) || 0;
+      present = parseInt(document.getElementById('as-present').value) || 0;
+      perWeek = parseInt(document.getElementById('as-perweek').value) || 3;
+      mode = 'exact';
+    }
+
+    const newSubject = {
+      name,
+      code: name.slice(0, 2).toUpperCase() + '101',
+      total,
+      present: Math.min(present, total),
+      perWeek,
+      target,
+      semTotal: semTotalAdd,
+      mode
+    };
+
+    const success = await addSubject(newSubject);
+
+    if (success) {
+      closeAddModal();
+      toast(randToast('add'));
+
+      // ✅ Safe reset (no crash if field missing)
+      const ids = [
+        'as-name',
+        'as-total',
+        'as-present',
+        'as-perweek',
+        'as-pw',
+        'as-missed',
+        'as-target',
+        'as-semtotal'
+      ];
+
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+
+      renderAll(); // optional but good
+    }
+
+  } catch (err) {
+    console.error(err);
+    toast('Something went wrong', 'err');
+
+  } finally {
+    // 🔓 Always re-enable button
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Add Subject';
+    }
   }
-  submitBtn.disabled = false;
-  submitBtn.textContent = 'Add Subject';
 }
  
 // ══════════════════════════════════════════════════════
@@ -1328,9 +1398,7 @@ document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.
 // ══════════════════════════════════════════════════════
 //  DAILY TRACKER
 // ══════════════════════════════════════════════════════
-let trackerLog = {};
-let trackerLocked = false; // ✅ ADDED: Prevent race conditions
- if (!trackerLog) trackerLog = {};
+
 function renderTracker() {
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('tracker-date').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -1380,8 +1448,8 @@ function renderTracker() {
     </div>
   `;
 }
- if (!trackerLog) trackerLog = {};
 async function markToday(date, subjId, status) {
+  if (!currentUser) return;
   // ✅ ADDED: Lock to prevent race conditions
   if (trackerLocked) return;
   trackerLocked = true;
