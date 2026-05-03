@@ -1328,61 +1328,6 @@ document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.
 // ══════════════════════════════════════════════════════
 //  DAILY TRACKER
 // ══════════════════════════════════════════════════════
- if (!trackerLog) trackerLog = {};
-function renderTracker() {
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('tracker-date').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  
-  // ✨ ADDED: Ensure today's entry exists in trackerLog
-  if (!trackerLog[today]) trackerLog[today] = {};
- 
-  if (!subjects.length) {
-    document.getElementById('tracker-content').innerHTML = `<div class="empty"><div class="empty-icon">📋</div><h3>No subjects yet.</h3><p>Add subjects from the sidebar first.</p></div>`;
-    return;
-  }
- 
-  const marked = Object.keys(trackerLog[today]).length;
-  const days = Object.keys(trackerLog).sort().reverse().slice(0, 7);
- 
-  document.getElementById('tracker-content').innerHTML = `
-    <div class="tracker-day">
-      <div class="tracker-day-hd">
-        <h4>Today</h4>
-        <span>${marked}/${subjects.length} marked</span>
-      </div>
-      <div class="tracker-rows">
-        ${subjects.map(s => {
-          const st = trackerLog[today][s.id];
-          return `<div class="tracker-row">
-            <span class="tracker-name">${s.name}</span>
-            <div class="tracker-btns">
-              <button class="tbtn p ${st==='p'?'on':''}" onclick="markToday('${today}','${s.id}','p')">Present</button>
-              <button class="tbtn a ${st==='a'?'on':''}" onclick="markToday('${today}','${s.id}','a')">Absent</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="card-title">Recent History</div>
-      ${days.length ? days.map(d => {
-        const log = trackerLog[d];
-        const p = Object.values(log).filter(v=>v==='p').length;
-        const a = Object.values(log).filter(v=>v==='a').length;
-        const lbl = new Date(d).toLocaleDateString('en-IN',{weekday:'short',month:'short',day:'numeric'});
-        return `<div class="hist-row">
-          <span style="flex:1;color:var(--text2)">${lbl}</span>
-          <span style="color:var(--accent)">✓ ${p}</span>
-          <span style="color:var(--danger)">✗ ${a}</span>
-        </div>`;
-      }).join('') : '<div style="color:var(--muted);font-size:.72rem">No history yet</div>'}
-    </div>
-  `;
-}
- 
-// ══════════════════════════════════════════════════════
-//  DAILY TRACKER
-// ══════════════════════════════════════════════════════
 let trackerLog = {};
 let trackerLocked = false; // ✅ ADDED: Prevent race conditions
  if (!trackerLog) trackerLog = {};
