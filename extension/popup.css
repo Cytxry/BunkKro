@@ -1,0 +1,55 @@
+body {
+  margin: 0;
+  padding: 12px;
+  width: 280px;
+  font-family: 'Syne', sans-serif;
+  background: #0b0b0f;
+  color: #fff;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.subject {
+  background: #111118;
+  border: 1px solid #1f1f2a;
+  padding: 10px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.subject-name {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.btns {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  flex: 1;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.present {
+  background: #b8ff2c;
+  color: #000;
+}
+
+.absent {
+  background: #ff4d6d;
+  color: #fff;
+}
+
+button:hover {
+  opacity: 0.85;
+}
