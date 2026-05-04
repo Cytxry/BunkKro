@@ -280,12 +280,14 @@
     </div>
     
     <!-- ESTIMATE MODE FIELDS -->
-    <div id="add-est-fields" style="display:none">
+      <div id="add-est-fields" style="display:none">
       <div class="mf"><label>Classes / Week</label><input type="number" id="as-pw" placeholder="3" min="1"></div>
       <div class="mf"><label>Missed Classes</label><input type="number" id="as-missed" placeholder="5" min="0"></div>
-      <div class="mf">
-        <label>Total Classes This Semester <span style="color:var(--muted);font-size:.56rem">(optional, for end-of-sem projection)</span></label>
-        <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0">
+     <!-- ✅ ADDED: Semester Start Date -->
+    <div class="mf"><label>Semester Start Date</label><input type="date" id="as-semstart"></div>
+    <div class="mf">
+    <label>Total Classes This Semester <span style="color:var(--muted);font-size:.56rem">(optional, for end-of-sem projection)</span></label>
+    <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0">
       </div>
     </div>
     

@@ -1262,10 +1262,16 @@ async function obFinish() {
 // ══════════════════════════════════════════════════════
 //  ADD SUBJECT MODAL
 // ══════════════════════════════════════════════════════
-function openAddModal() 
-{ 
+function openAddModal() { 
   document.getElementById('add-overlay').classList.add('show'); 
-  selAddMode('estimate'); // ✨ CHANGED: Default to estimate mode
+  selAddMode('estimate');
+  
+  // ✅ ADDED: Pre-fill semester start date if available
+  const savedSemStart = localStorage.getItem('bk_sem_start') || semStart;
+  if (savedSemStart) {
+    const semStartField = document.getElementById('as-semstart');
+    if (semStartField) semStartField.value = savedSemStart;
+  }
 }
 function closeAddModal() { document.getElementById('add-overlay').classList.remove('show'); }
 function selAddMode(m) {
@@ -1283,7 +1289,7 @@ function selAddMode(m) {
 }
 
 async function confirmAdd() {
-  const submitBtn = document.getElementById('add-submit');
+  const submitBtn = document.querySelector('#add-overlay .btn-pri');
 
   // 🔒 Prevent spam clicks
   if (submitBtn) {
@@ -1308,18 +1314,34 @@ async function confirmAdd() {
     if (addMode === 'estimate') {
       perWeek = parseInt(document.getElementById('as-pw').value) || 3;
       const missed = parseInt(document.getElementById('as-missed').value) || 0;
+      
+      // ✅ ADDED: Get semester start date from modal
+      const modalSemStart = document.getElementById('as-semstart').value;
+      
+      // ✅ ADDED: Save to localStorage if provided
+      if (modalSemStart) {
+        localStorage.setItem('bk_sem_start', modalSemStart);
+        semStart = modalSemStart; // Update global variable
+      }
+      
       const stRaw = document.getElementById('as-semtotal').value;
-
       semTotalAdd = stRaw ? parseInt(stRaw) : null;
+      
+      // ✅ FIXED: Calculate total AFTER setting semStart
       total = estimateTotal(perWeek);
       present = Math.max(0, total - missed);
       mode = 'estimate';
+      
+      // ✅ ADDED: Debug logging
+      console.log('Estimate Mode - Missed:', missed, 'Total:', total, 'Present:', present, 'PerWeek:', perWeek);
 
     } else {
       total = parseInt(document.getElementById('as-total').value) || 0;
       present = parseInt(document.getElementById('as-present').value) || 0;
       perWeek = parseInt(document.getElementById('as-perweek').value) || 3;
       mode = 'exact';
+      
+      console.log('Exact Mode - Total:', total, 'Present:', present);
     }
 
     const newSubject = {
@@ -1339,7 +1361,7 @@ async function confirmAdd() {
       closeAddModal();
       toast(randToast('add'));
 
-      // ✅ Safe reset (no crash if field missing)
+      // ✅ Safe reset all fields
       const ids = [
         'as-name',
         'as-total',
@@ -1348,7 +1370,8 @@ async function confirmAdd() {
         'as-pw',
         'as-missed',
         'as-target',
-        'as-semtotal'
+        'as-semtotal',
+        'as-semstart' // ✅ ADDED
       ];
 
       ids.forEach(id => {
@@ -1356,11 +1379,12 @@ async function confirmAdd() {
         if (el) el.value = '';
       });
 
-      renderAll(); // optional but good
+      // ✅ FIXED: Force re-render to show updated data
+      renderAll();
     }
 
   } catch (err) {
-    console.error(err);
+    console.error('Add subject error:', err);
     toast('Something went wrong', 'err');
 
   } finally {
