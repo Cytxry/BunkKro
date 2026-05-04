@@ -1,32 +1,80 @@
-function loadSubjects() {
-  chrome.storage.local.get(['subjects'], (data) => {
-    const subjects = data.subjects || [];
-    const container = document.getElementById('subjects');
-    container.innerHTML = '';
+document.addEventListener('DOMContentLoaded', () => {
+  loadSubjects();
+});
 
-    subjects.forEach((subj, index) => {
-      const div = document.createElement('div');
+async function loadSubjects() {
+  const { data: subjects, error } = await supabase
+    .from('subjects')
+    .select('*');
 
-      div.innerHTML = `
-        <p>${subj.name}</p>
-        <button onclick="mark(${index}, 'present')">+</button>
-        <button onclick="mark(${index}, 'absent')">-</button>
-      `;
+  const container = document.getElementById('subjects');
+  container.innerHTML = '';
 
-      container.appendChild(div);
+  if (error) {
+    container.innerHTML = "Error loading 😭";
+    console.error(error);
+    return;
+  }
+
+  if (!subjects || subjects.length === 0) {
+    container.innerHTML = "No subjects yet 😭";
+    return;
+  }
+
+  subjects.forEach((sub) => {
+    const percent = sub.total
+      ? Math.round((sub.present / sub.total) * 100)
+      : 0;
+
+    const div = document.createElement('div');
+    div.className = 'subject';
+
+    div.innerHTML = `
+      <div class="subject-name">${sub.name} (${percent}%)</div>
+      <div class="btns">
+        <button class="present" data-id="${sub.id}" data-type="present">✔</button>
+        <button class="absent" data-id="${sub.id}" data-type="absent">✖</button>
+      </div>
+    `;
+
+    container.appendChild(div);
+  });
+
+  // attach click listeners
+  document.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const type = btn.dataset.type;
+      mark(id, type);
     });
   });
 }
 
-function mark(index, type) {
-  chrome.storage.local.get(['subjects'], (data) => {
-    const subjects = data.subjects || [];
+async function mark(id, type) {
+  const { data: sub, error } = await supabase
+    .from('subjects')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-    if (type === 'present') subjects[index].present++;
-    else subjects[index].total++;
+  if (error || !sub) {
+    console.error(error);
+    return;
+  }
 
-    chrome.storage.local.set({ subjects }, loadSubjects);
-  });
+  let updated = {};
+
+  if (type === 'present') {
+    updated.present = sub.present + 1;
+    updated.total = sub.total + 1;
+  } else {
+    updated.total = sub.total + 1;
+  }
+
+  await supabase
+    .from('subjects')
+    .update(updated)
+    .eq('id', id);
+
+  loadSubjects();
 }
-
-loadSubjects();
