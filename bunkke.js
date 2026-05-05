@@ -1,3 +1,27 @@
+const SUPABASE_URL = "https://mvlyeygitnnuksuxmcsy.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_OrUBxAQ1tk1wqI6HQ7SIPA_bYwohXlf";
+
+let supabaseClient;
+let authListenerInitialized = false;
+
+// INIT ONLY ONCE
+if (!window.supabase) {
+  console.error("❌ Supabase CDN not loaded");
+} else {
+  supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  }
+);
+  console.log("✅ Supabase initialized");
+}
+
 window.addEventListener('online', () => toast('Back online'));
 window.addEventListener('offline', () => toast('You are offline', 'err'));
 
@@ -24,46 +48,101 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
 // ══════════════════════════════════════════════════════
-//  ✨ SUPABASE AUTHENTICATION
+//  SESSION STORAGE HELPER
 // ══════════════════════════════════════════════════════
+function storeSession(session) {
+  if (!session) {
+    console.warn('⚠️ Attempted to store null session');
+    localStorage.removeItem('sb-session');
+    return false;
+  }
 
-// Replace these with your actual Supabase credentials
-const SUPABASE_URL = "https://mvlyeygitnnuksuxmcsy.supabase.co";
-const SUPABASE_ANON_KEY = 'sb_publishable_OrUBxAQ1tk1wqI6HQ7SIPA_bYwohXlf';
-
-// Initialize Supabase client (ONLY ONCE!)
-let supabaseClient;
-try {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-} catch (error) {
-  console.error('Supabase initialization error:', error);
+  try {
+    const sessionData = JSON.stringify(session);
+    localStorage.setItem('sb-session', sessionData);
+    console.log('✅ Session stored in localStorage');
+    
+    // Send to extension
+    sendSessionToExtension(session);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to store session:', error);
+    return false;
+  }
 }
 
-if (!window.supabase || !supabaseClient) {
-  toast('Backend not loaded. Refresh.', 'err');
-  throw new Error('Supabase not initialized');
+function sendSessionToExtension(session) {
+  if (!window.chrome?.runtime) {
+    console.log('ℹ️ Chrome extension API not available');
+    return;
+  }
+
+  try {
+    chrome.runtime.sendMessage(
+      {
+        type: 'SET_SESSION',
+        session: session
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('⚠️ Extension not available:', chrome.runtime.lastError.message);
+        } else {
+          console.log('✅ Session sent to extension');
+        }
+      }
+    );
+  } catch (error) {
+    console.warn('⚠️ Failed to send to extension:', error.message);
+  }
 }
 
 // Auth state
 let currentUser = null;
 let isAuthMode = 'login'; // 'login' or 'signup'
-
 // Check session on page load
+// ══════════════════════════════════════════════════════
+//  INIT AUTH - FIXED TO PREVENT DUPLICATE LISTENERS
+// ══════════════════════════════════════════════════════
 async function initAuth() {
   try {
+    // 🔥 listen for auth changes (this is the real source of truth)
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      console.log('Auth change:', event, session);
+
+      if (session) {
+        currentUser = session.user;
+
+        // ✅ SAVE SESSION
+        localStorage.setItem('sb-session', JSON.stringify(session));
+
+        console.log("✅ Stored session from listener");
+
+        showApp();
+      } else {
+        showAuthModal();
+      }
+    });
+
+    // ⚠️ OPTIONAL: just check once, but DO NOT DELETE STORAGE
     const { data: { session } } = await supabaseClient.auth.getSession();
-    
+
+    console.log("Initial session:", session);
+
     if (session) {
       currentUser = session.user;
+      localStorage.setItem('sb-session', JSON.stringify(session));
       showApp();
     } else {
       showAuthModal();
     }
+
   } catch (error) {
-    console.error('Auth check error:', error);
+    console.error('Auth error:', error);
     showAuthModal();
   }
 }
+
 
 // ══════════════════════════════════════════════════════
 //  ✨ SUPABASE DATA FUNCTIONS
@@ -77,7 +156,7 @@ async function loadSubjects() {
   
   try {
     const { data, error } = await supabaseClient
-      .from('Subjects') // ✅ FIXED
+      .from('subjects') // ✅ FIXED
       .select('*')
       .eq('user_id', currentUser.id)
       .order('created_at', { ascending: true });
@@ -138,52 +217,57 @@ async function addSubject(subjectData) {
     toast('Please login first', 'err');
     return false;
   }
+
   if (!isOnline()) {
     toast('No internet connection', 'err');
     return false;
   }
-  
+
   try {
+    const payload = {
+      user_id: currentUser.id,
+      name: subjectData.name,
+      code: subjectData.code || '',
+      total: subjectData.total || 0,
+      present: subjectData.present || 0,
+      per_week: subjectData.perWeek || 0,
+      target: subjectData.target || null,
+      sem_total: subjectData.semTotal || null,
+      mode: subjectData.mode || 'exact'
+    };
+
     const { data, error } = await supabaseClient
-      .from('Subjects')
-      .insert([{
-        user_id: currentUser.id,
-        name: subjectData.name,
-        code: subjectData.code || '',
-        total: subjectData.total || 0,
-        present: subjectData.present || 0,
-        per_week: subjectData.perWeek || 0,
-        target: subjectData.target || null,
-        sem_total: subjectData.semTotal || null,
-        mode: subjectData.mode || 'exact'
-      }])
+      .from('subjects') // ✅ FIXED (lowercase)
+      .insert([payload])
       .select();
-    
+
     if (error) throw error;
-    
-    // ✅ SAFE ACCESS
+
     if (!data || data.length === 0) {
-      throw new Error('No data returned from insert');
+      throw new Error('Insert succeeded but no data returned');
     }
-    
-    const insertedSubject = data[0]; // ✅ GET FIRST ITEM
-    
+
+    const inserted = data[0];
+
+    // ✅ Update local UI state
     subjects.push({
-      id: insertedSubject.id,
-      name: insertedSubject.name,
-      code: insertedSubject.code,
-      total: insertedSubject.total,
-      present: insertedSubject.present,
-      perWeek: insertedSubject.per_week,
-      target: insertedSubject.target,
-      semTotal: insertedSubject.sem_total,
-      mode: insertedSubject.mode
+      id: inserted.id,
+      name: inserted.name,
+      code: inserted.code,
+      total: inserted.total,
+      present: inserted.present,
+      perWeek: inserted.per_week,
+      target: inserted.target,
+      semTotal: inserted.sem_total,
+      mode: inserted.mode
     });
-    
+
     renderAll();
+
     return true;
-  } catch (error) {
-    console.error('Error adding subject:', error);
+
+  } catch (err) {
+    console.error('Error adding subject:', err);
     toast('Failed to add subject', 'err');
     return false;
   }
@@ -194,7 +278,7 @@ async function updateSubject(id, updatedData) {
 
   try {
     const { error } = await supabaseClient
-      .from('Subjects')
+      .from('subjects')
       .update({
         name: updatedData.name,
         code: updatedData.code,
@@ -224,7 +308,7 @@ async function deleteSubjectFromDB(subjectId) {
   
   try {
     const { error } = await supabaseClient
-      .from('Subjects') // ✅ FIXED
+      .from('subjects') // ✅ FIXED
       .delete()
       .eq('id', subjectId)
       .eq('user_id', currentUser.id);
@@ -242,21 +326,6 @@ async function deleteSubjectFromDB(subjectId) {
   }
 }
 
-// Show auth modal
-function showAuthModal() {
-  document.getElementById('auth-overlay').classList.add('show');
-  document.getElementById('logout-btn').style.display = 'none';
-}
-
-// Hide auth modal and show app
-async function showApp() {
-  document.getElementById('auth-overlay').classList.remove('show');
-  document.getElementById('logout-btn').style.display = 'block';
-  
-  // Load data from database
-  await loadSubjects();
-  await loadTracker(); // ✨ ADDED: Load tracker data
-}
 
 // Toggle between login and signup
 function toggleAuthMode() {
@@ -287,52 +356,93 @@ async function handleAuth(event) {
   const password = document.getElementById('auth-password').value;
   const submitBtn = document.getElementById('auth-submit');
   
-  // Disable button
+  if (!email || !password) {
+    showAuthError('Please enter email and password');
+    return;
+  }
+
   submitBtn.disabled = true;
   submitBtn.textContent = isAuthMode === 'login' ? 'Logging in...' : 'Signing up...';
-  
   hideAuthMessages();
   
   try {
+    let result;
+
     if (isAuthMode === 'signup') {
-      const { data, error } = await supabaseClient.auth.signUp({
+      // SIGNUP
+      result = await supabaseClient.auth.signUp({
         email,
         password,
       });
       
-      if (error) throw error;
-      
-      // Check if email confirmation is required
-      if (data.user && !data.session) {
+      if (result.error) throw result.error;
+
+      if (result.data.user && !result.data.session) {
         showAuthSuccess('Account created! Check your email to confirm.');
-        // Switch to login mode after a delay
-        setTimeout(() => {
-          toggleAuthMode();
-        }, 2000);
-      } else {
-        currentUser = data.user;
+        setTimeout(() => toggleAuthMode(), 2000);
+        return;
+      }
+
+      if (result.data.session) {
+        console.log('✅ Signup successful with immediate session');
+        currentUser = result.data.user;
+        
+        // Store session
+        localStorage.setItem('sb-session', JSON.stringify(result.data.session));
+        
         showAuthSuccess('Account created successfully!');
         setTimeout(() => {
           showApp();
-          renderAll();
         }, 1000);
       }
+
     } else {
-      const { data, error } = await supabaseClient.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (error) throw error;
-      
-      currentUser = data.user;
+      // LOGIN
+      const result = await supabaseClient.auth.signInWithPassword({
+  email,
+  password,
+});
+
+if (result.error) throw result.error;
+
+console.log("LOGIN RESPONSE:", result.data);
+
+// 🔥 USE THIS (NOT getSession)
+const session = result.data.session;
+
+if (!session) {
+  console.error("❌ No session returned from login");
+  return;
+}
+
+// ✅ STORE IT IMMEDIATELY
+localStorage.setItem('sb-session', JSON.stringify(session));
+
+console.log("✅ Session saved:", session);
+
+// optional UI stuff
+currentUser = result.data.user;
+showAuthSuccess('Login successful!');
+window.location.reload();
+
+      // ✅ Dispatch custom event for content script
+      window.dispatchEvent(new CustomEvent('session-updated', { 
+        detail: { session } 
+      }));
+
+      currentUser = result.data.user;
+
       showAuthSuccess('Login successful!');
-      setTimeout(() => {
-        showApp();
-        renderAll();
+
+      // ✅ Load app
+      setTimeout(async () => {
+        await showApp();
       }, 800);
     }
+
   } catch (error) {
+    console.error('❌ Auth error:', error);
+    
     let errorMessage = 'An error occurred. Please try again.';
     
     if (error.message.includes('Invalid login credentials')) {
@@ -343,11 +453,14 @@ async function handleAuth(event) {
       errorMessage = 'Password must be at least 6 characters.';
     } else if (error.message.includes('Invalid email')) {
       errorMessage = 'Please enter a valid email address.';
+    } else if (error.message.includes('Email not confirmed')) {
+      errorMessage = 'Please confirm your email address first.';
     } else {
       errorMessage = error.message;
     }
     
     showAuthError(errorMessage);
+
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = isAuthMode === 'login' ? 'Login' : 'Sign Up';
@@ -362,8 +475,20 @@ async function handleLogout() {
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
     
+    console.log('✅ Logged out successfully');
     currentUser = null;
-    trackerLog = {}; // ✨ ADDED: Clear tracker data
+    trackerLog = {};
+    localStorage.removeItem('sb-session');
+    
+    // Notify extension
+    if (window.chrome?.runtime) {
+      try {
+        chrome.runtime.sendMessage({ type: 'CLEAR_SESSION' });
+      } catch (e) {
+        console.warn('Extension not available');
+      }
+    }
+    
     showAuthModal();
     
     // Clear form
@@ -372,9 +497,39 @@ async function handleLogout() {
     
     toast('Logged out successfully');
   } catch (error) {
+    console.error('❌ Logout error:', error);
     toast('Error logging out: ' + error.message, 'err');
   }
 }
+
+// Show/hide functions remain the same
+function showAuthModal() {
+  document.getElementById('auth-overlay').classList.add('show');
+  document.getElementById('logout-btn').style.display = 'none';
+}
+
+async function showApp() {
+  document.getElementById('auth-overlay').classList.remove('show');
+  document.getElementById('logout-btn').style.display = 'block';
+  await loadSubjects();
+  await loadTracker();
+}
+
+function hideAuthMessages() {
+  document.getElementById('auth-error').style.display = 'none';
+  document.getElementById('auth-success').style.display = 'none';
+}
+
+const DOM = {
+  authOverlay: null,
+  logoutBtn: null,
+  toast: null,
+  init() {
+    this.authOverlay = document.getElementById('auth-overlay');
+    this.logoutBtn = document.getElementById('logout-btn');
+    this.toast = document.getElementById('toast');
+  }
+};
 
 // Show error message
 function showAuthError(message) {

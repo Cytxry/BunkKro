@@ -1,12 +1,188 @@
+<!DOCTYPE html>
+<html>
 <head>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js"></script>
-  <link rel="stylesheet" href="popup.css">
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 380px;
+      min-height: 400px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      padding: 16px;
+    }
+    
+    #loading, #error, #not-logged-in {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    #loading { color: #c8f135; }
+    #error { color: #ff4060; }
+    #not-logged-in { color: #ffb830; }
+    
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #1a1a1a;
+      border-top-color: #c8f135;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    h2 { 
+      font-size: 18px; 
+      margin-bottom: 24px;
+      color: #c8f135;
+    }
+    
+    .subject-item {
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    
+    .subject-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .subject-name {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    
+    .subject-pct {
+      font-weight: 700;
+      font-size: 16px;
+    }
+    
+    .subject-pct.safe { color: #c8f135; }
+    .subject-pct.warn { color: #ffb830; }
+    .subject-pct.danger { color: #ff4060; }
+    
+    .tracker-btns {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    
+    .tracker-btns button {
+      flex: 1;
+      padding: 8px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #1a1a1a;
+      color: #888;
+    }
+    
+    .tracker-btns button.present {
+      background: #1a3a1a;
+      color: #c8f135;
+    }
+    
+    .tracker-btns button.present.active {
+      background: #c8f135;
+      color: #0a0a0a;
+    }
+    
+    .tracker-btns button.absent {
+      background: #3a1a1a;
+      color: #ff4060;
+    }
+    
+    .tracker-btns button.absent.active {
+      background: #ff4060;
+      color: #fff;
+    }
+    
+    .open-app {
+      width: 100%;
+      padding: 12px;
+      background: #c8f135;
+      color: #0a0a0a;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 16px;
+    }
+    
+    .open-app:hover {
+      background: #d4ff4a;
+    }
+    
+    .login-btn {
+      padding: 12px 24px;
+      background: #c8f135;
+      color: #0a0a0a;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 16px;
+    }
+    
+    .login-btn:hover {
+      background: #d4ff4a;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #888;
+    }
+    
+    .empty-state h3 {
+      font-size: 16px;
+      margin-bottom: 8px;
+      color: #aaa;
+    }
+  </style>
 </head>
-
 <body>
-  <h3>BunkKro</h3>
-  <div id="subjects"></div>
-
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Loading your subjects...</p>
+  </div>
+  
+  <div id="error" style="display:none;">
+    <p>❌ Failed to load data</p>
+    <button class="login-btn" onclick="location.reload()">Retry</button>
+  </div>
+  
+  <div id="not-logged-in" style="display:none;">
+    <p style="font-size: 48px; margin-bottom: 16px;">🔒</p>
+    <h3>Not Logged In</h3>
+    <p style="color: #888; margin-bottom: 16px;">Please login to BunkKro first</p>
+    <button class="login-btn" id="open-login">Open BunkKro</button>
+  </div>
+  
+  <div id="content" style="display:none;">
+    <h2>Today's Attendance</h2>
+    <div id="subjects-list"></div>
+    <button class="open-app" id="open-app">Open Full App</button>
+  </div>
+    <script src="supabase.js"></script>
   <script src="popup.js"></script>
 </body>
+</html>
