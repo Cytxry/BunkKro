@@ -4,6 +4,22 @@ const SUPABASE_ANON_KEY = "sb_publishable_OrUBxAQ1tk1wqI6HQ7SIPA_bYwohXlf";
 let supabaseClient;
 let authListenerInitialized = false;
 
+// ══════════════════════════════════════════════════════
+//  DOM REFERENCES - SINGLE DECLARATION
+// ══════════════════════════════════════════════════════
+const DOM = {
+  authOverlay: null,
+  logoutBtn: null,
+  toast: null,
+  sidebar: null,
+  init() {
+    this.authOverlay = document.getElementById('auth-overlay');
+    this.logoutBtn = document.getElementById('logout-btn');
+    this.toast = document.getElementById('toast');
+    this.sidebar = document.getElementById('sidebar');
+  }
+};
+
 // INIT ONLY ONCE
 if (!window.supabase) {
   console.error("❌ Supabase CDN not loaded");
@@ -29,23 +45,69 @@ function isOnline() {
   return navigator.onLine;
 }
 
-const DOM = {
-  authOverlay: null,
-  logoutBtn: null,
-  toast: null,
-  init() {
-    this.authOverlay = document.getElementById('auth-overlay');
-    this.logoutBtn = document.getElementById('logout-btn');
-    this.toast = document.getElementById('toast');
-  }
-};
-
 // ✅ CALL AFTER DOM LOADS
 window.addEventListener('DOMContentLoaded', () => {
   DOM.init();
   initAuth();
+  initEventListeners(); // ✅ NEW: Initialize all event listeners
 });
 
+
+// ══════════════════════════════════════════════════════
+//  EVENT LISTENERS - CENTRALIZED SETUP
+// ══════════════════════════════════════════════════════
+function initEventListeners() {
+  // Sidebar toggle
+  const sidebarToggleBtn = document.getElementById('sidebar-toggle');
+  if (sidebarToggleBtn) {
+    sidebarToggleBtn.addEventListener('click', toggleSidebar);
+  }
+
+  // Auth form
+  const authForm = document.getElementById('auth-form');
+  if (authForm) {
+    authForm.addEventListener('submit', handleAuth);
+  }
+
+  // Auth mode toggle
+  const authToggleBtn = document.getElementById('auth-toggle-btn');
+  if (authToggleBtn) {
+    authToggleBtn.addEventListener('click', toggleAuthMode);
+  }
+
+  // Logout button
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+  }
+
+  // Global target input
+  const globalTargetInput = document.getElementById('global-target');
+  if (globalTargetInput) {
+    globalTargetInput.addEventListener('change', (e) => {
+      updateGlobalTarget(e.target.value);
+    });
+  }
+
+  // Modal overlay clicks (close on outside click)
+  const cookedOverlay = document.getElementById('cooked-overlay');
+  if (cookedOverlay) {
+    cookedOverlay.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeCooked();
+    });
+  }
+
+  ['ob-overlay', 'add-overlay'].forEach(id => {
+    const overlay = document.getElementById(id);
+    if (overlay) {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) {
+          e.currentTarget.classList.remove('show');
+        }
+      });
+    }
+  });
+}
 
 // ══════════════════════════════════════════════════════
 //  SESSION STORAGE HELPER
@@ -515,22 +577,6 @@ async function showApp() {
   await loadTracker();
 }
 
-function hideAuthMessages() {
-  document.getElementById('auth-error').style.display = 'none';
-  document.getElementById('auth-success').style.display = 'none';
-}
-
-const DOM = {
-  authOverlay: null,
-  logoutBtn: null,
-  toast: null,
-  init() {
-    this.authOverlay = document.getElementById('auth-overlay');
-    this.logoutBtn = document.getElementById('logout-btn');
-    this.toast = document.getElementById('toast');
-  }
-};
-
 // Show error message
 function showAuthError(message) {
   const errorEl = document.getElementById('auth-error');
@@ -700,17 +746,31 @@ function toast(msg, type = 'ok') {
 // ══════════════════════════════════════════════════════
 //  SIDEBAR
 // ══════════════════════════════════════════════════════
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+function toggleSidebar() { 
+  if (DOM.sidebar) {
+    DOM.sidebar.classList.toggle('open'); 
+  } else {
+    document.getElementById('sidebar')?.classList.toggle('open');
+  }
+}
+
 function renderNav() {
   document.getElementById('global-target').value = globalTarget;
   document.getElementById('nav-subjects').innerHTML = subjects.map((s, i) => {
     const p = pct(s), tgt = getTarget(s), risk = p < tgt;
-    return `<div class="nav-item" id="nav-s-${s.id}" onclick="goPage('subject','${s.id}')">
+    return `<div class="nav-item" id="nav-s-${s.id}" data-subject-id="${s.id}">
       <div class="nav-dot" style="background:${COLORS[i%COLORS.length]}"></div>
       ${s.name}
       <span class="${risk ? 'nav-risk' : 'nav-safe'}">${p}%</span>
     </div>`;
   }).join('');
+  
+  // ✅ Add event listeners to nav items (replacing onclick)
+  document.querySelectorAll('.nav-item[data-subject-id]').forEach(item => {
+    item.addEventListener('click', () => {
+      goPage('subject', item.dataset.subjectId);
+    });
+  });
 }
 
 function updateGlobalTarget(v) {
@@ -742,7 +802,11 @@ function goPage(page, id) {
     if (page === 'tracker') renderTracker();
     else renderHome();
   }
-  document.getElementById('sidebar').classList.remove('open');
+  if (DOM.sidebar) {
+    DOM.sidebar.classList.remove('open');
+  } else {
+    document.getElementById('sidebar')?.classList.remove('open');
+  }
 }
  
 // ══════════════════════════════════════════════════════
@@ -765,8 +829,15 @@ function renderHome() {
         <div class="empty-icon">😶</div>
         <h3>No subjects yet.</h3>
         <p>Add your subjects to find out if you're cooked.</p>
-        <button class="btn-pri" onclick="openAddModal()">+ Add Subject</button>
+        <button class="btn-pri" id="empty-add-btn">+ Add Subject</button>
       </div>`;
+    
+    // ✅ Add event listener to the dynamically created button
+    const emptyAddBtn = document.getElementById('empty-add-btn');
+    if (emptyAddBtn) {
+      emptyAddBtn.addEventListener('click', openAddModal);
+    }
+    
     document.getElementById('bar-chart').innerHTML = '';
     document.getElementById('quick-view').innerHTML = '';
     return;
@@ -809,12 +880,12 @@ function renderHome() {
   // Streak
   renderStreak();
  
-  // Subject cards
+  // Subject cards (with data attributes instead of onclick)
   document.getElementById('subject-cards').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s), col = pctColor(p, tgt);
     const risk = p < tgt;
     const roast = getRoast(p, tgt);
-    return `<div class="subj-card ${risk?'at-risk':'safe-zone'}" onclick="goPage('subject','${s.id}')">
+    return `<div class="subj-card ${risk?'at-risk':'safe-zone'}" data-subject-id="${s.id}">
       <div class="subj-card-accent" style="background:${COLORS[i%COLORS.length]}"></div>
       <div class="subj-card-main">
         <div class="subj-card-name">${s.name}</div>
@@ -827,29 +898,56 @@ function renderHome() {
       </div>
     </div>`;
   }).join('');
+  
+  // ✅ Add event listeners to subject cards
+  document.querySelectorAll('.subj-card[data-subject-id]').forEach(card => {
+    card.addEventListener('click', () => {
+      goPage('subject', card.dataset.subjectId);
+    });
+  });
  
-  // Bar chart
+  // Bar chart (with data attributes)
   const maxV = Math.max(...subjects.map(s=>s.total), 1);
   document.getElementById('bar-chart').innerHTML = subjects.map((s,i) => {
     const ph = Math.round(s.present/maxV*100);
     const ah = Math.round((s.total-s.present)/maxV*100);
-    return `<div class="bg" onclick="goPage('subject','${s.id}')">
+    return `<div class="bg" data-subject-id="${s.id}">
       <div class="bw"><div class="b p" style="height:${ph}px"></div><div class="b a" style="height:${ah}px"></div></div>
       <div class="bl">${s.name.slice(0,4)}</div>
     </div>`;
   }).join('');
+  
+  // ✅ Add event listeners to bar chart items
+  document.querySelectorAll('.bg[data-subject-id]').forEach(bar => {
+    bar.addEventListener('click', () => {
+      goPage('subject', bar.dataset.subjectId);
+    });
+  });
  
-  // Quick view
+  // Quick view (with data attributes)
   document.getElementById('quick-view').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), col = pctColor(p, tgt);
     const cls = p>=tgt?'pct-safe':p>=tgt-15?'pct-warn':'pct-danger';
-    return `<div style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''" onclick="goPage('subject','${s.id}')">
+    return `<div class="quick-view-item" data-subject-id="${s.id}" style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;cursor:pointer;transition:background .15s">
       <div style="width:8px;height:8px;border-radius:2px;background:${COLORS[i%COLORS.length]};flex-shrink:0"></div>
       <span style="flex:1;font-size:.76rem">${s.name}</span>
       <div style="width:60px;height:3px;background:var(--border2);border-radius:2px;overflow:hidden"><div style="height:100%;width:${p}%;background:${col};border-radius:2px"></div></div>
       <span style="font-size:.7rem;font-family:'Syne',sans-serif;font-weight:700;color:${col};min-width:32px;text-align:right">${p}%</span>
     </div>`;
   }).join('');
+  
+  // ✅ Add event listeners and hover effects to quick view items
+  document.querySelectorAll('.quick-view-item[data-subject-id]').forEach(item => {
+    item.addEventListener('click', () => {
+      goPage('subject', item.dataset.subjectId);
+    });
+    item.addEventListener('mouseenter', () => {
+      item.style.background = 'var(--surface2)';
+    });
+    item.addEventListener('mouseleave', () => {
+      item.style.background = '';
+    });
+  });
 }
  
 function renderVerdictCard(ov, atRisk, safeBunks) {
@@ -868,12 +966,18 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
     sub = `${atRisk.map(s=>s.name).join(', ')} below target. ${randFrom(['Respawn recommended.','Academic terrorism.','Hall ticket trembling.'])}`;
   }
   document.getElementById('verdict-wrap').innerHTML = `
-    <div class="verdict-card ${cls}" onclick="openCooked()">
+    <div class="verdict-card ${cls}" id="verdict-card-clickable">
       <div class="verdict-emoji">${emoji}</div>
       <div class="verdict-title">${title}</div>
       <div class="verdict-sub">${sub}</div>
       <span class="verdict-tap">Am I Cooked? →</span>
     </div>`;
+  
+  // ✅ Add event listener to verdict card
+  const verdictCard = document.getElementById('verdict-card-clickable');
+  if (verdictCard) {
+    verdictCard.addEventListener('click', openCooked);
+  }
 }
  
 // ══════════════════════════════════════════════════════
@@ -896,11 +1000,17 @@ function renderStreak() {
     <div class="streak-card" style="flex-direction:column;align-items:flex-start;gap:8px">
       <div style="font-size:.7rem;color:var(--text2)">${checked?'✓ Checked in today':'Check in before you bunk'}</div>
       ${examDate ? `<div style="font-size:.68rem;color:var(--muted)">🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'var(--text)'}">${examDays}</strong> days</div>` : ''}
-      <button class="checkin-btn ${checked?'checked':''}" onclick="${checked?'':'checkIn()'}">
+      <button class="checkin-btn ${checked?'checked':''}" id="checkin-btn-dynamic">
         ${checked ? '✓ Checked in today' : 'Check in — Am I Cooked?'}
       </button>
     </div>
   `;
+  
+  // ✅ Add event listener to check-in button
+  const checkinBtn = document.getElementById('checkin-btn-dynamic');
+  if (checkinBtn && !checked) {
+    checkinBtn.addEventListener('click', checkIn);
+  }
 }
  
 function checkIn() {
@@ -1330,7 +1440,7 @@ function obAddRow(name='') {
   div.innerHTML = `
     <div class="rt">
       <input type="text" placeholder="Subject name" value="${name}">
-      <button class="rm-btn" onclick="this.closest('.subj-setup-row').remove()">✕</button>
+      <button class="rm-btn">✕</button>
     </div>
     <div class="rf">
       ${isEst ? `
@@ -1344,6 +1454,15 @@ function obAddRow(name='') {
         <div><label>Target %</label><input type="number" placeholder="${globalTarget}" min="1" max="100" data-f="target"></div>
       `}
     </div>`;
+  
+  // ✅ Add event listener to remove button
+  const rmBtn = div.querySelector('.rm-btn');
+  if (rmBtn) {
+    rmBtn.addEventListener('click', () => {
+      div.remove();
+    });
+  }
+  
   document.getElementById('ob-subj-list').appendChild(div);
 }
 
@@ -1561,18 +1680,8 @@ function renderAll() {
 }
  
 // Never auto-open onboarding. User adds subjects manually.
-document.getElementById('ob-overlay').classList.remove('show');
+document.getElementById('ob-overlay')?.classList.remove('show');
 renderAll();
- 
-// close modals on overlay click
-document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
-['ob-overlay','add-overlay'].forEach(id => {
-  document.getElementById(id).addEventListener('click', e => {
-    if (e.target === e.currentTarget) {
-      e.currentTarget.classList.remove('show');
-    }
-  });
-});
  
 // ══════════════════════════════════════════════════════
 //  DAILY TRACKER
@@ -1604,8 +1713,8 @@ function renderTracker() {
           return `<div class="tracker-row">
             <span class="tracker-name">${s.name}</span>
             <div class="tracker-btns">
-              <button class="tbtn p ${st==='p'?'on':''}" onclick="markToday('${today}','${s.id}','p')">Present</button>
-              <button class="tbtn a ${st==='a'?'on':''}" onclick="markToday('${today}','${s.id}','a')">Absent</button>
+              <button class="tbtn p ${st==='p'?'on':''}" data-date="${today}" data-subject-id="${s.id}" data-status="p">Present</button>
+              <button class="tbtn a ${st==='a'?'on':''}" data-date="${today}" data-subject-id="${s.id}" data-status="a">Absent</button>
             </div>
           </div>`;
         }).join('')}
@@ -1626,7 +1735,15 @@ function renderTracker() {
       }).join('') : '<div style="color:var(--muted);font-size:.72rem">No history yet</div>'}
     </div>
   `;
+  
+  // ✅ Add event listeners to tracker buttons
+  document.querySelectorAll('.tbtn[data-subject-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      markToday(btn.dataset.date, btn.dataset.subjectId, btn.dataset.status);
+    });
+  });
 }
+
 async function markToday(date, subjId, status) {
   if (!currentUser) return;
   // ✅ ADDED: Lock to prevent race conditions
@@ -1689,7 +1806,16 @@ async function markToday(date, subjId, status) {
     }
     
     // Update subject in database
-    await updateSubject(subjId, { total: s.total, present: s.present });
+    await updateSubject(subjId, { 
+      name: s.name,
+      code: s.code,
+      total: s.total, 
+      present: s.present,
+      perWeek: s.perWeek,
+      target: s.target,
+      semTotal: s.semTotal,
+      mode: s.mode
+    });
     
     // Re-render UI
     renderNav();
