@@ -42,12 +42,7 @@ async function loadData() {
     show('loading');
 
     const session = await getSession();
-    globalSession = session; // ✅ SAVE IT
-
-    await supabaseClient.auth.setSession({
-  access_token: session.access_token,
-  refresh_token: session.refresh_token
-    });
+    globalSession = session;
 
     if (!session || !session.user) {
       console.log('No active session found');
@@ -55,18 +50,40 @@ async function loadData() {
       return;
     }
 
+    // Set session in Supabase client
+    await supabaseClient.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token
+    });
+
     currentUser = session.user;
     console.log('User logged in:', currentUser.id);
 
-    // NOW queries will work 🔥
+    // Load subjects
     const { data: subjectsData, error: subjectsError } = await supabaseClient
-  .from('subjects')
-  .select('*')
-  .eq('user_id', currentUser.id);
+      .from('subjects')
+      .select('*')
+      .eq('user_id', currentUser.id);
 
     if (subjectsError) throw subjectsError;
 
     subjects = subjectsData || [];
+    
+    // Load today's tracker log
+    const today = new Date().toISOString().split('T')[0];
+    const { data: trackerData, error: trackerError } = await supabaseClient
+      .from('tracker_logs')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('date', today);
+    
+    if (trackerError) throw trackerError;
+    
+    // Build tracker log map
+    trackerLog = {};
+    (trackerData || []).forEach(log => {
+      trackerLog[log.subject_id] = log.status;
+    });
 
     renderSubjects();
     show('content');
@@ -94,7 +111,8 @@ function renderSubjects() {
   
   list.innerHTML = subjects.map(s => {
     const pct = s.total > 0 ? Math.round((s.present / s.total) * 100) : 0;
-    const pctClass = pct >= s.target ? 'safe' : pct >= s.target - 15 ? 'warn' : 'danger';
+    const target = s.target || 75;
+    const pctClass = pct >= target ? 'safe' : pct >= target - 15 ? 'warn' : 'danger';
     const status = trackerLog[s.id] || null;
     
     return `
@@ -126,7 +144,10 @@ function renderSubjects() {
 }
 
 async function markAttendance(subjId, status) {
-  if (!currentUser) return;
+  if (!currentUser || !globalSession) {
+    alert('Session expired. Please open the app and login again.');
+    return;
+  }
   
   const today = new Date().toISOString().split('T')[0];
   const s = subjects.find(x => x.id === subjId);
@@ -139,12 +160,14 @@ async function markAttendance(subjId, status) {
     if (prev === status) {
       delete trackerLog[subjId];
       
-      await supabaseClient
+      const { error: deleteError } = await supabaseClient
         .from('tracker_logs')
         .delete()
         .eq('user_id', currentUser.id)
         .eq('date', today)
         .eq('subject_id', subjId);
+      
+      if (deleteError) throw deleteError;
       
       if (prev === 'p') s.present = Math.max(0, s.present - 1);
       s.total = Math.max(0, s.total - 1);
@@ -158,24 +181,22 @@ async function markAttendance(subjId, status) {
       s.total += 1;
       if (status === 'p') s.present += 1;
       
-      await supabaseClient
+      const { error: upsertError } = await supabaseClient
         .from('tracker_logs')
         .upsert({
           user_id: currentUser.id,
           date: today,
           subject_id: subjId,
           status: status
-        }
-        .headers({
-         Authorization: `Bearer ${globalSession.access_token}`
-          })
-        , {
+        }, {
           onConflict: 'user_id,date,subject_id'
         });
+      
+      if (upsertError) throw upsertError;
     }
     
     // Update subject
-    await supabaseClient
+    const { error: updateError } = await supabaseClient
       .from('subjects')
       .update({
         total: s.total,
@@ -184,11 +205,13 @@ async function markAttendance(subjId, status) {
       .eq('id', subjId)
       .eq('user_id', currentUser.id);
     
+    if (updateError) throw updateError;
+    
     renderSubjects();
     
   } catch (error) {
     console.error('Mark attendance error:', error);
-    alert('Failed to update attendance');
+    alert('Failed to update attendance: ' + error.message);
   }
 }
 
@@ -203,9 +226,6 @@ function showError() {
   show('error');
 }
 
-chrome.runtime.sendMessage({ type: 'GET_SESSION' }, (session) => {
-  console.log("Popup session:", session);
-});
 function getSession() {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type: 'GET_SESSION' }, (res) => {
