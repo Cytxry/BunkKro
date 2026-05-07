@@ -305,6 +305,18 @@
  
 <div class="toast" id="toast"></div>
  
+<!-- ══════ DELETE CONFIRMATION MODAL ══════ -->
+<div class="overlay" id="delete-overlay">
+  <div class="modal" style="max-width:380px">
+    <div style="text-align:center;font-size:2.8rem;margin-bottom:12px">⚠️</div>
+    <h2 style="text-align:center">Delete Subject?</h2>
+    <p class="sub" style="text-align:center" id="delete-msg"></p>
+    <div class="modal-btns" style="margin-top:20px">
+      <button class="btn-sec" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn-pri" style="background:var(--danger);color:#fff" onclick="confirmDeleteSubject()">Delete</button>
+    </div>
+  </div>
+</div>
 
 <script src="bunkke.js"></script>
 </body>

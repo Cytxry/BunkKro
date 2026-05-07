@@ -1178,14 +1178,56 @@ async function saveSubject() {
  
 async function deleteSubject() {
   const s = subjects.find(x=>x.id===currSubjId);
-  if (!s || !confirm(`Delete "${s.name}"?`)) return;
+  if (!s) return;
   
-  // ✨ CHANGED: Delete from Supabase instead of localStorage
-  const success = await deleteSubjectFromDB(currSubjId);
+  const p = pct(s);
+  const tgt = getTarget(s);
+  document.getElementById('delete-msg').innerHTML = `
+    <strong style="color:var(--accent)">${s.name}</strong><br>
+    <span style="font-size:.72rem;color:${pctColor(p,tgt)}">${p}% attendance</span><br>
+    <span style="font-size:.68rem;color:var(--muted);margin-top:8px;display:inline-block">This will also delete all tracker history for this subject.</span>
+  `;
   
-  if (success) {
-    goPage('home');
-    toast(randToast('delete'));
+  document.getElementById('delete-overlay').classList.add('show');
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-overlay').classList.remove('show');
+}
+
+async function confirmDeleteSubject() {
+  const subjId = currSubjId;
+  const s = subjects.find(x=>x.id===subjId);
+  if (!s) return;
+  
+  try {
+    // Delete tracker logs first
+    const { error: trackerError } = await supabaseClient
+      .from('tracker_logs')
+      .delete()
+      .eq('user_id', currentUser.id)
+      .eq('subject_id', subjId);
+    
+    if (trackerError) throw trackerError;
+    
+    // Delete subject
+    const success = await deleteSubjectFromDB(subjId);
+    
+    if (success) {
+      // Clean up local tracker log
+      Object.keys(trackerLog).forEach(date => {
+        if (trackerLog[date][subjId]) {
+          delete trackerLog[date][subjId];
+        }
+      });
+      
+      closeDeleteModal();
+      goPage('home');
+      toast(randToast('delete'));
+    }
+  } catch (error) {
+    console.error('Delete error:', error);
+    toast('Failed to delete subject', 'err');
   }
 }
  
@@ -1551,7 +1593,7 @@ renderAll();
  
 // close modals on overlay click
 document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
-['ob-overlay','add-overlay'].forEach(id => {
+['ob-overlay','add-overlay','delete-overlay'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target === e.currentTarget) {
       e.currentTarget.classList.remove('show');

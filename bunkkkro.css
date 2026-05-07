@@ -647,3 +647,16 @@ nav{padding:12px 0;flex:1;overflow-y:auto}
   border-color: var(--danger);
   color: var(--danger);
 }
+
+#delete-overlay .modal {
+  animation: modalin .25s cubic-bezier(.34,1.56,.64,1) both;
+}
+
+#delete-overlay .btn-pri {
+  transition: opacity .15s, transform .1s;
+}
+
+#delete-overlay .btn-pri:hover {
+  opacity: .9;
+  transform: translateY(-1px);
+}
