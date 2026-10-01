@@ -9,8 +9,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BunkKro — Can I bunk today?</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-<!-- ✨ ADDED: Supabase CDN -->
+<!-- ✨ Supabase CDN & Tesseract.js OCR -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
  
@@ -28,7 +29,10 @@
       <div class="nav-dot"></div> Home
     </div>
     <div class="nav-item" id="nav-tracker" onclick="goPage('tracker')">
-      <div class="nav-dot"></div> Daily Tracker
+      <div class="nav-dot"></div> Daily Classes 📅
+    </div>
+    <div class="nav-item" id="nav-timetable" onclick="goPage('timetable')">
+      <div class="nav-dot"></div> Smart Timetable ⚡
     </div>
     <div class="nav-label">Subjects</div>
     <div id="nav-subjects"></div>
@@ -154,15 +158,233 @@
     </div>
   </div>
  
-  <!-- ░░ DAILY TRACKER ░░ -->
+  <!-- ░░ DAILY TRACKER (TODAY'S CLASSES) ░░ -->
   <div class="page" id="page-tracker">
-    <div class="ph">
-      <h2>Daily Tracker 📅</h2>
-      <p id="tracker-date"></p>
+    <div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2>Daily Classes 📅</h2>
+        <p id="tracker-date-subtitle">Track your classes and mark attendance effortlessly.</p>
+      </div>
+      <div class="date-nav-bar">
+        <button class="date-nav-btn" onclick="navDate(-1)" title="Previous Day">◀</button>
+        <div class="date-picker-wrap">
+          <input type="date" id="tracker-date-input" onchange="onDateSelected(this.value)">
+        </div>
+        <button class="date-nav-btn" onclick="navDate(1)" title="Next Day">▶</button>
+        <button class="date-today-btn" onclick="resetToToday()">Today</button>
+      </div>
     </div>
+
+    <!-- Date Status Banner (e.g. Holiday, Today) -->
+    <div id="date-status-banner"></div>
+
+    <!-- Daily Completion Summary -->
+    <div class="daily-summary-card" id="daily-summary-card"></div>
+
+    <!-- Scheduled Classes Content -->
     <div id="tracker-content"></div>
+
+    <!-- Date Exceptions Controls -->
+    <div class="tracker-actions-row">
+      <button class="btn-sec" id="btn-toggle-holiday" onclick="toggleDateHoliday()">🏖️ Mark Day as Holiday</button>
+      <button class="btn-sec" onclick="openExtraClassModal()">⚡ Add Extra Class</button>
+      <button class="btn-sec" onclick="goPage('timetable')">📅 Manage Timetable</button>
+    </div>
+
+    <!-- Recent History -->
+    <div class="card" style="margin-top:20px">
+      <div class="card-title">Recent Attendance History <span>last 7 active days</span></div>
+      <div id="recent-history-list"></div>
+    </div>
   </div>
- 
+
+  <!-- ░░ SMART TIMETABLE PAGE ░░ -->
+  <div class="page" id="page-timetable">
+    <div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2>Smart Timetable ⚡</h2>
+        <p>Upload a photo of your schedule or edit your weekly periods manually.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-pri" onclick="document.getElementById('tt-file-input').click()">📸 Upload & Scan</button>
+        <button class="btn-sec" onclick="openAddSlotModal()">+ Add Class</button>
+        <button class="btn-sec" onclick="openSyncFrequenciesModal()">📊 Auto-Calc / Week</button>
+      </div>
+    </div>
+
+    <!-- Timetable Upload & OCR Card -->
+    <div class="tt-upload-card" id="tt-upload-card">
+      <input type="file" id="tt-file-input" accept="image/png, image/jpeg, image/jpg" style="display:none" onchange="handleTimetableFileUpload(this.files[0])">
+      <div class="tt-dropzone" id="tt-dropzone" onclick="document.getElementById('tt-file-input').click()">
+        <div class="tt-drop-icon">📷</div>
+        <div class="tt-drop-text">
+          <strong>Drop your timetable screenshot here</strong> or <span style="color:var(--accent);text-decoration:underline">browse files</span>
+        </div>
+        <div class="tt-drop-hint">Supports PNG, JPG, JPEG. Clean text, table grids and college photos work best.</div>
+      </div>
+
+      <!-- OCR Scanning Progress State -->
+      <div class="ocr-progress-box" id="ocr-progress-box" style="display:none">
+        <div class="ocr-spinner"></div>
+        <div class="ocr-status-text" id="ocr-status-text">Scanning timetable image...</div>
+        <div class="ocr-bar"><div class="ocr-bar-fill" id="ocr-bar-fill" style="width:0%"></div></div>
+        <div class="ocr-details" id="ocr-details">Analyzing timetable layout and text blocks...</div>
+      </div>
+
+      <!-- OCR Image Preview & Controls -->
+      <div class="tt-preview-box" id="tt-preview-box" style="display:none">
+        <div class="tt-preview-header">
+          <span style="font-size:.78rem;font-weight:700">Uploaded Timetable Preview</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn-sec" style="padding:4px 10px;font-size:.68rem" onclick="reScanTimetable()">↺ Re-scan</button>
+            <button class="btn-sec" style="padding:4px 10px;font-size:.68rem;color:var(--danger)" onclick="clearScannedImage()">✕ Remove</button>
+          </div>
+        </div>
+        <div class="tt-img-wrap">
+          <img id="tt-scanned-preview-img" alt="Scanned timetable preview">
+        </div>
+      </div>
+    </div>
+
+    <!-- Weekly Timetable Grid View -->
+    <div class="tt-grid-container" id="tt-grid-container" style="margin-top:20px">
+      <div class="tt-grid-header">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700">Weekly Schedule Grid</h3>
+          <span id="tt-stats-badge" class="tt-badge">0 classes scheduled</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sec" style="font-size:.7rem" onclick="toggleSundayDisplay()" id="btn-toggle-sunday">+ Sunday</button>
+          <button class="btn-sec" style="font-size:.7rem;color:var(--danger)" onclick="confirmClearTimetable()">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <div class="tt-grid-wrap" id="tt-grid-wrap"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════ TIMETABLE SLOT EDIT / ADD MODAL ══════ -->
+<div class="overlay" id="slot-edit-overlay">
+  <div class="modal" style="max-width:440px">
+    <h2 id="slot-modal-title">Edit Class Slot 🕒</h2>
+    <p class="sub">Configure day, period timing and assigned subject.</p>
+
+    <input type="hidden" id="slot-edit-id">
+
+    <div class="mf">
+      <label>Day of Week</label>
+      <select id="slot-day">
+        <option value="1">Monday</option>
+        <option value="2">Tuesday</option>
+        <option value="3">Wednesday</option>
+        <option value="4">Thursday</option>
+        <option value="5">Friday</option>
+        <option value="6">Saturday</option>
+        <option value="7">Sunday</option>
+      </select>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf">
+        <label>Period Index</label>
+        <input type="number" id="slot-period" min="1" max="15" value="1">
+      </div>
+      <div class="mf">
+        <label>Type</label>
+        <select id="slot-type" onchange="onSlotTypeChange(this.value)">
+          <option value="subject">Subject Class</option>
+          <option value="break">Break / Free Period</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mf">
+        <label>Start Time <span style="color:var(--muted);font-size:.56rem">(optional)</span></label>
+        <input type="time" id="slot-start-time">
+      </div>
+      <div class="mf">
+        <label>End Time <span style="color:var(--muted);font-size:.56rem">(optional)</span></label>
+        <input type="time" id="slot-end-time">
+      </div>
+    </div>
+
+    <div class="mf" id="slot-subject-group">
+      <label>Subject</label>
+      <div style="display:flex;gap:8px">
+        <select id="slot-subject-select" style="flex:1" onchange="onSlotSubjectSelect(this.value)">
+          <option value="">-- Choose Existing Subject --</option>
+        </select>
+      </div>
+      <div style="margin-top:8px">
+        <label style="font-size:.55rem;color:var(--muted);margin-bottom:3px">Or Type Subject Name</label>
+        <input type="text" id="slot-subject-name" placeholder="e.g. Mathematics or CS101">
+      </div>
+    </div>
+
+    <div class="modal-btns" style="margin-top:20px">
+      <button class="btn-sec" onclick="closeSlotEditModal()">Cancel</button>
+      <button class="btn-sec" id="btn-delete-slot" style="color:var(--danger);border-color:rgba(255,64,96,.3)" onclick="deleteCurrentSlot()">Delete</button>
+      <button class="btn-pri" onclick="saveSlotModal()">Save Slot</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ AUTO-SYNC FREQUENCIES MODAL ══════ -->
+<div class="overlay" id="sync-freq-overlay">
+  <div class="modal" style="max-width:480px">
+    <h2>Weekly Classes Summary 📊</h2>
+    <p class="sub">Calculated automatically from your weekly timetable entries.</p>
+    
+    <div id="sync-freq-list" style="margin-bottom:18px;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r-sm);padding:12px;margin-bottom:18px;font-size:.72rem;line-height:1.6;color:var(--text2)">
+      💡 <strong>Note:</strong> Applying these values updates the "Classes / Week" setting for each subject. It will <em>not</em> erase your attendance numbers or present counts.
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeSyncFrequenciesModal()">Close</button>
+      <button class="btn-pri" onclick="applyWeeklyFrequencies()">Apply to Subjects ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ EXTRA CLASS MODAL ══════ -->
+<div class="overlay" id="extra-class-overlay">
+  <div class="modal" style="max-width:420px">
+    <h2>Add Extra Class ⚡</h2>
+    <p class="sub" id="extra-class-date-label">Schedule an ad-hoc class for this date.</p>
+
+    <div class="mf">
+      <label>Subject</label>
+      <select id="extra-subject-select"></select>
+    </div>
+
+    <div class="mf">
+      <label>Time / Description <span style="color:var(--muted);font-size:.56rem">(optional)</span></label>
+      <input type="text" id="extra-class-time" placeholder="e.g. 04:00 PM - Remedial Session">
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeExtraClassModal()">Cancel</button>
+      <button class="btn-pri" onclick="confirmAddExtraClass()">Add to Today</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TIMETABLE OVERWRITE CONFIRMATION ══════ -->
+<div class="overlay" id="tt-confirm-overlay">
+  <div class="modal" style="max-width:400px">
+    <div style="text-align:center;font-size:2.5rem;margin-bottom:10px">⚠️</div>
+    <h2 style="text-align:center">Replace Existing Timetable?</h2>
+    <p class="sub" style="text-align:center">You already have a saved timetable. Scanning or saving this will replace your current weekly schedule.</p>
+    <div class="modal-btns" style="justify-content:center;margin-top:16px">
+      <button class="btn-sec" onclick="closeTtConfirmModal()">Cancel</button>
+      <button class="btn-pri" style="background:var(--accent);color:#000" onclick="confirmProceedScan()">Proceed</button>
+    </div>
+  </div>
 </div>
  
 <!-- ✨ ADDED: AUTH MODAL -->

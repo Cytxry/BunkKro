@@ -5,8 +5,16 @@ const APP_URL = 'https://bunkkro.vercel.app';
 let supabaseClient;
 let currentUser = null;
 let subjects = [];
-let trackerLog = {};
+let timetableEntries = [];
+let dailyPeriodLogs = {};
 let globalSession = null;
+
+function getLocalDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -59,33 +67,41 @@ async function loadData() {
     currentUser = session.user;
     console.log('User logged in:', currentUser.id);
 
-    // Load subjects
+    // 1. Load subjects
     const { data: subjectsData, error: subjectsError } = await supabaseClient
       .from('subjects')
       .select('*')
       .eq('user_id', currentUser.id);
 
     if (subjectsError) throw subjectsError;
-
     subjects = subjectsData || [];
+
+    // 2. Load timetable entries
+    const { data: ttData, error: ttError } = await supabaseClient
+      .from('timetable_entries')
+      .select('*')
+      .eq('user_id', currentUser.id);
+
+    timetableEntries = ttData || [];
+
+    // 3. Load today's attendance logs
+    const today = getLocalDateString();
     
-    // Load today's tracker log
-    const today = new Date().toISOString().split('T')[0];
-    const { data: trackerData, error: trackerError } = await supabaseClient
-      .from('tracker_logs')
+    dailyPeriodLogs = {};
+    const { data: logsData, error: logsError } = await supabaseClient
+      .from('daily_period_logs')
       .select('*')
       .eq('user_id', currentUser.id)
       .eq('date', today);
-    
-    if (trackerError) throw trackerError;
-    
-    // Build tracker log map
-    trackerLog = {};
-    (trackerData || []).forEach(log => {
-      trackerLog[log.subject_id] = log.status;
-    });
 
-    renderSubjects();
+    if (!logsError && logsData) {
+      logsData.forEach(row => {
+        const key = row.entry_id || row.subject_id;
+        dailyPeriodLogs[key] = row.status;
+      });
+    }
+
+    renderTodayClasses();
     show('content');
 
   } catch (error) {
@@ -94,132 +110,205 @@ async function loadData() {
   }
 }
 
-function renderSubjects() {
+function getTodayDayOfWeek() {
+  const d = new Date();
+  const day = d.getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+  return day === 0 ? 7 : day;
+}
+
+function renderTodayClasses() {
   const list = document.getElementById('subjects-list');
-  
-  if (!subjects.length) {
+  const subText = document.getElementById('today-sub-text');
+  const summaryStats = document.getElementById('summary-stats');
+  const summaryPct = document.getElementById('summary-pct');
+  const summaryFill = document.getElementById('summary-fill');
+
+  const todayDay = getTodayDayOfWeek();
+  const d = new Date();
+  const dayName = d.toLocaleDateString('en-IN', { weekday: 'long' });
+
+  // Filter timetable for today
+  let todayClasses = timetableEntries
+    .filter(s => s.day_of_week === todayDay && !s.is_break)
+    .sort((a, b) => a.period_index - b.period_index);
+
+  // If no timetable entries exist for today, check if user has subjects to fallback
+  const isFallback = todayClasses.length === 0;
+  if (isFallback && subjects.length > 0) {
+    todayClasses = subjects.map((s, i) => ({
+      id: s.id,
+      day_of_week: todayDay,
+      period_index: i + 1,
+      start_time: '',
+      end_time: '',
+      subject_id: s.id,
+      subject_name: s.name,
+      is_break: false
+    }));
+  }
+
+  const totalClasses = todayClasses.length;
+  subText.textContent = `${dayName} · ${totalClasses} class${totalClasses !== 1 ? 'es' : ''}`;
+
+  if (totalClasses === 0) {
     list.innerHTML = `
       <div class="empty-state">
-        <h3>No subjects yet</h3>
-        <p>Add subjects in the app first</p>
+        <p style="font-size:32px;margin-bottom:8px">😴</p>
+        <h3>No classes scheduled today</h3>
+        <p style="font-size:11px;color:#777">Open the full app to upload your timetable or view upcoming days.</p>
       </div>
     `;
+    summaryStats.textContent = '0 scheduled';
+    summaryPct.textContent = '100%';
+    summaryFill.style.width = '100%';
     return;
   }
-  
-  const today = new Date().toISOString().split('T')[0];
-  
-  list.innerHTML = subjects.map(s => {
-    const pct = s.total > 0 ? Math.round((s.present / s.total) * 100) : 0;
-    const target = s.target || 75;
+
+  // Calculate completion
+  let markedCount = 0;
+  todayClasses.forEach(c => {
+    const st = dailyPeriodLogs[c.id];
+    if (st) markedCount++;
+  });
+
+  const completionPct = Math.round((markedCount / totalClasses) * 100);
+  summaryStats.textContent = `${markedCount} of ${totalClasses} marked`;
+  summaryPct.textContent = `${completionPct}%`;
+  summaryFill.style.width = `${completionPct}%`;
+
+  list.innerHTML = todayClasses.map(c => {
+    const s = subjects.find(x => x.id === c.subject_id);
+    const displayName = s ? s.name : c.subject_name;
+    const pct = s && s.total > 0 ? Math.round((s.present / s.total) * 100) : 0;
+    const target = s ? (s.target || 75) : 75;
     const pctClass = pct >= target ? 'safe' : pct >= target - 15 ? 'warn' : 'danger';
-    const status = trackerLog[s.id] || null;
-    
+    const status = dailyPeriodLogs[c.id] || null;
+    const timeDisplay = c.start_time ? (c.end_time ? `${c.start_time} - ${c.end_time}` : c.start_time) : '';
+
+    let itemClass = 'class-item';
+    if (status === 'p') itemClass += ' marked-p';
+    else if (status === 'a') itemClass += ' marked-a';
+    else if (status === 'cancelled') itemClass += ' marked-c';
+
     return `
-      <div class="subject-item">
-        <div class="subject-header">
-          <span class="subject-name">${s.name}</span>
-          <span class="subject-pct ${pctClass}">${pct}%</span>
+      <div class="${itemClass}">
+        <div class="class-header">
+          <span class="class-name">${displayName}</span>
+          ${s ? `<span class="class-pct ${pctClass}">${pct}%</span>` : ''}
+        </div>
+        <div class="period-meta">
+          <span class="badge-pnum">P${c.period_index}</span>
+          ${timeDisplay ? `<span>🕒 ${timeDisplay}</span>` : ''}
+          ${s ? `<span>${s.present}/${s.total} attended</span>` : ''}
         </div>
         <div class="tracker-btns">
-          <button class="present ${status === 'p' ? 'active' : ''}" data-id="${s.id}" data-status="p">
+          <button class="present ${status === 'p' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.period_index}" data-status="p">
             ${status === 'p' ? '✓ Present' : 'Present'}
           </button>
-          <button class="absent ${status === 'a' ? 'active' : ''}" data-id="${s.id}" data-status="a">
+          <button class="absent ${status === 'a' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.period_index}" data-status="a">
             ${status === 'a' ? '✗ Absent' : 'Absent'}
+          </button>
+          <button class="cancel ${status === 'cancelled' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.period_index}" data-status="cancelled" title="Cancelled (No absence penalty)">
+            ${status === 'cancelled' ? '🚫' : 'Cancel'}
           </button>
         </div>
       </div>
     `;
   }).join('');
-  
-  // Add event listeners
+
+  // Add click handlers
   document.querySelectorAll('.tracker-btns button').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      const subjId = e.target.dataset.id;
-      const status = e.target.dataset.status;
-      markAttendance(subjId, status);
+      const entryId = e.currentTarget.dataset.entry;
+      const subjId = e.currentTarget.dataset.subject;
+      const period = parseInt(e.currentTarget.dataset.period) || 1;
+      const status = e.currentTarget.dataset.status;
+      markPeriodAttendance(entryId, subjId, status, period);
     });
   });
 }
 
-async function markAttendance(subjId, status) {
+async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
   if (!currentUser || !globalSession) {
     alert('Session expired. Please open the app and login again.');
     return;
   }
-  
-  const today = new Date().toISOString().split('T')[0];
+
+  const today = getLocalDateString();
   const s = subjects.find(x => x.id === subjId);
-  if (!s) return;
-  
-  const prev = trackerLog[subjId];
-  
+  const prevStatus = dailyPeriodLogs[entryId] || null;
+
   try {
-    // Toggle off if same status
-    if (prev === status) {
-      delete trackerLog[subjId];
-      
-      const { error: deleteError } = await supabaseClient
-        .from('tracker_logs')
+    let finalStatus = newStatus;
+
+    if (prevStatus === newStatus) {
+      // Toggle off
+      finalStatus = null;
+      delete dailyPeriodLogs[entryId];
+
+      await supabaseClient
+        .from('daily_period_logs')
         .delete()
         .eq('user_id', currentUser.id)
         .eq('date', today)
-        .eq('subject_id', subjId);
-      
-      if (deleteError) throw deleteError;
-      
-      if (prev === 'p') s.present = Math.max(0, s.present - 1);
-      s.total = Math.max(0, s.total - 1);
-      
+        .eq('entry_id', entryId);
+
     } else {
-      // Update counts
-      if (prev === 'p') s.present = Math.max(0, s.present - 1);
-      if (prev) s.total = Math.max(0, s.total - 1);
-      
-      trackerLog[subjId] = status;
-      s.total += 1;
-      if (status === 'p') s.present += 1;
-      
-      const { error: upsertError } = await supabaseClient
-        .from('tracker_logs')
+      // Set new
+      dailyPeriodLogs[entryId] = newStatus;
+
+      await supabaseClient
+        .from('daily_period_logs')
         .upsert({
           user_id: currentUser.id,
           date: today,
-          subject_id: subjId,
-          status: status
+          entry_id: entryId,
+          subject_id: subjId || null,
+          period_index: periodIndex,
+          status: newStatus
         }, {
-          onConflict: 'user_id,date,subject_id'
+          onConflict: 'user_id,date,entry_id'
         });
-      
-      if (upsertError) throw upsertError;
     }
-    
-    // Update subject
-    const { error: updateError } = await supabaseClient
-      .from('subjects')
-      .update({
-        total: s.total,
-        present: s.present
-      })
-      .eq('id', subjId)
-      .eq('user_id', currentUser.id);
-    
-    if (updateError) throw updateError;
-    
-    renderSubjects();
-    
-  } catch (error) {
-    console.error('Mark attendance error:', error);
-    alert('Failed to update attendance: ' + error.message);
+
+    // Sync subject numbers
+    if (s) {
+      if (prevStatus === 'p') {
+        s.present = Math.max(0, s.present - 1);
+        s.total = Math.max(0, s.total - 1);
+      } else if (prevStatus === 'a') {
+        s.total = Math.max(0, s.total - 1);
+      }
+
+      if (finalStatus === 'p') {
+        s.present += 1;
+        s.total += 1;
+      } else if (finalStatus === 'a') {
+        s.total += 1;
+      }
+
+      await supabaseClient
+        .from('subjects')
+        .update({ total: s.total, present: s.present })
+        .eq('id', s.id)
+        .eq('user_id', currentUser.id);
+    }
+
+    renderTodayClasses();
+
+  } catch (err) {
+    console.error('Mark attendance error:', err);
+    alert('Failed to update attendance: ' + err.message);
   }
 }
 
 function show(section) {
   ['loading', 'error', 'not-logged-in', 'content'].forEach(id => {
-    document.getElementById(id).style.display = 'none';
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
   });
-  document.getElementById(section).style.display = section === 'content' ? 'block' : 'flex';
+  const target = document.getElementById(section);
+  if (target) target.style.display = section === 'content' ? 'block' : 'flex';
 }
 
 function showError() {

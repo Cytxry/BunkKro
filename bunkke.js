@@ -172,8 +172,146 @@ async function loadSubjects() {
 }
 
 // ══════════════════════════════════════════════════════
-//  ✨ LOAD TRACKER FROM SUPABASE
+//  ✨ LOAD TIMETABLE, TRACKER & EXCEPTIONS FROM SUPABASE
 // ══════════════════════════════════════════════════════
+
+let timetable = [];
+let timetableMeta = { id: null, title: 'Weekly Timetable', showSunday: false };
+let dailyPeriodLogs = {}; // date -> { [entryId]: { status: 'p'|'a'|'c', subjectId, periodIndex, isExtra, extraName } }
+let dateExceptions = {}; // date -> { type: 'holiday', note: '' }
+let selectedTrackerDate = ''; // YYYY-MM-DD
+
+function getLocalDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Load Timetable from Supabase (with localStorage fallback)
+async function loadTimetable() {
+  if (!currentUser) return;
+
+  try {
+    // 1. Fetch active timetable
+    const { data: ttData, error: ttError } = await supabaseClient
+      .from('timetables')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .limit(1);
+
+    if (ttError && ttError.code !== 'PGRST116') {
+      console.warn('Timetables table not accessible, using cached:', ttError.message);
+    }
+
+    if (ttData && ttData.length > 0) {
+      timetableMeta = { id: ttData[0].id, title: ttData[0].title || 'Weekly Timetable', showSunday: false };
+    }
+
+    // 2. Fetch timetable entries
+    const { data: entriesData, error: entriesError } = await supabaseClient
+      .from('timetable_entries')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('day_of_week', { ascending: true })
+      .order('period_index', { ascending: true });
+
+    if (!entriesError && entriesData) {
+      timetable = entriesData.map(e => ({
+        id: e.id,
+        day: e.day_of_week,
+        period: e.period_index,
+        startTime: e.start_time || '',
+        endTime: e.end_time || '',
+        subjectId: e.subject_id,
+        subjectName: e.subject_name,
+        isBreak: e.is_break || false,
+        isUncertain: false
+      }));
+      localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
+    } else {
+      // Offline / cached fallback
+      const cached = localStorage.getItem('bk_timetable_' + currentUser.id);
+      if (cached) timetable = JSON.parse(cached);
+    }
+  } catch (error) {
+    console.warn('Error loading timetable:', error);
+    const cached = localStorage.getItem('bk_timetable_' + (currentUser ? currentUser.id : ''));
+    if (cached) timetable = JSON.parse(cached);
+  }
+
+  // Check if any sunday entry exists
+  if (timetable.some(t => t.day === 7)) {
+    timetableMeta.showSunday = true;
+  }
+}
+
+// Load Daily Period Logs & Legacy Tracker
+async function loadDailyPeriodLogs() {
+  if (!currentUser) return;
+  
+  dailyPeriodLogs = {};
+  
+  try {
+    const { data, error } = await supabaseClient
+      .from('daily_period_logs')
+      .select('*')
+      .eq('user_id', currentUser.id);
+    
+    if (!error && data) {
+      data.forEach(row => {
+        if (!dailyPeriodLogs[row.date]) dailyPeriodLogs[row.date] = {};
+        const key = row.entry_id || row.subject_id;
+        dailyPeriodLogs[row.date][key] = {
+          status: row.status,
+          subjectId: row.subject_id,
+          periodIndex: row.period_index || 1,
+          entryId: row.entry_id
+        };
+      });
+      localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
+    } else {
+      const cached = localStorage.getItem('bk_daily_period_logs_' + currentUser.id);
+      if (cached) dailyPeriodLogs = JSON.parse(cached);
+    }
+  } catch (err) {
+    console.warn('Error loading daily period logs:', err);
+    const cached = localStorage.getItem('bk_daily_period_logs_' + (currentUser ? currentUser.id : ''));
+    if (cached) dailyPeriodLogs = JSON.parse(cached);
+  }
+}
+
+// Load Date Exceptions (Holidays, etc.)
+async function loadDateExceptions() {
+  if (!currentUser) return;
+  dateExceptions = {};
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('timetable_exceptions')
+      .select('*')
+      .eq('user_id', currentUser.id);
+
+    if (!error && data) {
+      data.forEach(row => {
+        dateExceptions[row.date] = {
+          type: row.type,
+          note: row.note || ''
+        };
+      });
+      localStorage.setItem('bk_date_exceptions_' + currentUser.id, JSON.stringify(dateExceptions));
+    } else {
+      const cached = localStorage.getItem('bk_date_exceptions_' + currentUser.id);
+      if (cached) dateExceptions = JSON.parse(cached);
+    }
+  } catch (err) {
+    console.warn('Error loading date exceptions:', err);
+    const cached = localStorage.getItem('bk_date_exceptions_' + (currentUser ? currentUser.id : ''));
+    if (cached) dateExceptions = JSON.parse(cached);
+  }
+}
+
+// Legacy tracker loader for backwards compatibility
 async function loadTracker() {
   if (!currentUser) return;
   
@@ -185,7 +323,6 @@ async function loadTracker() {
     
     if (error) throw error;
     
-    // Rebuild trackerLog object from database
     trackerLog = {};
     (data || []).forEach(row => {
       if (!trackerLog[row.date]) {
@@ -195,7 +332,7 @@ async function loadTracker() {
     });
     
   } catch (error) {
-    console.error('Error loading tracker:', error);
+    console.error('Error loading legacy tracker:', error);
     trackerLog = {};
   }
 }
@@ -500,8 +637,13 @@ function showAuthModal() {
 async function showApp() {
   document.getElementById('auth-overlay').classList.remove('show');
   document.getElementById('logout-btn').style.display = 'block';
+  selectedTrackerDate = getLocalDateString();
   await loadSubjects();
+  await loadTimetable();
+  await loadDailyPeriodLogs();
+  await loadDateExceptions();
   await loadTracker();
+  renderAll();
 }
 
 
@@ -725,6 +867,7 @@ function goPage(page, id) {
     const nv = document.getElementById(`nav-${page}`);
     if (nv) nv.classList.add('active');
     if (page === 'tracker') renderTracker();
+    else if (page === 'timetable') renderTimetable();
     else renderHome();
   }
   document.getElementById('sidebar').classList.remove('open');
@@ -1585,149 +1728,1228 @@ function renderAll() {
   renderNav();
   renderHome();
   if (currPage === 'tracker') renderTracker();
+  else if (currPage === 'timetable') renderTimetable();
 }
- 
+
 // Never auto-open onboarding. User adds subjects manually.
 document.getElementById('ob-overlay').classList.remove('show');
 renderAll();
- 
+
 // close modals on overlay click
 document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
-['ob-overlay','add-overlay','delete-overlay'].forEach(id => {
-  document.getElementById(id).addEventListener('click', e => {
-    if (e.target === e.currentTarget) {
-      e.currentTarget.classList.remove('show');
-    }
-  });
+['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('click', e => {
+      if (e.target === e.currentTarget) {
+        e.currentTarget.classList.remove('show');
+      }
+    });
+  }
 });
- 
+
+// Setup drag and drop for timetable upload
+document.addEventListener('DOMContentLoaded', () => {
+  setupTimetableDragDrop();
+});
+
+function setupTimetableDragDrop() {
+  const dropzone = document.getElementById('tt-dropzone');
+  if (!dropzone) return;
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add('dragover');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove('dragover');
+    }, false);
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files && files.length > 0) {
+      handleTimetableFileUpload(files[0]);
+    }
+  }, false);
+}
+
+
 // ══════════════════════════════════════════════════════
-//  DAILY TRACKER
+//  FEATURE 1 & 2: SMART TIMETABLE OCR & SCANNING
 // ══════════════════════════════════════════════════════
 
-function renderTracker() {
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('tracker-date').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  
-  if (!trackerLog[today]) trackerLog[today] = {};
- 
-  if (!subjects.length) {
-    document.getElementById('tracker-content').innerHTML = `<div class="empty"><div class="empty-icon">📋</div><h3>No subjects yet.</h3><p>Add subjects from the sidebar first.</p></div>`;
+let pendingOCRFile = null;
+let currentScannedImageBlob = null;
+
+function handleTimetableFileUpload(file) {
+  if (!file) return;
+
+  const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+  if (!validTypes.includes(file.type)) {
+    toast('Please upload a valid PNG or JPG image', 'err');
     return;
   }
- 
-  const marked = Object.keys(trackerLog[today]).length;
-  const days = Object.keys(trackerLog).sort().reverse().slice(0, 7);
- 
-  document.getElementById('tracker-content').innerHTML = `
-    <div class="tracker-day">
-      <div class="tracker-day-hd">
-        <h4>Today</h4>
-        <span>${marked}/${subjects.length} marked</span>
-      </div>
-      <div class="tracker-rows">
-        ${subjects.map(s => {
-          const st = trackerLog[today][s.id];
-          return `<div class="tracker-row">
-            <span class="tracker-name">${s.name}</span>
-            <div class="tracker-btns">
-              <button class="tbtn p ${st==='p'?'on':''}" onclick="markToday('${today}','${s.id}','p')">Present</button>
-              <button class="tbtn a ${st==='a'?'on':''}" onclick="markToday('${today}','${s.id}','a')">Absent</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="card-title">Recent History</div>
-      ${days.length ? days.map(d => {
-        const log = trackerLog[d];
-        const p = Object.values(log).filter(v=>v==='p').length;
-        const a = Object.values(log).filter(v=>v==='a').length;
-        const lbl = new Date(d).toLocaleDateString('en-IN',{weekday:'short',month:'short',day:'numeric'});
-        return `<div class="hist-row">
-          <span style="flex:1;color:var(--text2)">${lbl}</span>
-          <span style="color:var(--accent)">✓ ${p}</span>
-          <span style="color:var(--danger)">✗ ${a}</span>
-        </div>`;
-      }).join('') : '<div style="color:var(--muted);font-size:.72rem">No history yet</div>'}
-    </div>
-  `;
+
+  // If user already has entries, confirm replacement
+  if (timetable.length > 0) {
+    pendingOCRFile = file;
+    document.getElementById('tt-confirm-overlay').classList.add('show');
+    return;
+  }
+
+  processTimetableImage(file);
 }
-async function markToday(date, subjId, status) {
+
+function closeTtConfirmModal() {
+  document.getElementById('tt-confirm-overlay').classList.remove('show');
+  pendingOCRFile = null;
+}
+
+function confirmProceedScan() {
+  closeTtConfirmModal();
+  if (pendingOCRFile) {
+    processTimetableImage(pendingOCRFile);
+    pendingOCRFile = null;
+  }
+}
+
+async function processTimetableImage(file) {
+  currentScannedImageBlob = file;
+
+  // Show preview
+  const previewBox = document.getElementById('tt-preview-box');
+  const previewImg = document.getElementById('tt-scanned-preview-img');
+  const progressBox = document.getElementById('ocr-progress-box');
+  const progressBar = document.getElementById('ocr-bar-fill');
+  const statusText = document.getElementById('ocr-status-text');
+  const detailsText = document.getElementById('ocr-details');
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    if (previewImg) previewImg.src = e.target.result;
+    if (previewBox) previewBox.style.display = 'block';
+
+    if (progressBox) progressBox.style.display = 'block';
+    if (progressBar) progressBar.style.width = '10%';
+    if (statusText) statusText.textContent = 'Initializing OCR Scanner...';
+    if (detailsText) detailsText.textContent = 'Preparing image data for local recognition...';
+
+    await runTesseractScan(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function reScanTimetable() {
+  if (currentScannedImageBlob) {
+    processTimetableImage(currentScannedImageBlob);
+  } else {
+    document.getElementById('tt-file-input').click();
+  }
+}
+
+function clearScannedImage() {
+  const previewBox = document.getElementById('tt-preview-box');
+  const previewImg = document.getElementById('tt-scanned-preview-img');
+  const progressBox = document.getElementById('ocr-progress-box');
+  if (previewBox) previewBox.style.display = 'none';
+  if (previewImg) previewImg.src = '';
+  if (progressBox) progressBox.style.display = 'none';
+  currentScannedImageBlob = null;
+  document.getElementById('tt-file-input').value = '';
+}
+
+async function runTesseractScan(imageSrc) {
+  const progressBox = document.getElementById('ocr-progress-box');
+  const progressBar = document.getElementById('ocr-bar-fill');
+  const statusText = document.getElementById('ocr-status-text');
+  const detailsText = document.getElementById('ocr-details');
+
+  try {
+    if (!window.Tesseract) {
+      throw new Error('Tesseract OCR engine is loading or unavailable. Please check your connection.');
+    }
+
+    if (statusText) statusText.textContent = 'Reading timetable structure...';
+
+    const result = await Tesseract.recognize(imageSrc, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          if (progressBar) progressBar.style.width = `${pct}%`;
+          if (statusText) statusText.textContent = `Scanning timetable... ${pct}%`;
+          if (detailsText) detailsText.textContent = `Recognizing periods and subject codes (${pct}% complete)`;
+        }
+      }
+    });
+
+    if (progressBar) progressBar.style.width = '100%';
+    if (statusText) statusText.textContent = '✓ Timetable Scanned Successfully!';
+    if (detailsText) detailsText.textContent = 'Review detected schedule below. Tap any slot to edit.';
+
+    setTimeout(() => {
+      if (progressBox) progressBox.style.display = 'none';
+    }, 1800);
+
+    // Parse extracted OCR text
+    parseOCRResultToSchedule(result.data);
+    toast('Timetable extracted! Review and adjust below.');
+
+  } catch (err) {
+    console.error('OCR Error:', err);
+    if (progressBox) progressBox.style.display = 'none';
+    toast('Failed to scan image: ' + err.message, 'err');
+  }
+}
+
+// Intelligent parser: identifies days, periods, times, breaks, subject codes
+function parseOCRResultToSchedule(ocrData) {
+  const text = ocrData.text || '';
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  console.log('OCR Extracted Lines:', lines);
+
+  const dayKeywords = [
+    { day: 1, name: 'Monday', regex: /\b(mon|monday)\b/i },
+    { day: 2, name: 'Tuesday', regex: /\b(tue|tues|tuesday)\b/i },
+    { day: 3, name: 'Wednesday', regex: /\b(wed|wednes|wednesday)\b/i },
+    { day: 4, name: 'Thursday', regex: /\b(thu|thur|thurs|thursday)\b/i },
+    { day: 5, name: 'Friday', regex: /\b(fri|friday)\b/i },
+    { day: 6, name: 'Saturday', regex: /\b(sat|saturday)\b/i },
+    { day: 7, name: 'Sunday', regex: /\b(sun|sunday)\b/i }
+  ];
+
+  const extractedSlots = [];
+  let currentDay = 1;
+  let currentPeriod = 1;
+
+  // Extract common period times if present (e.g. 09:00 - 10:00, 10:15 - 11:15)
+  const timeRegex = /(\d{1,2}[:.]\d{2})\s*(?:-|to)\s*(\d{1,2}[:.]\d{2})/i;
+  const periodTimes = [];
+
+  lines.forEach(line => {
+    const tm = line.match(timeRegex);
+    if (tm && periodTimes.length < 8) {
+      periodTimes.push({
+        start: tm[1].replace('.', ':'),
+        end: tm[2].replace('.', ':')
+      });
+    }
+  });
+
+  // Line-by-line parsing
+  lines.forEach(line => {
+    // Check if line specifies a day
+    const matchedDay = dayKeywords.find(d => d.regex.test(line));
+    if (matchedDay) {
+      currentDay = matchedDay.day;
+      currentPeriod = 1;
+      // Strip the day keyword from line to see if subjects follow
+      line = line.replace(matchedDay.regex, '').trim();
+      if (!line) return;
+    }
+
+    // Check for lunch / break
+    if (/\b(lunch|break|recess|interval|tiffin)\b/i.test(line)) {
+      extractedSlots.push({
+        id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        day: currentDay,
+        period: currentPeriod++,
+        startTime: '',
+        endTime: '',
+        subjectId: null,
+        subjectName: 'Lunch / Break',
+        isBreak: true,
+        isUncertain: false
+      });
+      return;
+    }
+
+    // Split line by separators (| , ; tabs or multiple spaces)
+    const tokens = line.split(/[|;,]|\s{2,}/).map(t => t.trim()).filter(t => t.length > 1);
+
+    tokens.forEach(tok => {
+      // Ignore pure timestamps or headers
+      if (timeRegex.test(tok) || /^(period|time|day|hour|sem|room)\b/i.test(tok)) return;
+
+      // Check for break token
+      if (/\b(lunch|break|free|recess)\b/i.test(tok)) {
+        extractedSlots.push({
+          id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+          day: currentDay,
+          period: currentPeriod++,
+          startTime: '',
+          endTime: '',
+          subjectId: null,
+          subjectName: 'Break',
+          isBreak: true,
+          isUncertain: false
+        });
+        return;
+      }
+
+      // Check if token matches an existing subject
+      const cleanToken = tok.replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+      if (!cleanToken) return;
+
+      let matchedSubj = subjects.find(s => 
+        s.name.toLowerCase() === cleanToken.toLowerCase() ||
+        (s.code && s.code.toLowerCase() === cleanToken.toLowerCase())
+      );
+
+      // Substring fuzzy match
+      if (!matchedSubj) {
+        matchedSubj = subjects.find(s => 
+          cleanToken.toLowerCase().includes(s.name.toLowerCase()) || 
+          s.name.toLowerCase().includes(cleanToken.toLowerCase())
+        );
+      }
+
+      const pTime = periodTimes[currentPeriod - 1] || { start: '', end: '' };
+
+      extractedSlots.push({
+        id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        day: currentDay,
+        period: currentPeriod++,
+        startTime: pTime.start || '',
+        endTime: pTime.end || '',
+        subjectId: matchedSubj ? matchedSubj.id : null,
+        subjectName: matchedSubj ? matchedSubj.name : cleanToken,
+        isBreak: false,
+        isUncertain: !matchedSubj // Highlight for review if not matched to existing subject
+      });
+    });
+  });
+
+  // Fallback: If OCR produced very few slots, generate a standard template
+  if (extractedSlots.length === 0) {
+    dayKeywords.slice(0, 5).forEach(d => {
+      for (let p = 1; p <= 4; p++) {
+        const defaultSubj = subjects[(p - 1) % (subjects.length || 1)];
+        extractedSlots.push({
+          id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+          day: d.day,
+          period: p,
+          startTime: '',
+          endTime: '',
+          subjectId: defaultSubj ? defaultSubj.id : null,
+          subjectName: defaultSubj ? defaultSubj.name : `Period ${p}`,
+          isBreak: false,
+          isUncertain: true
+        });
+      }
+    });
+  }
+
+  timetable = extractedSlots;
+  saveTimetableToStorageAndDB();
+  renderTimetable();
+}
+
+// ══════════════════════════════════════════════════════
+//  FEATURE 2: WEEKLY TIMETABLE GRID & EDITOR
+// ══════════════════════════════════════════════════════
+
+const DAYS_MAP = [
+  { num: 1, name: 'Monday', short: 'Mon' },
+  { num: 2, name: 'Tuesday', short: 'Tue' },
+  { num: 3, name: 'Wednesday', short: 'Wed' },
+  { num: 4, name: 'Thursday', short: 'Thu' },
+  { num: 5, name: 'Friday', short: 'Fri' },
+  { num: 6, name: 'Saturday', short: 'Sat' },
+  { num: 7, name: 'Sunday', short: 'Sun' }
+];
+
+function renderTimetable() {
+  const container = document.getElementById('tt-grid-wrap');
+  const badge = document.getElementById('tt-stats-badge');
+  const sundayBtn = document.getElementById('btn-toggle-sunday');
+
+  if (!container) return;
+
+  const activeDays = DAYS_MAP.filter(d => d.num <= 6 || timetableMeta.showSunday);
+
+  if (sundayBtn) {
+    sundayBtn.textContent = timetableMeta.showSunday ? '- Sunday' : '+ Sunday';
+  }
+
+  const validSubjectSlots = timetable.filter(s => !s.isBreak);
+  if (badge) {
+    badge.textContent = `${validSubjectSlots.length} class${validSubjectSlots.length !== 1 ? 'es' : ''} scheduled`;
+  }
+
+  if (!timetable.length) {
+    container.innerHTML = `
+      <div class="empty" style="padding:32px 10px">
+        <div class="empty-icon">📅</div>
+        <h3>No weekly schedule configured yet</h3>
+        <p>Upload your timetable screenshot above or add class periods manually.</p>
+        <button class="btn-pri" onclick="openAddSlotModal(1, 1)">+ Add First Class</button>
+      </div>
+    `;
+    return;
+  }
+
+  // Render weekly grid table
+  let html = `
+    <table class="tt-table">
+      <thead>
+        <tr>
+          <th style="width:110px">Day</th>
+          <th>Scheduled Periods & Subjects</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  activeDays.forEach(dayInfo => {
+    const daySlots = timetable
+      .filter(s => s.day === dayInfo.num)
+      .sort((a, b) => a.period - b.period);
+
+    html += `
+      <tr>
+        <td class="tt-day-cell">
+          <div style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:.85rem">${dayInfo.name}</div>
+          <div style="font-size:.6rem;color:var(--muted);margin-top:2px">${daySlots.filter(s=>!s.isBreak).length} classes</div>
+        </td>
+        <td>
+          <div class="tt-slots-col">
+            ${daySlots.map(slot => {
+              const matchedSubj = subjects.find(s => s.id === slot.subjectId);
+              const displayName = matchedSubj ? matchedSubj.name : slot.subjectName;
+              const timeDisplay = slot.startTime ? (slot.endTime ? `${slot.startTime} - ${slot.endTime}` : slot.startTime) : '';
+
+              if (slot.isBreak) {
+                return `
+                  <div class="tt-slot-card break" onclick="openEditSlotModal('${slot.id}')">
+                    <div class="tt-slot-top">
+                      <span class="tt-slot-pnum">P${slot.period}</span>
+                      <span class="tt-slot-time">${timeDisplay || 'Break'}</span>
+                    </div>
+                    <div class="tt-slot-name">☕ ${slot.subjectName}</div>
+                  </div>
+                `;
+              }
+
+              return `
+                <div class="tt-slot-card ${slot.isUncertain ? 'uncertain' : ''}" onclick="openEditSlotModal('${slot.id}')" title="Click to edit">
+                  <div class="tt-slot-top">
+                    <span class="tt-slot-pnum">Period ${slot.period}</span>
+                    <span class="tt-slot-time">${timeDisplay}</span>
+                  </div>
+                  <div class="tt-slot-name">${displayName}</div>
+                  ${slot.isUncertain ? '<div style="color:var(--warn);font-size:.56rem;margin-top:3px">⚠️ Review subject</div>' : ''}
+                  ${matchedSubj ? `<div class="tt-slot-subjtag">✓ Mapped to ${matchedSubj.name}</div>` : ''}
+                </div>
+              `;
+            }).join('')}
+            <button class="tt-add-slot-btn" onclick="openAddSlotModal(${dayInfo.num}, ${(daySlots.length ? Math.max(...daySlots.map(s=>s.period)) + 1 : 1)})">+ Add Class</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+}
+
+function toggleSundayDisplay() {
+  timetableMeta.showSunday = !timetableMeta.showSunday;
+  renderTimetable();
+}
+
+// ══════════════════════════════════════════════════════
+//  TIMETABLE SLOT EDIT / ADD MODAL
+// ══════════════════════════════════════════════════════
+
+let currentEditingSlot = null;
+
+function openAddSlotModal(day = 1, period = 1) {
+  currentEditingSlot = null;
+  document.getElementById('slot-modal-title').textContent = 'Add Class Slot 🕒';
+  document.getElementById('slot-edit-id').value = '';
+  document.getElementById('slot-day').value = day;
+  document.getElementById('slot-period').value = period;
+  document.getElementById('slot-type').value = 'subject';
+  document.getElementById('slot-start-time').value = '';
+  document.getElementById('slot-end-time').value = '';
+  document.getElementById('slot-subject-name').value = '';
+  document.getElementById('btn-delete-slot').style.display = 'none';
+
+  populateSubjectDropdown();
+  onSlotTypeChange('subject');
+  document.getElementById('slot-edit-overlay').classList.add('show');
+}
+
+function openEditSlotModal(slotId) {
+  const slot = timetable.find(s => s.id === slotId);
+  if (!slot) return;
+
+  currentEditingSlot = slot;
+  document.getElementById('slot-modal-title').textContent = 'Edit Class Slot 🕒';
+  document.getElementById('slot-edit-id').value = slot.id;
+  document.getElementById('slot-day').value = slot.day;
+  document.getElementById('slot-period').value = slot.period;
+  document.getElementById('slot-type').value = slot.isBreak ? 'break' : 'subject';
+  document.getElementById('slot-start-time').value = slot.startTime || '';
+  document.getElementById('slot-end-time').value = slot.endTime || '';
+  document.getElementById('slot-subject-name').value = slot.subjectName || '';
+  document.getElementById('btn-delete-slot').style.display = 'inline-block';
+
+  populateSubjectDropdown(slot.subjectId);
+  onSlotTypeChange(slot.isBreak ? 'break' : 'subject');
+  document.getElementById('slot-edit-overlay').classList.add('show');
+}
+
+function closeSlotEditModal() {
+  document.getElementById('slot-edit-overlay').classList.remove('show');
+  currentEditingSlot = null;
+}
+
+function populateSubjectDropdown(selectedId = null) {
+  const select = document.getElementById('slot-subject-select');
+  if (!select) return;
+
+  select.innerHTML = '<option value="">-- Choose Existing Subject --</option>' + 
+    subjects.map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${s.name} (${pct(s)}%)</option>`).join('');
+}
+
+function onSlotTypeChange(type) {
+  const subjGroup = document.getElementById('slot-subject-group');
+  if (subjGroup) {
+    subjGroup.style.display = type === 'break' ? 'none' : 'block';
+  }
+}
+
+function onSlotSubjectSelect(subjId) {
+  if (!subjId) return;
+  const s = subjects.find(x => x.id === subjId);
+  if (s) {
+    document.getElementById('slot-subject-name').value = s.name;
+  }
+}
+
+async function saveSlotModal() {
+  const day = parseInt(document.getElementById('slot-day').value) || 1;
+  const period = parseInt(document.getElementById('slot-period').value) || 1;
+  const type = document.getElementById('slot-type').value;
+  const isBreak = type === 'break';
+  const startTime = document.getElementById('slot-start-time').value.trim();
+  const endTime = document.getElementById('slot-end-time').value.trim();
+  const subjSelect = document.getElementById('slot-subject-select').value;
+  const subjNameInput = document.getElementById('slot-subject-name').value.trim();
+
+  let subjectName = isBreak ? 'Break' : (subjNameInput || 'Unassigned');
+  let subjectId = isBreak ? null : (subjSelect || null);
+
+  // If user typed a subject name that isn't mapped, check if matches existing
+  if (!isBreak && !subjectId && subjNameInput) {
+    const matched = subjects.find(s => s.name.toLowerCase() === subjNameInput.toLowerCase());
+    if (matched) {
+      subjectId = matched.id;
+      subjectName = matched.name;
+    }
+  }
+
+  const slotId = document.getElementById('slot-edit-id').value;
+
+  if (slotId) {
+    // Update existing
+    const idx = timetable.findIndex(s => s.id === slotId);
+    if (idx !== -1) {
+      timetable[idx] = {
+        ...timetable[idx],
+        day,
+        period,
+        startTime,
+        endTime,
+        subjectId,
+        subjectName,
+        isBreak,
+        isUncertain: false
+      };
+    }
+  } else {
+    // Add new slot
+    timetable.push({
+      id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      day,
+      period,
+      startTime,
+      endTime,
+      subjectId,
+      subjectName,
+      isBreak,
+      isUncertain: false
+    });
+  }
+
+  await saveTimetableToStorageAndDB();
+  closeSlotEditModal();
+  renderTimetable();
+  if (currPage === 'tracker') renderTracker();
+  toast('Schedule updated ✓');
+}
+
+async function deleteCurrentSlot() {
+  const slotId = document.getElementById('slot-edit-id').value;
+  if (!slotId) return;
+
+  timetable = timetable.filter(s => s.id !== slotId);
+  await saveTimetableToStorageAndDB();
+  closeSlotEditModal();
+  renderTimetable();
+  if (currPage === 'tracker') renderTracker();
+  toast('Slot removed');
+}
+
+function confirmClearTimetable() {
+  if (!confirm('Are you sure you want to clear your entire weekly schedule?')) return;
+  timetable = [];
+  saveTimetableToStorageAndDB();
+  renderTimetable();
+  if (currPage === 'tracker') renderTracker();
+  toast('Timetable cleared');
+}
+
+// ══════════════════════════════════════════════════════
+//  FEATURE 3: AUTOMATICALLY CALCULATE CLASSES PER WEEK
+// ══════════════════════════════════════════════════════
+
+function calculateWeeklyFrequencies() {
+  const freqMap = {}; // subjectId/subjectName -> count
+
+  subjects.forEach(s => {
+    freqMap[s.id] = 0;
+  });
+
+  timetable.forEach(slot => {
+    if (slot.isBreak) return;
+    if (slot.subjectId && freqMap[slot.subjectId] !== undefined) {
+      freqMap[slot.subjectId]++;
+    } else if (slot.subjectName) {
+      const match = subjects.find(s => s.name.toLowerCase() === slot.subjectName.toLowerCase());
+      if (match && freqMap[match.id] !== undefined) {
+        freqMap[match.id]++;
+      }
+    }
+  });
+
+  return freqMap;
+}
+
+function openSyncFrequenciesModal() {
+  const modal = document.getElementById('sync-freq-overlay');
+  const list = document.getElementById('sync-freq-list');
+  if (!modal || !list) return;
+
+  const frequencies = calculateWeeklyFrequencies();
+
+  if (!subjects.length) {
+    list.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted)">No subjects found. Add subjects first.</div>`;
+    modal.classList.add('show');
+    return;
+  }
+
+  list.innerHTML = subjects.map(s => {
+    const calculated = frequencies[s.id] || 0;
+    const current = s.perWeek || 0;
+    const isDiff = calculated !== current;
+
+    return `
+      <div class="sync-freq-row">
+        <div>
+          <strong style="font-size:.82rem">${s.name}</strong>
+          <div style="font-size:.62rem;color:var(--muted)">Current setting: ${current} / week</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="sync-freq-badge">${calculated} / week</span>
+          ${isDiff ? '<span style="font-size:.6rem;color:var(--accent)">⚡ Change</span>' : '<span style="font-size:.6rem;color:var(--muted)">✓ Match</span>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  modal.classList.add('show');
+}
+
+function closeSyncFrequenciesModal() {
+  document.getElementById('sync-freq-overlay').classList.remove('show');
+}
+
+async function applyWeeklyFrequencies() {
+  const frequencies = calculateWeeklyFrequencies();
+  let updatedCount = 0;
+
+  for (const s of subjects) {
+    const calc = frequencies[s.id];
+    if (calc !== undefined && calc !== s.perWeek) {
+      s.perWeek = calc;
+      await updateSubject(s.id, {
+        name: s.name,
+        code: s.code,
+        total: s.total,
+        present: s.present,
+        perWeek: s.perWeek,
+        target: s.target,
+        semTotal: s.semTotal,
+        mode: s.mode
+      });
+      updatedCount++;
+    }
+  }
+
+  closeSyncFrequenciesModal();
+  renderAll();
+  toast(`Applied calculated weekly frequencies to ${updatedCount} subjects ✓`);
+}
+
+// ══════════════════════════════════════════════════════
+//  FEATURE 4 & 5: DAILY TRACKER & EXCEPTIONS ENGINE
+// ══════════════════════════════════════════════════════
+
+if (!selectedTrackerDate) {
+  selectedTrackerDate = getLocalDateString();
+}
+
+function navDate(offset) {
+  const parts = selectedTrackerDate.split('-').map(Number);
+  const curr = new Date(parts[0], parts[1] - 1, parts[2]);
+  curr.setDate(curr.getDate() + offset);
+  selectedTrackerDate = getLocalDateString(curr);
+  renderTracker();
+}
+
+function onDateSelected(dateVal) {
+  if (!dateVal) return;
+  selectedTrackerDate = dateVal;
+  renderTracker();
+}
+
+function resetToToday() {
+  selectedTrackerDate = getLocalDateString();
+  renderTracker();
+}
+
+function toggleDateHoliday() {
+  const date = selectedTrackerDate;
+  if (dateExceptions[date] && dateExceptions[date].type === 'holiday') {
+    delete dateExceptions[date];
+    saveDateExceptionToDB(date, null);
+    toast('Holiday removed for ' + date);
+  } else {
+    dateExceptions[date] = { type: 'holiday', note: 'College Holiday' };
+    saveDateExceptionToDB(date, 'holiday');
+    toast('Marked as Holiday 🏖️');
+  }
+  renderTracker();
+}
+
+// Get scheduled classes for a specific date (1=Monday ... 7=Sunday)
+function getScheduledClassesForDate(dateStr) {
+  const parts = dateStr.split('-').map(Number);
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  let dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday ... 6 = Saturday
+  dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Convert 0 (Sun) to 7
+
+  // Filter timetable slots for that day
+  const slots = timetable.filter(s => s.day === dayOfWeek && !s.isBreak);
+
+  // Map each slot with its attendance status for that date
+  return slots.map(slot => {
+    const periodLog = dailyPeriodLogs[dateStr] ? dailyPeriodLogs[dateStr][slot.id] : null;
+    const legacyStatus = (slot.subjectId && trackerLog[dateStr]) ? trackerLog[dateStr][slot.subjectId] : null;
+
+    const status = periodLog ? periodLog.status : (legacyStatus || null);
+
+    return {
+      slotId: slot.id,
+      day: slot.day,
+      period: slot.period,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      subjectId: slot.subjectId,
+      subjectName: slot.subjectName,
+      status: status, // 'p', 'a', 'cancelled' or null
+      isExtra: false
+    };
+  }).sort((a, b) => a.period - b.period);
+}
+
+function renderTracker() {
+  const dateInput = document.getElementById('tracker-date-input');
+  const subtitle = document.getElementById('tracker-date-subtitle');
+  const banner = document.getElementById('date-status-banner');
+  const summaryBox = document.getElementById('daily-summary-card');
+  const content = document.getElementById('tracker-content');
+  const holidayBtn = document.getElementById('btn-toggle-holiday');
+
+  if (!content) return;
+
+  if (dateInput) dateInput.value = selectedTrackerDate;
+
+  const todayStr = getLocalDateString();
+  const isToday = selectedTrackerDate === todayStr;
+
+  const parts = selectedTrackerDate.split('-').map(Number);
+  const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+  const formattedDate = dateObj.toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+
+  if (subtitle) {
+    subtitle.textContent = isToday ? `Today · ${formattedDate}` : formattedDate;
+  }
+
+  const isHoliday = dateExceptions[selectedTrackerDate]?.type === 'holiday';
+
+  if (holidayBtn) {
+    holidayBtn.textContent = isHoliday ? '❌ Remove Holiday' : '🏖️ Mark Day as Holiday';
+    holidayBtn.style.color = isHoliday ? 'var(--danger)' : '';
+  }
+
+  // Render Date Status Banner
+  if (banner) {
+    if (isHoliday) {
+      banner.className = 'date-status-banner holiday';
+      banner.innerHTML = `🏖️ <strong>College Holiday</strong> — No classes are counted as absent today.`;
+      banner.style.display = 'flex';
+    } else if (isToday) {
+      banner.className = 'date-status-banner today';
+      banner.innerHTML = `⚡ <strong>Today's Classes</strong> — Mark each period as you attend or bunk.`;
+      banner.style.display = 'flex';
+    } else {
+      banner.className = 'date-status-banner future';
+      banner.innerHTML = `📅 Viewing schedule for <strong>${formattedDate}</strong>`;
+      banner.style.display = 'flex';
+    }
+  }
+
+  // Get scheduled timetable classes for this day
+  const scheduledClasses = getScheduledClassesForDate(selectedTrackerDate);
+
+  // Include any extra ad-hoc classes logged for this date
+  const extraClasses = [];
+  if (dailyPeriodLogs[selectedTrackerDate]) {
+    Object.entries(dailyPeriodLogs[selectedTrackerDate]).forEach(([key, log]) => {
+      if (log.isExtra) {
+        extraClasses.push({
+          slotId: key,
+          day: 0,
+          period: log.periodIndex || 99,
+          startTime: log.extraTime || '',
+          endTime: '',
+          subjectId: log.subjectId,
+          subjectName: log.extraName || (subjects.find(s=>s.id===log.subjectId)?.name || 'Extra Class'),
+          status: log.status,
+          isExtra: true
+        });
+      }
+    });
+  }
+
+  const allClasses = [...scheduledClasses, ...extraClasses];
+
+  // Daily Completion Stats
+  const totalCount = allClasses.length;
+  const presentCount = allClasses.filter(c => c.status === 'p').length;
+  const absentCount = allClasses.filter(c => c.status === 'a').length;
+  const cancelledCount = allClasses.filter(c => c.status === 'cancelled').length;
+  const markedCount = presentCount + absentCount + cancelledCount;
+  const pendingCount = totalCount - markedCount;
+  const progressPct = totalCount > 0 ? Math.round((markedCount / totalCount) * 100) : 0;
+
+  if (summaryBox) {
+    summaryBox.innerHTML = `
+      <div class="daily-summary-stats">
+        <div class="daily-stat-box">
+          <div class="daily-stat-val" style="color:var(--text)">${totalCount}</div>
+          <div class="daily-stat-lbl">Scheduled</div>
+        </div>
+        <div class="daily-stat-box">
+          <div class="daily-stat-val" style="color:var(--accent)">${presentCount}</div>
+          <div class="daily-stat-lbl">Present</div>
+        </div>
+        <div class="daily-stat-box">
+          <div class="daily-stat-val" style="color:var(--danger)">${absentCount}</div>
+          <div class="daily-stat-lbl">Absent</div>
+        </div>
+        <div class="daily-stat-box">
+          <div class="daily-stat-val" style="color:${pendingCount === 0 ? 'var(--accent)' : 'var(--warn)'}">${pendingCount}</div>
+          <div class="daily-stat-lbl">${pendingCount === 0 ? 'All Done ✓' : 'Pending'}</div>
+        </div>
+      </div>
+      <div class="daily-prog-track">
+        <div class="daily-prog-fill" style="width:${progressPct}%"></div>
+      </div>
+      <div class="daily-completion-text">
+        <span>${markedCount} of ${totalCount} classes marked</span>
+        <span>${progressPct}% complete</span>
+      </div>
+    `;
+  }
+
+  // If holiday
+  if (isHoliday) {
+    content.innerHTML = `
+      <div class="empty" style="padding:30px 10px">
+        <div class="empty-icon">🏖️</div>
+        <h3>Enjoy your holiday!</h3>
+        <p>No classes scheduled for today. Attendance records are paused.</p>
+      </div>
+    `;
+    renderRecentHistory();
+    return;
+  }
+
+  // If no scheduled classes on this day
+  if (!allClasses.length) {
+    content.innerHTML = `
+      <div class="empty" style="padding:32px 10px">
+        <div class="empty-icon">😴</div>
+        <h3>No classes scheduled for ${dateObj.toLocaleDateString('en-IN', { weekday: 'long' })}</h3>
+        <p>${timetable.length ? 'You have no timetable classes on this day.' : 'Set up your weekly timetable to see your daily classes automatically.'}</p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+          <button class="btn-pri" onclick="goPage('timetable')">Configure Timetable ⚡</button>
+          <button class="btn-sec" onclick="openExtraClassModal()">+ Add Extra Class</button>
+        </div>
+      </div>
+    `;
+    renderRecentHistory();
+    return;
+  }
+
+  // Render Daily Scheduled Class Cards
+  content.innerHTML = allClasses.map((item, idx) => {
+    const s = subjects.find(x => x.id === item.subjectId);
+    const displayName = s ? s.name : item.subjectName;
+    const timeDisplay = item.startTime ? (item.endTime ? `${item.startTime} - ${item.endTime}` : item.startTime) : '';
+
+    let cardClass = 'daily-class-card';
+    if (item.status === 'p') cardClass += ' marked-p';
+    else if (item.status === 'a') cardClass += ' marked-a';
+    else if (item.status === 'cancelled') cardClass += ' marked-c';
+
+    return `
+      <div class="${cardClass}">
+        <div class="daily-class-main">
+          <div class="daily-class-meta">
+            <span class="period-badge">${item.isExtra ? 'EXTRA' : `PERIOD ${item.period}`}</span>
+            ${timeDisplay ? `<span class="time-badge">🕒 ${timeDisplay}</span>` : ''}
+            ${item.status === 'cancelled' ? '<span style="font-size:.6rem;color:var(--warn);font-weight:700">🚫 CANCELLED</span>' : ''}
+          </div>
+          <div class="daily-class-name">${displayName}</div>
+          ${s ? `<div class="daily-class-stats">Attendance: <strong style="color:${pctColor(pct(s))}">${pct(s)}%</strong> (${s.present}/${s.total}) · ${bunkable(s)} safe bunks</div>` : '<div class="daily-class-stats" style="color:var(--muted)">Unmapped subject</div>'}
+        </div>
+        <div class="tracker-btns">
+          <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">Present</button>
+          <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">Absent</button>
+          <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" title="Cancelled class does not count as absence" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">Cancel</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  renderRecentHistory();
+}
+
+// ══════════════════════════════════════════════════════
+//  ATTENDANCE MARKING & SUBJECT SYNC
+// ══════════════════════════════════════════════════════
+
+async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, isExtra = false) {
   if (!currentUser) return;
-  // ✅ ADDED: Lock to prevent race conditions
   if (trackerLocked) return;
   trackerLocked = true;
-  
-  if (!trackerLog[date]) trackerLog[date] = {};
+
+  const date = selectedTrackerDate;
+  if (!dailyPeriodLogs[date]) dailyPeriodLogs[date] = {};
+
+  const prevEntry = dailyPeriodLogs[date][slotId];
+  const prevStatus = prevEntry ? prevEntry.status : null;
+
   const s = subjects.find(x => x.id === subjId);
-  
-  if (!s) {
-    trackerLocked = false; // ✅ UNLOCK before returning
-    return;
-  }
-  
-  const prev = trackerLog[date][subjId];
-  
+
   try {
-    // Toggle off if same status
-    if (prev === status) {
-      // Remove from local object
-      delete trackerLog[date][subjId];
-      
-      // DELETE from Supabase
-      const { error } = await supabaseClient
-        .from('tracker_logs')
+    let finalStatus = newStatus;
+
+    // Toggle off if clicked the same status button
+    if (prevStatus === newStatus) {
+      finalStatus = null;
+      delete dailyPeriodLogs[date][slotId];
+
+      // Delete from DB
+      await supabaseClient
+        .from('daily_period_logs')
         .delete()
         .eq('user_id', currentUser.id)
         .eq('date', date)
-        .eq('subject_id', subjId);
-      
-      if (error) throw error;
-      
-      // Update attendance counts
-      if (prev === 'p') s.present = Math.max(0, s.present - 1);
-      s.total = Math.max(0, s.total - 1);
-      
+        .eq('entry_id', slotId);
+
     } else {
-      // Update attendance counts first
-      if (prev === 'p') s.present = Math.max(0, s.present - 1);
-      if (prev) s.total = Math.max(0, s.total - 1);
-      
-      // Add new status
-      trackerLog[date][subjId] = status;
-      s.total += 1;
-      if (status === 'p') s.present += 1;
-      
-      // UPSERT to Supabase
-      const { error } = await supabaseClient
-        .from('tracker_logs')
+      // Set new status
+      dailyPeriodLogs[date][slotId] = {
+        status: newStatus,
+        subjectId: subjId,
+        periodIndex: periodIndex,
+        isExtra: isExtra
+      };
+
+      // Upsert to daily_period_logs
+      await supabaseClient
+        .from('daily_period_logs')
         .upsert({
           user_id: currentUser.id,
           date: date,
-          subject_id: subjId,
-          status: status
+          entry_id: slotId,
+          subject_id: subjId || null,
+          period_index: periodIndex,
+          status: newStatus
         }, {
-          onConflict: 'user_id,date,subject_id'
+          onConflict: 'user_id,date,entry_id'
         });
-      
-      if (error) throw error;
     }
-    
-    // Update subject in database
-    await updateSubject(subjId, { total: s.total, present: s.present });
-    
-    // Re-render UI
+
+    // Accurately recalculate subject's total and present counts without double counting
+    if (s) {
+      if (prevStatus === 'p') {
+        s.present = Math.max(0, s.present - 1);
+        s.total = Math.max(0, s.total - 1);
+      } else if (prevStatus === 'a') {
+        s.total = Math.max(0, s.total - 1);
+      } // 'cancelled' or null did not increment totals
+
+      if (finalStatus === 'p') {
+        s.present += 1;
+        s.total += 1;
+      } else if (finalStatus === 'a') {
+        s.total += 1;
+      } // 'cancelled' does not increment total or count as absence
+
+      await updateSubject(s.id, { total: s.total, present: s.present });
+    }
+
+    // Save to local cache
+    localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
+
     renderNav();
     renderTracker();
-    toast(`${s.name}: ${status === 'p' ? '✓ Present' : '✗ Absent'}`);
-    
-  } catch (error) {
-    console.error('Error updating tracker:', error);
-    toast('Failed to update attendance', 'err');
+    if (currPage === 'home') renderHome();
+
+    if (finalStatus === 'p') toast(`${s ? s.name : 'Class'}: ✓ Present`);
+    else if (finalStatus === 'a') toast(`${s ? s.name : 'Class'}: ✗ Absent`, 'err');
+    else if (finalStatus === 'cancelled') toast(`${s ? s.name : 'Class'}: Cancelled (No penalty)`);
+    else toast('Attendance unmarked');
+
+  } catch (err) {
+    console.error('Error marking attendance:', err);
+    toast('Failed to record attendance', 'err');
   } finally {
-    // ✅ ALWAYS unlock, even if error occurs
     trackerLocked = false;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  EXTRA CLASS MODAL
+// ══════════════════════════════════════════════════════
+
+function openExtraClassModal() {
+  const select = document.getElementById('extra-subject-select');
+  const dateLbl = document.getElementById('extra-class-date-label');
+  if (!select) return;
+
+  if (dateLbl) {
+    dateLbl.textContent = `Schedule an extra class for ${selectedTrackerDate}`;
+  }
+
+  select.innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('extra-class-time').value = '';
+  document.getElementById('extra-class-overlay').classList.add('show');
+}
+
+function closeExtraClassModal() {
+  document.getElementById('extra-class-overlay').classList.remove('show');
+}
+
+async function confirmAddExtraClass() {
+  const subjId = document.getElementById('extra-subject-select').value;
+  const timeNote = document.getElementById('extra-class-time').value.trim();
+  const s = subjects.find(x => x.id === subjId);
+
+  if (!subjId || !s) {
+    toast('Please select a subject', 'err');
+    return;
+  }
+
+  const extraId = 'extra_' + Date.now();
+  const date = selectedTrackerDate;
+
+  if (!dailyPeriodLogs[date]) dailyPeriodLogs[date] = {};
+
+  dailyPeriodLogs[date][extraId] = {
+    status: 'p', // default to present when adding extra class
+    subjectId: subjId,
+    periodIndex: 99,
+    isExtra: true,
+    extraName: s.name,
+    extraTime: timeNote
+  };
+
+  // Increment subject total & present
+  s.total += 1;
+  s.present += 1;
+  await updateSubject(s.id, { total: s.total, present: s.present });
+
+  try {
+    await supabaseClient
+      .from('daily_period_logs')
+      .upsert({
+        user_id: currentUser.id,
+        date: date,
+        entry_id: extraId,
+        subject_id: subjId,
+        period_index: 99,
+        status: 'p'
+      });
+  } catch (e) {
+    console.warn('DB upsert error for extra class:', e);
+  }
+
+  closeExtraClassModal();
+  renderNav();
+  renderTracker();
+  toast(`Extra class added for ${s.name} ✓`);
+}
+
+// ══════════════════════════════════════════════════════
+//  RECENT HISTORY
+// ══════════════════════════════════════════════════════
+
+function renderRecentHistory() {
+  const container = document.getElementById('recent-history-list');
+  if (!container) return;
+
+  const dates = Object.keys(dailyPeriodLogs).sort().reverse().slice(0, 7);
+
+  if (!dates.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:.72rem;padding:6px 0">No attendance history logged yet.</div>';
+    return;
+  }
+
+  container.innerHTML = dates.map(d => {
+    const logs = dailyPeriodLogs[d] || {};
+    const p = Object.values(logs).filter(v => v.status === 'p').length;
+    const a = Object.values(logs).filter(v => v.status === 'a').length;
+    const c = Object.values(logs).filter(v => v.status === 'cancelled').length;
+
+    const parts = d.split('-').map(Number);
+    const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+    const lbl = dateObj.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    return `
+      <div class="hist-row" onclick="onDateSelected('${d}')" style="cursor:pointer" title="Click to view this day">
+        <span style="flex:1;color:var(--text2)">${lbl} ${dateExceptions[d]?.type === 'holiday' ? '🏖️' : ''}</span>
+        <span style="color:var(--accent);font-weight:700">✓ ${p}</span>
+        <span style="color:var(--danger);font-weight:700">✗ ${a}</span>
+        ${c > 0 ? `<span style="color:var(--warn);font-size:.65rem">🚫 ${c}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  STORAGE & DB PERSISTENCE HELPERS
+// ══════════════════════════════════════════════════════
+
+async function saveTimetableToStorageAndDB() {
+  if (currentUser) {
+    localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
+  }
+
+  if (!currentUser) return;
+
+  try {
+    // 1. Ensure master timetable record
+    let ttId = timetableMeta.id;
+    if (!ttId) {
+      const { data: ttRes } = await supabaseClient
+        .from('timetables')
+        .insert([{ user_id: currentUser.id, title: 'Weekly Timetable' }])
+        .select();
+      if (ttRes && ttRes[0]) {
+        ttId = ttRes[0].id;
+        timetableMeta.id = ttId;
+      }
+    }
+
+    if (ttId) {
+      // 2. Clear old entries
+      await supabaseClient
+        .from('timetable_entries')
+        .delete()
+        .eq('user_id', currentUser.id);
+
+      // 3. Insert new entries
+      if (timetable.length > 0) {
+        const payload = timetable.map(s => ({
+          timetable_id: ttId,
+          user_id: currentUser.id,
+          day_of_week: s.day,
+          period_index: s.period,
+          start_time: s.startTime || '',
+          end_time: s.endTime || '',
+          subject_id: s.subjectId || null,
+          subject_name: s.subjectName || 'Unassigned',
+          is_break: s.isBreak || false
+        }));
+
+        await supabaseClient.from('timetable_entries').insert(payload);
+      }
+    }
+  } catch (err) {
+    console.warn('Timetable database sync warning:', err.message);
+  }
+}
+
+async function saveDateExceptionToDB(date, type) {
+  if (currentUser) {
+    localStorage.setItem('bk_date_exceptions_' + currentUser.id, JSON.stringify(dateExceptions));
+  }
+  if (!currentUser) return;
+
+  try {
+    if (!type) {
+      await supabaseClient
+        .from('timetable_exceptions')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('date', date);
+    } else {
+      await supabaseClient
+        .from('timetable_exceptions')
+        .upsert({
+          user_id: currentUser.id,
+          date: date,
+          type: type,
+          note: 'College Holiday'
+        }, {
+          onConflict: 'user_id,date'
+        });
+    }
+  } catch (err) {
+    console.warn('Exception sync warning:', err.message);
   }
 }

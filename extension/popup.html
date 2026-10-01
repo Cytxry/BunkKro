@@ -6,10 +6,10 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       width: 380px;
-      min-height: 400px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0a0a0a;
-      color: #fff;
+      min-height: 420px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+      background: #09090b;
+      color: #efefef;
       padding: 16px;
     }
     
@@ -28,9 +28,9 @@
     #not-logged-in { color: #ffb830; }
     
     .spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid #1a1a1a;
+      width: 36px;
+      height: 36px;
+      border: 3px solid #1a1a21;
       border-top-color: #c8f135;
       border-radius: 50%;
       animation: spin 1s linear infinite;
@@ -41,128 +41,198 @@
       to { transform: rotate(360deg); }
     }
     
+    .popup-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+    
     h2 { 
-      font-size: 18px; 
-      margin-bottom: 24px;
+      font-size: 17px; 
+      font-weight: 800;
       color: #c8f135;
+      line-height: 1.2;
     }
-    
-    .subject-item {
-      background: #141414;
-      border: 1px solid #222;
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 10px;
+
+    .today-sub {
+      font-size: 11px;
+      color: #999;
+      margin-top: 2px;
     }
-    
-    .subject-header {
+
+    /* Daily Summary */
+    .summary-card {
+      background: #101014;
+      border: 1px solid #1e1e26;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+
+    .summary-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+
+    .summary-pbar {
+      height: 4px;
+      background: #1a1a21;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .summary-pbar-fill {
+      height: 100%;
+      background: #c8f135;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+    
+    .class-item {
+      background: #101014;
+      border: 1px solid #1e1e26;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 9px;
+      transition: border-color 0.2s;
+    }
+
+    .class-item.marked-p { border-left: 3px solid #c8f135; }
+    .class-item.marked-a { border-left: 3px solid #ff4060; }
+    .class-item.marked-c { border-left: 3px solid #ffb830; opacity: 0.8; }
+    
+    .class-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    
+    .class-name {
+      font-weight: 700;
+      font-size: 13px;
+      color: #efefef;
+    }
+    
+    .class-pct {
+      font-weight: 700;
+      font-size: 13px;
+    }
+    
+    .class-pct.safe { color: #c8f135; }
+    .class-pct.warn { color: #ffb830; }
+    .class-pct.danger { color: #ff4060; }
+
+    .period-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      color: #888;
       margin-bottom: 8px;
     }
-    
-    .subject-name {
+
+    .badge-pnum {
+      background: #15151a;
+      border: 1px solid #28282f;
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: #999;
       font-weight: 600;
-      font-size: 14px;
     }
-    
-    .subject-pct {
-      font-weight: 700;
-      font-size: 16px;
-    }
-    
-    .subject-pct.safe { color: #c8f135; }
-    .subject-pct.warn { color: #ffb830; }
-    .subject-pct.danger { color: #ff4060; }
     
     .tracker-btns {
       display: flex;
-      gap: 8px;
-      margin-top: 8px;
+      gap: 6px;
     }
     
     .tracker-btns button {
       flex: 1;
-      padding: 8px;
-      border: none;
+      padding: 6px 8px;
+      border: 1px solid #28282f;
       border-radius: 6px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
-      background: #1a1a1a;
-      color: #888;
+      transition: all 0.15s;
+      background: #15151a;
+      color: #999;
     }
-    
-    .tracker-btns button.present {
-      background: #1a3a1a;
-      color: #c8f135;
+
+    .tracker-btns button:hover {
+      border-color: #555;
+      color: #fff;
     }
     
     .tracker-btns button.present.active {
-      background: #c8f135;
-      color: #0a0a0a;
-    }
-    
-    .tracker-btns button.absent {
-      background: #3a1a1a;
-      color: #ff4060;
+      background: rgba(200,241,53,0.18);
+      border-color: #c8f135;
+      color: #c8f135;
     }
     
     .tracker-btns button.absent.active {
-      background: #ff4060;
-      color: #fff;
+      background: rgba(255,64,96,0.18);
+      border-color: #ff4060;
+      color: #ff4060;
+    }
+
+    .tracker-btns button.cancel.active {
+      background: rgba(255,184,48,0.18);
+      border-color: #ffb830;
+      color: #ffb830;
     }
     
     .open-app {
       width: 100%;
-      padding: 12px;
+      padding: 10px;
       background: #c8f135;
-      color: #0a0a0a;
+      color: #000;
       border: none;
       border-radius: 8px;
       font-weight: 700;
+      font-size: 12px;
       cursor: pointer;
-      margin-top: 16px;
+      margin-top: 12px;
+      transition: opacity 0.15s;
     }
     
     .open-app:hover {
-      background: #d4ff4a;
+      opacity: 0.9;
     }
     
     .login-btn {
-      padding: 12px 24px;
+      padding: 10px 20px;
       background: #c8f135;
-      color: #0a0a0a;
+      color: #000;
       border: none;
       border-radius: 8px;
       font-weight: 700;
+      font-size: 12px;
       cursor: pointer;
-      margin-top: 16px;
-    }
-    
-    .login-btn:hover {
-      background: #d4ff4a;
+      margin-top: 14px;
     }
     
     .empty-state {
       text-align: center;
-      padding: 40px 20px;
+      padding: 30px 16px;
       color: #888;
     }
     
     .empty-state h3 {
-      font-size: 16px;
-      margin-bottom: 8px;
-      color: #aaa;
+      font-size: 14px;
+      margin-bottom: 6px;
+      color: #ccc;
     }
   </style>
 </head>
 <body>
   <div id="loading">
     <div class="spinner"></div>
-    <p>Loading your subjects...</p>
+    <p>Loading your schedule...</p>
   </div>
   
   <div id="error" style="display:none;">
@@ -171,18 +241,38 @@
   </div>
   
   <div id="not-logged-in" style="display:none;">
-    <p style="font-size: 48px; margin-bottom: 16px;">🔒</p>
+    <p style="font-size: 40px; margin-bottom: 12px;">🔒</p>
     <h3>Not Logged In</h3>
-    <p style="color: #888; margin-bottom: 16px;">Please login to BunkKro first</p>
+    <p style="color: #888; font-size: 12px; margin-bottom: 14px;">Please login to BunkKro first</p>
     <button class="login-btn" id="open-login">Open BunkKro</button>
   </div>
   
   <div id="content" style="display:none;">
-    <h2>Today's Attendance</h2>
+    <div class="popup-header">
+      <div>
+        <h2>Today's Classes 📅</h2>
+        <div class="today-sub" id="today-sub-text">Monday · 4 classes</div>
+      </div>
+    </div>
+
+    <!-- Summary Box -->
+    <div class="summary-card" id="summary-card">
+      <div class="summary-row">
+        <span id="summary-stats">0 of 0 marked</span>
+        <span id="summary-pct" style="color:#c8f135;font-weight:700">0%</span>
+      </div>
+      <div class="summary-pbar">
+        <div class="summary-pbar-fill" id="summary-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Today's Schedule List -->
     <div id="subjects-list"></div>
-    <button class="open-app" id="open-app">Open Full App</button>
+
+    <button class="open-app" id="open-app">Open Full App 🚀</button>
   </div>
-    <script src="supabase.js"></script>
+
+  <script src="supabase.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
