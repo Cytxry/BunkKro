@@ -1960,18 +1960,10 @@ async function processTimetableImage(file) {
     let grid = null;
     let cells = [];
     try {
-      grid = TimetableScanner.GeometryEngine.buildGrid(
-        preprocessed.canvas,
-        preprocessed.gray,
-        preprocessed.T
-      );
+      grid = TimetableScanner.GeometryEngine.buildGrid(preprocessed);
       scannerState.grid = grid;
 
-      cells = TimetableScanner.GeometryEngine.buildCells(
-        grid,
-        preprocessed.integral,
-        preprocessed.T
-      );
+      cells = TimetableScanner.GeometryEngine.buildCells(grid, preprocessed.cfg || TimetableScanner.Config);
       scannerState.cells = cells;
     } catch (gErr) {
       console.warn('Geometry engine note:', gErr.message);

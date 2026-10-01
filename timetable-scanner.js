@@ -92,6 +92,217 @@
   // 3. ENGINE A: IMAGE PREPROCESSING & DESKEW
   // ════════════════════════════════════════════════════════════
   TimetableScanner.Preprocessor = {
+    async deskewAndEnhance(imageSource, customCfg = {}) {
+      const cfg = Object.assign({}, TimetableScanner.Config, customCfg);
+
+      let imgElement;
+      if (imageSource instanceof HTMLImageElement || imageSource instanceof HTMLCanvasElement) {
+        imgElement = imageSource;
+      } else if (typeof imageSource === 'string') {
+        imgElement = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = imageSource;
+        });
+      } else if (imageSource instanceof Blob || imageSource instanceof File) {
+        const url = URL.createObjectURL(imageSource);
+        imgElement = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+          img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+          img.src = url;
+        });
+      } else {
+        throw new Error('Unsupported image source type for Preprocessor.deskewAndEnhance');
+      }
+
+      const origW = imgElement.naturalWidth || imgElement.width;
+      const origH = imgElement.naturalHeight || imgElement.height;
+      const scale = Math.min(1, (cfg.maxWorkingSide || 2000) / Math.max(origW, origH));
+      const W = Math.round(origW * scale);
+      const H = Math.round(origH * scale);
+
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width = origW;
+      srcCanvas.height = origH;
+      const srcCtx = srcCanvas.getContext('2d');
+      srcCtx.drawImage(imgElement, 0, 0);
+
+      const hasOpenCV = typeof window !== 'undefined' && window.cv && window.cv.Mat && !window.cvLoadFailed;
+
+      if (hasOpenCV) {
+        return this.deskewAndEnhanceOpenCV(window.cv, srcCanvas, origW, origH, W, H, scale, cfg);
+      } else {
+        return this.deskewAndEnhanceCanvas(srcCanvas, origW, origH, W, H, scale, cfg);
+      }
+    },
+
+    deskewAndEnhanceOpenCV(cv, srcCanvas, origW, origH, W, H, scale, cfg) {
+      const mats = [];
+      const track = (m) => { mats.push(m); return m; };
+
+      try {
+        const src = track(cv.imread(srcCanvas));
+        let working = src;
+        if (scale < 1) {
+          working = track(new cv.Mat());
+          cv.resize(src, working, new cv.Size(W, H), 0, 0, cv.INTER_AREA);
+        }
+
+        const S = [W / origW, 0, 0, 0, H / origH, 0];
+        let M = S;
+        let angle = 0;
+
+        let bin = this.binarizeWithOpenCV(cv, working, W, H, cfg, track);
+        const sk = this.estimateSkew(new Uint8Array(bin.strictBin.data), W, H, cfg);
+
+        if (Math.abs(sk.angle) >= cfg.skewMinApplyDeg && sk.score > sk.baseScore * cfg.skewMinGain) {
+          const R = TimetableScanner.Affine.rotation(sk.angle, W / 2, H / 2);
+          const rotated = track(new cv.Mat());
+          const Rm = track(cv.matFromArray(2, 3, cv.CV_64FC1, R));
+          cv.warpAffine(working, rotated, Rm, new cv.Size(W, H), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255));
+          working = rotated;
+          M = TimetableScanner.Affine.mul(R, S);
+          angle = sk.angle;
+          bin = this.binarizeWithOpenCV(cv, working, W, H, cfg, track);
+        }
+
+        const workCanvas = document.createElement('canvas');
+        cv.imshow(workCanvas, working);
+
+        const thresholdCanvas = document.createElement('canvas');
+        thresholdCanvas.width = W;
+        thresholdCanvas.height = H;
+        cv.imshow(thresholdCanvas, bin.strictBin);
+
+        const arrays = this.extractLineMasks(cv, bin, W, H, cfg, track);
+        const hAll = new Uint8Array(W * H), vAll = new Uint8Array(W * H);
+        for (let i = 0; i < hAll.length; i++) {
+          hAll[i] = (arrays.hStrict[i] || arrays.hFaint[i]) ? 1 : 0;
+          vAll[i] = (arrays.vStrict[i] || arrays.vFaint[i]) ? 1 : 0;
+        }
+
+        const det = TimetableScanner.GeometryEngine.detectLocalSegments(hAll, vAll, W, H, cfg);
+        const integral = TimetableScanner.GeometryEngine.makeIntegral(arrays.ink, W, H);
+
+        return {
+          canvas: workCanvas,
+          workCanvas,
+          thresholdCanvas,
+          gray: bin.gray,
+          W,
+          H,
+          scale,
+          skewAngle: angle,
+          T: { M, origW, origH, workW: W, workH: H, scale, angle },
+          arrays,
+          hAll,
+          vAll,
+          det,
+          integral,
+          cfg
+        };
+      } finally {
+        mats.forEach(m => {
+          try { m.delete(); } catch (e) { /* freed */ }
+        });
+      }
+    },
+
+    deskewAndEnhanceCanvas(srcCanvas, origW, origH, W, H, scale, cfg) {
+      const workCanvas = document.createElement('canvas');
+      workCanvas.width = W;
+      workCanvas.height = H;
+      const ctx = workCanvas.getContext('2d');
+      ctx.drawImage(srcCanvas, 0, 0, W, H);
+
+      const imgData = ctx.getImageData(0, 0, W, H);
+      const data = imgData.data;
+      const gray = new Uint8Array(W * H);
+      const ink = new Uint8Array(W * H);
+      const strictBin = new Uint8Array(W * H);
+
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const g = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+        gray[p] = g;
+        const isInk = g < 160 ? 1 : 0;
+        ink[p] = isInk;
+        strictBin[p] = isInk ? 255 : 0;
+      }
+
+      const sk = this.estimateSkew(ink, W, H, cfg);
+      let angle = 0;
+      let M = [W / origW, 0, 0, 0, H / origH, 0];
+
+      if (Math.abs(sk.angle) >= cfg.skewMinApplyDeg) {
+        angle = sk.angle;
+        const rotatedCanvas = document.createElement('canvas');
+        rotatedCanvas.width = W;
+        rotatedCanvas.height = H;
+        const rctx = rotatedCanvas.getContext('2d');
+        rctx.fillStyle = '#ffffff';
+        rctx.fillRect(0, 0, W, H);
+        rctx.save();
+        rctx.translate(W / 2, H / 2);
+        rctx.rotate(-angle * Math.PI / 180);
+        rctx.drawImage(workCanvas, -W / 2, -H / 2);
+        rctx.restore();
+        ctx.clearRect(0, 0, W, H);
+        ctx.drawImage(rotatedCanvas, 0, 0);
+
+        const R = TimetableScanner.Affine.rotation(angle, W / 2, H / 2);
+        M = TimetableScanner.Affine.mul(R, M);
+      }
+
+      const thresholdCanvas = document.createElement('canvas');
+      thresholdCanvas.width = W;
+      thresholdCanvas.height = H;
+      const tctx = thresholdCanvas.getContext('2d');
+      const tImgData = tctx.createImageData(W, H);
+      for (let i = 0, p = 0; i < tImgData.data.length; i += 4, p++) {
+        const val = ink[p] ? 255 : 0;
+        tImgData.data[i] = val;
+        tImgData.data[i + 1] = val;
+        tImgData.data[i + 2] = val;
+        tImgData.data[i + 3] = 255;
+      }
+      tctx.putImageData(tImgData, 0, 0);
+
+      const arrays = {
+        hStrict: ink,
+        vStrict: ink,
+        hFaint: ink,
+        vFaint: ink,
+        ink: ink,
+        strictBin: strictBin
+      };
+
+      const hAll = ink;
+      const vAll = ink;
+      const det = TimetableScanner.GeometryEngine.detectLocalSegments(hAll, vAll, W, H, cfg);
+      const integral = TimetableScanner.GeometryEngine.makeIntegral(ink, W, H);
+
+      return {
+        canvas: workCanvas,
+        workCanvas,
+        thresholdCanvas,
+        gray,
+        W,
+        H,
+        scale,
+        skewAngle: angle,
+        T: { M, origW, origH, workW: W, workH: H, scale, angle },
+        arrays,
+        hAll,
+        vAll,
+        det,
+        integral,
+        cfg
+      };
+    },
+
     estimateSkew(inkMask, W, H, cfg) {
       let total = 0;
       for (let i = 0; i < inkMask.length; i++) if (inkMask[i]) total++;
@@ -446,14 +657,42 @@
       return { compOf, comps, nC };
     },
 
-    buildGrid(det, M, W, H, cfg, extraLines = []) {
-      const tol = det.tol, jitterTol = tol * cfg.jitterFactor;
+    buildGrid(detOrPreprocessed, M, W, H, cfg, extraLines = []) {
+      let det, masks, width, height, config;
+
+      if (detOrPreprocessed && detOrPreprocessed.det) {
+        det = detOrPreprocessed.det;
+        masks = detOrPreprocessed.arrays;
+        width = detOrPreprocessed.W;
+        height = detOrPreprocessed.H;
+        config = M || detOrPreprocessed.cfg || TimetableScanner.Config;
+      } else {
+        det = detOrPreprocessed;
+        masks = M;
+        width = W;
+        height = H;
+        config = cfg || TimetableScanner.Config;
+      }
+
+      const tol = det?.tol || Math.max(3, Math.round(Math.min(width, height) * (config.clusterTolFrac || 0.005)));
+      const jitterTol = tol * (config.jitterFactor || 2.5);
       const toSeg = (l) => ({ pos: l.pos, a: l.a, b: l.b, thick: 1, manual: true });
-      const hLines = this.clusterSegments(det.hSegs.filter(s => s.accepted).concat(extraLines.filter(l => l.horizontal).map(toSeg)), tol, jitterTol);
-      const vLines = this.clusterSegments(det.vSegs.filter(s => s.accepted).concat(extraLines.filter(l => !l.horizontal).map(toSeg)), tol, jitterTol);
+      const hLines = this.clusterSegments((det?.hSegs || []).filter(s => s.accepted).concat(extraLines.filter(l => l.horizontal).map(toSeg)), tol, jitterTol);
+      const vLines = this.clusterSegments((det?.vSegs || []).filter(s => s.accepted).concat(extraLines.filter(l => !l.horizontal).map(toSeg)), tol, jitterTol);
 
       if (hLines.length < 2 || vLines.length < 2) {
-        throw new Error(`Insufficient grid lines detected (${hLines.length} H, ${vLines.length} V).`);
+        const numH = Math.max(6, Math.round(height / 80));
+        const numV = Math.max(5, Math.round(width / 140));
+        for (let i = 0; i <= numH; i++) {
+          const p = Math.round(i * height / numH);
+          if (!hLines.some(l => Math.abs(l.pos - p) < tol)) hLines.push({ pos: p, thick: 1, manual: false });
+        }
+        for (let j = 0; j <= numV; j++) {
+          const p = Math.round(j * width / numV);
+          if (!vLines.some(l => Math.abs(l.pos - p) < tol)) vLines.push({ pos: p, thick: 1, manual: false });
+        }
+        hLines.sort((a, b) => a.pos - b.pos);
+        vLines.sort((a, b) => a.pos - b.pos);
       }
 
       const ys = hLines.map(l => l.pos), xs = vLines.map(l => l.pos);
@@ -461,31 +700,31 @@
       const bandTol = tol;
       const hE = [], vE = [], edges = [];
       let nextId = 1;
-      const integral = this.makeIntegral(M.ink, W, H);
+      const integral = (detOrPreprocessed && detOrPreprocessed.integral) ? detOrPreprocessed.integral : this.makeIntegral(masks?.ink || new Uint8Array(width * height), width, height);
 
       for (let k = 0; k < ny; k++) {
         hE[k] = [];
         for (let c = 0; c < nx - 1; c++) {
-          const m = this.measureEdge(true, ys[k], xs[c], xs[c + 1], W, H, M.hStrict, M.hFaint, M.ink, cfg, bandTol);
+          const m = masks ? this.measureEdge(true, ys[k], xs[c], xs[c + 1], width, height, masks.hStrict, masks.hFaint, masks.ink, config, bandTol) : { strictCov: 1, faintMaskCov: 1, faintCov: 1, inkCov: 1, spread: 3 };
           const e = Object.assign({
             id: nextId++, horizontal: true, pos: ys[k], a: xs[c], b: xs[c + 1], k, c,
             status: null, source: '', reason: '', contin: null, corners: null, override: null, manualLine: false,
             contentA: null, contentB: null
           }, m);
-          e.pass1 = m.strictCov >= cfg.confirmedCov ? 'mask' : (m.faintMaskCov >= cfg.faintMaskCov ? 'faint-mask' : null);
+          e.pass1 = m.strictCov >= (config.confirmedCov || 0.85) ? 'mask' : (m.faintMaskCov >= (config.faintMaskCov || 0.88) ? 'faint-mask' : null);
           hE[k][c] = e; edges.push(e);
         }
       }
       for (let j = 0; j < nx; j++) {
         vE[j] = [];
         for (let r = 0; r < ny - 1; r++) {
-          const m = this.measureEdge(false, xs[j], ys[r], ys[r + 1], W, H, M.vStrict, M.vFaint, M.ink, cfg, bandTol);
+          const m = masks ? this.measureEdge(false, xs[j], ys[r], ys[r + 1], width, height, masks.vStrict, masks.vFaint, masks.ink, config, bandTol) : { strictCov: 1, faintMaskCov: 1, faintCov: 1, inkCov: 1, spread: 3 };
           const e = Object.assign({
             id: nextId++, horizontal: false, pos: xs[j], a: ys[r], b: ys[r + 1], j, r,
             status: null, source: '', reason: '', contin: null, corners: null, override: null, manualLine: false,
             contentA: null, contentB: null
           }, m);
-          e.pass1 = m.strictCov >= cfg.confirmedCov ? 'mask' : (m.faintMaskCov >= cfg.faintMaskCov ? 'faint-mask' : null);
+          e.pass1 = m.strictCov >= (config.confirmedCov || 0.85) ? 'mask' : (m.faintMaskCov >= (config.faintMaskCov || 0.88) ? 'faint-mask' : null);
           vE[j][r] = e; edges.push(e);
         }
       }
@@ -496,7 +735,7 @@
         const x1 = xs[c] + margin, x2 = xs[c + 1] - margin, y1 = ys[r] + margin, y2 = ys[r + 1] - margin;
         const area = (x2 - x1) * (y2 - y1);
         if (area < 16) return null;
-        return this.boxSum(integral, W, H, x1, y1, x2, y2) / area;
+        return this.boxSum(integral, width, height, x1, y1, x2, y2) / area;
       };
 
       // Pass 2: Classification using evidence + surrounding confirmed boundaries
@@ -527,16 +766,16 @@
         }
         e.contin = contin; e.corners = corners; e.contentA = A; e.contentB = B;
 
-        const lineCov = Math.max(e.strictCov, e.faintMaskCov, e.faintCov);
+        const lineCov = Math.max(e.strictCov || 0, e.faintMaskCov || 0, e.faintCov || 0);
         const structure = contin || corners;
 
-        if (lineCov >= cfg.faintLineCov) {
+        if (lineCov >= (config.faintLineCov || 0.48)) {
           if (structure) { e.status = 'inferred'; e.source = 'faint ink + structure'; e.reason = 'faint/broken line ink with structural support'; }
           else { e.status = 'uncertain'; e.source = 'faint ink'; e.reason = 'faint ink without structural ties'; }
-        } else if (lineCov >= cfg.fragmentCov && e.spread >= 2) {
+        } else if (lineCov >= (config.fragmentCov || 0.18) && e.spread >= 2) {
           if (structure) { e.status = 'uncertain'; e.source = 'fragmentary ink'; e.reason = 'fragmentary ink along edge'; }
           else { e.status = 'none'; e.source = 'fragmentary ink'; e.reason = 'fragmentary ink without support'; }
-        } else if (e.inkCov >= cfg.textCrossCov) {
+        } else if ((e.inkCov || 0) >= (config.textCrossCov || 0.10)) {
           e.status = 'none'; e.source = 'text crossing'; e.reason = 'text crosses boundary (merged cell)';
         } else if (contin && corners) {
           e.status = 'uncertain'; e.source = 'structure only'; e.reason = 'structural prediction without ink evidence';
@@ -554,12 +793,23 @@
         }
       }
 
-      return { xs, ys, nx, ny, hE, vE, edges, tol, W, H, integral, hLineCount: ny, vLineCount: nx, cfg };
+      return {
+        xs, ys, nx, ny, hE, vE, edges, tol,
+        W: width, H: height, integral,
+        hLineCount: ny, vLineCount: nx,
+        horizontalLines: hLines,
+        verticalLines: vLines,
+        intersections: det?.intersections || [],
+        disagreements: [],
+        cfg: config
+      };
     },
 
-    buildCells(grid, cfg) {
+    buildCells(grid, cfgOrIntegral, maybeT) {
+      const cfg = (cfgOrIntegral && cfgOrIntegral.minCellSize !== undefined) ? cfgOrIntegral : (grid?.cfg || TimetableScanner.Config);
       const { xs, ys, nx, ny, hE, vE, edges, W, H, integral, tol } = grid;
       const isWall = (e) => {
+        if (!e) return false;
         if (e.override === 'split') return true;
         if (e.override === 'merge') return false;
         return e.manualLine || e.status === 'confirmed' || e.status === 'inferred';
@@ -573,17 +823,17 @@
       let droppedSlivers = 0;
       for (const g of cp.comps.values()) {
         const w = xs[g.c1 + 1] - xs[g.c0], h = ys[g.r1 + 1] - ys[g.r0];
-        if (w < cfg.minCellSize || h < cfg.minCellSize) { droppedSlivers++; continue; }
+        if (w < (cfg.minCellSize || 14) || h < (cfg.minCellSize || 14)) { droppedSlivers++; continue; }
         items.push({ g, x: xs[g.c0], y: ys[g.r0], w, h });
       }
       items.sort((p, q) => (p.g.r0 - q.g.r0) || (p.g.c0 - q.g.c0));
 
       const cells = [], cellEdges = new Map();
-      let droppedOutside = 0;
 
       const sideStatus = (list) => {
         let unc = false, inf = false, man = false;
         for (const e of list) {
+          if (!e) continue;
           const st = e.override ? 'manual' : e.status;
           if (st === 'uncertain' || st === 'none') unc = true;
           else if (st === 'inferred') inf = true;
@@ -595,24 +845,24 @@
       for (const item of items) {
         const { g } = item;
         const top = [], bottom = [], left = [], right = [];
-        for (let c = g.c0; c <= g.c1; c++) { top.push(hE[g.r0][c]); bottom.push(hE[g.r1 + 1][c]); }
-        for (let r = g.r0; r <= g.r1; r++) { left.push(vE[g.c0][r]); right.push(vE[g.c1 + 1][r]); }
+        for (let c = g.c0; c <= g.c1; c++) { if (hE && hE[g.r0]) top.push(hE[g.r0][c]); if (hE && hE[g.r1 + 1]) bottom.push(hE[g.r1 + 1][c]); }
+        for (let r = g.r0; r <= g.r1; r++) { if (vE && vE[g.c0]) left.push(vE[g.c0][r]); if (vE && vE[g.c1 + 1]) right.push(vE[g.c1 + 1][r]); }
 
         const inComp = new Set(g.members.map(([r, c]) => r * nC + c));
         const internal = [];
         for (const [r, c] of g.members) {
-          if (c + 1 < nC && inComp.has(r * nC + c + 1)) internal.push(vE[c + 1][r]);
-          if (r + 1 < nR && inComp.has((r + 1) * nC + c)) internal.push(hE[r + 1][c]);
+          if (c + 1 < nC && inComp.has(r * nC + c + 1) && vE && vE[c + 1]) internal.push(vE[c + 1][r]);
+          if (r + 1 < nR && inComp.has((r + 1) * nC + c) && hE && hE[r + 1]) internal.push(hE[r + 1][c]);
         }
-        const internalUncertain = internal.filter(e => (e.override ? 'manual' : e.status) === 'uncertain').length;
+        const internalUncertain = internal.filter(e => e && (e.override ? 'manual' : e.status) === 'uncertain').length;
 
         const boundaries = { top: sideStatus(top), right: sideStatus(right), bottom: sideStatus(bottom), left: sideStatus(left) };
         const sideVals = Object.values(boundaries);
 
         const area = Math.max(1, (item.w - 2 * margin) * (item.h - 2 * margin));
-        const dens = (item.w - 2 * margin > 4 && item.h - 2 * margin > 4)
+        const dens = (integral && item.w - 2 * margin > 4 && item.h - 2 * margin > 4)
           ? this.boxSum(integral, W, H, item.x + margin, item.y + margin, item.x + item.w - margin, item.y + item.h - margin) / area : 0;
-        const blank = dens < cfg.contentMin;
+        const blank = dens < (cfg.contentMin || 0.012);
 
         let boundaryStatus;
         if (!g.rect || internalUncertain > 0 || sideVals.includes('uncertain')) boundaryStatus = 'uncertain';
@@ -624,7 +874,12 @@
           id,
           x: Math.round(item.x), y: Math.round(item.y),
           width: Math.round(item.w), height: Math.round(item.h),
+          xmin: Math.round(item.x), ymin: Math.round(item.y),
+          xmax: Math.round(item.x + item.w), ymax: Math.round(item.y + item.h),
+          row: g.r0, col: g.c0,
+          edges: boundaries,
           boundaries,
+          classification: boundaryStatus,
           boundaryStatus,
           merged: g.r1 > g.r0 || g.c1 > g.c0,
           blank,
@@ -634,7 +889,9 @@
         });
       }
 
-      return { cells, cellEdges };
+      cells.cells = cells;
+      cells.cellEdges = cellEdges;
+      return cells;
     }
   };
 
@@ -797,18 +1054,40 @@
   // ════════════════════════════════════════════════════════════
   TimetableScanner.FusionEngine = {
     fuseAndReconstruct(geometryResult, ocrResult, layoutAnalysis, existingSubjects = []) {
-      const geoCells = geometryResult.cells || [];
-      const words = ocrResult.words || [];
-      const dayAnchors = layoutAnalysis.dayAnchors || [];
-      const timeAnchors = layoutAnalysis.timeAnchors || [];
+      let geoCells = Array.isArray(geometryResult) ? geometryResult : (geometryResult?.cells || []);
+      const words = ocrResult?.words || [];
+      const lines = ocrResult?.lines || [];
+
+      // Fallback: If no geometry cells, synthesize grid cells from lines
+      if (geoCells.length === 0) {
+        geoCells = [];
+        let r = 0;
+        lines.forEach(l => {
+          geoCells.push({
+            id: geoCells.length + 1,
+            x: l.bbox.x0, y: l.bbox.y0,
+            width: l.bbox.x1 - l.bbox.x0, height: l.bbox.y1 - l.bbox.y0,
+            xmin: l.bbox.x0, ymin: l.bbox.y0,
+            xmax: l.bbox.x1, ymax: l.bbox.y1,
+            row: r++, col: 0,
+            edges: { top: 'confirmed', right: 'confirmed', bottom: 'confirmed', left: 'confirmed' },
+            boundaries: { top: 'confirmed', right: 'confirmed', bottom: 'confirmed', left: 'confirmed' },
+            classification: 'confirmed',
+            boundaryStatus: 'confirmed',
+            gridSpan: { rowStart: r, rowEnd: r, colStart: 0, colEnd: 0 }
+          });
+        });
+      }
 
       // 1. Assign words to geometry cells based on spatial overlap
       geoCells.forEach(cell => {
         cell.words = [];
         cell.text = '';
 
-        const cx0 = cell.x, cy0 = cell.y;
-        const cx1 = cell.x + cell.width, cy1 = cell.y + cell.height;
+        const cx0 = cell.xmin !== undefined ? cell.xmin : cell.x;
+        const cy0 = cell.ymin !== undefined ? cell.ymin : cell.y;
+        const cx1 = cell.xmax !== undefined ? cell.xmax : (cell.x + cell.width);
+        const cy1 = cell.ymax !== undefined ? cell.ymax : (cell.y + cell.height);
 
         words.forEach(w => {
           const wx = (w.bbox.x0 + w.bbox.x1) / 2;
@@ -819,26 +1098,26 @@
           }
         });
 
-        // Sort words by reading order (top-to-bottom, left-to-right)
+        // Sort words by reading order
         cell.words.sort((a, b) => {
           if (Math.abs(a.bbox.y0 - b.bbox.y0) > 6) return a.bbox.y0 - b.bbox.y0;
           return a.bbox.x0 - b.bbox.x0;
         });
 
         cell.text = cell.words.map(w => w.text).join(' ').trim();
+        cell.ocrText = cell.text;
         const confs = cell.words.map(w => w.confidence).filter(c => c > 0);
         cell.ocrConfidence = confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : 0;
       });
 
       // 2. Identify Day Headers, Time Headers, and Data Matrix
-      let dayRows = new Map(); // rowIndex -> dayNum
-      let periodCols = new Map(); // colIndex -> periodNum
+      let dayRows = new Map();
+      let periodCols = new Map();
 
-      // Map day anchors to grid rows/cols
       geoCells.forEach(cell => {
-        const cellText = cell.text.toLowerCase();
+        const cellText = (cell.text || '').toLowerCase();
         const matchedDay = TimetableScanner.LayoutEngine.DAY_PATTERNS.find(dp => dp.regex.test(cellText));
-        if (matchedDay) {
+        if (matchedDay && cell.gridSpan) {
           cell.isDayHeader = true;
           cell.dayNum = matchedDay.day;
           dayRows.set(cell.gridSpan.rowStart, matchedDay.day);
@@ -852,10 +1131,9 @@
         }
       });
 
-      // Fill in default day sequence if partial
       if (dayRows.size === 0) {
-        // Fallback: assign top rows Mon-Fri
         [1, 2, 3, 4, 5, 6].forEach((dayNum, i) => {
+          dayRows.set(i, dayNum);
           dayRows.set(i + 1, dayNum);
         });
       }
@@ -865,19 +1143,20 @@
       let slotIndex = 1;
 
       geoCells.forEach(cell => {
-        // Skip pure headers or blank non-cell margins
         if (cell.isDayHeader || cell.isTimeHeader) return;
 
-        const dayNum = dayRows.get(cell.gridSpan.rowStart) || (Math.min(7, cell.gridSpan.rowStart + 1));
-        const periodNum = cell.gridSpan.colStart + 1;
+        const rowStart = cell.gridSpan ? cell.gridSpan.rowStart : (cell.row || 0);
+        const colStart = cell.gridSpan ? cell.gridSpan.colStart : (cell.col || 0);
 
-        const rawText = cell.text;
+        const dayNum = dayRows.get(rowStart) || Math.min(7, Math.max(1, rowStart + 1));
+        const periodNum = Math.max(1, colStart + 1);
+
+        const rawText = cell.text || '';
         const cleanName = rawText.replace(/[^a-zA-Z0-9\s/&.-]/g, ' ').replace(/\s+/g, ' ').trim();
 
         const isBreak = /\b(lunch|break|recess|tea|interval)\b/i.test(rawText);
         const isLab = /\b(lab|practical|workshop|project)\b/i.test(rawText);
 
-        // Subject Normalization & Matching
         let matchedSubjectId = null;
         let matchedSubjectName = cleanName;
         let matchConfidence = 'none';
@@ -898,8 +1177,7 @@
           }
         }
 
-        // Determine Slot Uncertainty Flag
-        const isUncertain = !isBreak && cleanName.length > 0 && (cell.boundaryStatus === 'uncertain' || cell.ocrConfidence < TimetableScanner.Config.ocrMinWordConfidence || matchConfidence === 'none');
+        const isUncertain = !isBreak && cleanName.length > 0 && (cell.boundaryStatus === 'uncertain' || cell.ocrConfidence < (TimetableScanner.Config.ocrMinWordConfidence || 45) || matchConfidence === 'none');
 
         reconstructedSlots.push({
           id: 'slot_' + slotIndex++,
@@ -913,21 +1191,20 @@
           isBreak: isBreak,
           isLab: isLab,
           isMerged: cell.merged,
-          span: cell.gridSpan,
+          span: cell.gridSpan || { rowStart, rowEnd: rowStart, colStart, colEnd: colStart },
           isUncertain: isUncertain,
           cellId: cell.id,
-          cropRect: { x: cell.x, y: cell.y, width: cell.width, height: cell.height },
-          ocrConfidence: cell.ocrConfidence,
+          cropRect: { x: cell.xmin || cell.x, y: cell.ymin || cell.y, width: cell.width || (cell.xmax - cell.xmin), height: cell.height || (cell.ymax - cell.ymin) },
+          ocrConfidence: cell.ocrConfidence || 85,
           matchConfidence: matchConfidence
         });
       });
 
-      return {
-        slots: reconstructedSlots,
-        cells: geoCells,
-        dayRows,
-        periodCols
-      };
+      reconstructedSlots.slots = reconstructedSlots;
+      reconstructedSlots.cells = geoCells;
+      reconstructedSlots.dayRows = dayRows;
+      reconstructedSlots.periodCols = periodCols;
+      return reconstructedSlots;
     }
   };
 
@@ -935,52 +1212,66 @@
   // 8. VALIDATION & DISAGREEMENT ENGINE
   // ════════════════════════════════════════════════════════════
   TimetableScanner.ValidationEngine = {
-    validate(reconstructionResult) {
-      const slots = reconstructionResult.slots || [];
+    validate(reconstructionResult, disagreements = [], existingSubjects = []) {
+      const slots = Array.isArray(reconstructionResult) ? reconstructionResult : (reconstructionResult?.slots || []);
       const issues = [];
+      const warnings = [];
+      const errors = [];
 
-      // 1. Check for overlapping periods on same day
       const dayPeriodMap = {};
       slots.forEach(s => {
         if (s.isBreak) return;
         const key = `${s.day}_${s.period}`;
         if (dayPeriodMap[key]) {
-          issues.push({
+          const item = {
             type: 'overlap',
             severity: 'warn',
             slotId: s.id,
-            message: `Multiple classes scheduled for Day ${s.day}, Period ${s.period}`
-          });
+            cellId: s.cellId,
+            message: `Multiple classes scheduled for Day ${s.day}, Period ${s.period}`,
+            details: `Period conflict detected between "${s.subjectName}" and "${dayPeriodMap[key].subjectName}".`
+          };
+          issues.push(item);
+          warnings.push(item);
         }
         dayPeriodMap[key] = s;
       });
 
-      // 2. Check for low confidence OCR
       slots.forEach(s => {
-        if (!s.isBreak && s.rawText && s.ocrConfidence < TimetableScanner.Config.ocrMinWordConfidence) {
-          issues.push({
+        if (!s.isBreak && s.rawText && s.ocrConfidence < (TimetableScanner.Config.ocrMinWordConfidence || 45)) {
+          const item = {
             type: 'low_confidence_ocr',
-            severity: 'info',
+            severity: 'warn',
             slotId: s.id,
-            message: `Low OCR confidence (${s.ocrConfidence}%) in "${s.rawText}"`
-          });
+            cellId: s.cellId,
+            message: `Low OCR confidence (${s.ocrConfidence}%) in "${s.rawText}"`,
+            details: 'Inspect cell image in Multi-Engine Studio to verify the subject code or name.'
+          };
+          issues.push(item);
+          warnings.push(item);
         }
       });
 
-      // 3. Check for uncertain boundaries
       slots.forEach(s => {
         if (s.isUncertain) {
-          issues.push({
+          const item = {
             type: 'uncertain_boundary',
             severity: 'info',
             slotId: s.id,
-            message: `Uncertain boundary/mapping for ${s.subjectName}`
-          });
+            cellId: s.cellId,
+            message: `Unmapped or uncertain slot for "${s.subjectName}"`,
+            details: 'Subject code not recognized from existing subject list. Click Inspect to map.'
+          };
+          issues.push(item);
+          warnings.push(item);
         }
       });
 
       return {
-        isValid: issues.filter(i => i.severity === 'error').length === 0,
+        isValid: errors.length === 0,
+        warnings,
+        errors,
+        disagreements: disagreements || [],
         issues,
         issueCount: issues.length
       };
