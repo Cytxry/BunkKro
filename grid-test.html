@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BunkKro - Cell Detection Test</title>
+
+  <!-- onerror flag lets the page report a failed OpenCV download instead of waiting forever -->
+  <script async id="cvScript" src="https://docs.opencv.org/4.x/opencv.js"
+          onerror="window.cvLoadFailed = true"></script>
+
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 1150px; margin: 25px auto; padding: 20px; }
+    canvas { display: block; max-width: 100%; height: auto; margin-top: 12px; border: 1px solid #aaa; cursor: crosshair; }
+    button, input { padding: 8px 10px; margin: 6px 5px 6px 0; }
+    #status { font-weight: bold; }
+    #summary { font-size: 14px; line-height: 1.6; margin: 8px 0; }
+    .hint { font-size: 13px; color: #555; margin: 6px 0; }
+
+    fieldset.layers { border: 1px solid #ccc; border-radius: 6px; padding: 6px 12px 10px; margin-top: 10px; }
+    fieldset.layers legend { font-size: 13px; color: #444; }
+    fieldset.layers label { display: inline-flex; align-items: center; gap: 5px; margin: 4px 14px 4px 0; font-size: 14px; cursor: pointer; }
+    fieldset.layers input { margin: 0; padding: 0; }
+    .sep { display: inline-block; width: 1px; height: 18px; background: #ccc; margin: 0 8px; vertical-align: middle; }
+
+    .dot { width: 14px; height: 14px; display: inline-block; border-radius: 3px; }
+    .green { background: #00a83b; } .orange { background: #ff9100; } .red { background: #e53935; }
+    .blue { background: #1976d2; } .grey { background: #9e9e9e; } .cyan { background: #00bcd4; }
+
+    details.settings { margin: 8px 0; font-size: 14px; }
+    details.settings label { margin-right: 16px; }
+    details.settings input { width: 70px; }
+
+    #editBar button { padding: 6px 10px; }
+    #edgePanel, #cellPanel { margin-top: 8px; padding: 8px 10px; background: #eef6ff; border: 1px solid #bcd; border-radius: 6px; font-size: 14px; }
+    #cellPanel { background: #fff8e1; border-color: #e6d08a; }
+    #info { white-space: pre-wrap; font-family: Consolas, monospace; font-size: 12px; background: #f6f6f6;
+            border: 1px solid #ddd; border-radius: 6px; padding: 10px; margin-top: 10px; min-height: 36px; }
+
+    #cellTableWrap { max-height: 340px; overflow: auto; border: 1px solid #ddd; border-radius: 6px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th, td { padding: 5px 8px; text-align: right; border-bottom: 1px solid #eee; }
+    th { position: sticky; top: 0; background: #fafafa; }
+    tr.row { cursor: pointer; } tr.row:hover { background: #fff8d6; } tr.sel { background: #ffe97a; }
+    .st-confirmed { color: #00a83b; font-weight: bold; }
+    .st-inferred { color: #ef6c00; font-weight: bold; }
+    .st-uncertain { color: #e53935; font-weight: bold; }
+    .st-manual { color: #1976d2; font-weight: bold; }
+  </style>
+</head>
+
+<body>
+  <h2>BunkKro Cell Detection Test</h2>
+  <p id="status">Loading OpenCV...</p>
+
+  <input type="file" id="upload" accept="image/*">
+  <br>
+  <button id="detect" disabled>Detect Cells</button>
+  <button id="reset" disabled>Show Original</button>
+  <button id="export" disabled>Download layout JSON</button>
+
+  <details class="settings">
+    <summary>Detection settings (re-run Detect after changing)</summary>
+    <label>Faint-ink threshold offset <input type="number" id="setFaintC" value="4" min="1" max="12"></label>
+    <label>Line kernel divisor <input type="number" id="setKernel" value="70" min="20" max="200"></label>
+    <label>Shortest boundary (% of image) <input type="number" id="setMinSeg" value="3" min="1" max="10" step="0.5"></label>
+  </details>
+
+  <fieldset class="layers">
+    <legend>Layers</legend>
+    <label><input type="checkbox" data-layer="original" checked> Image</label>
+    <label><input type="checkbox" data-layer="regions"> Final regions (fill)</label>
+    <label><input type="checkbox" data-layer="cells" checked> Cell boxes + numbers</label>
+    <span class="sep"></span>
+    <label><i class="dot green"></i><input type="checkbox" data-layer="confirmed" checked> Confirmed</label>
+    <label><i class="dot orange"></i><input type="checkbox" data-layer="inferred" checked> Inferred</label>
+    <label><i class="dot red"></i><input type="checkbox" data-layer="uncertain" checked> Uncertain</label>
+    <label><i class="dot grey"></i><input type="checkbox" data-layer="none"> No boundary</label>
+    <label><i class="dot blue"></i><input type="checkbox" data-layer="manual" checked> Manual edits</label>
+    <span class="sep"></span>
+    <label><input type="checkbox" data-layer="threshold"> Thresholded image</label>
+    <label><input type="checkbox" data-layer="masks"> H / V line masks</label>
+    <label><input type="checkbox" data-layer="segments"> Raw segments</label>
+    <label><input type="checkbox" data-layer="intersections"> Intersections</label>
+  </fieldset>
+
+  <div id="editBar">
+    <button id="undoBtn" disabled>Undo</button>
+    <button id="redoBtn" disabled>Redo</button>
+    <button id="resetEditsBtn" disabled>Discard all manual edits</button>
+  </div>
+
+  <p id="summary"></p>
+  <canvas id="canvas"></canvas>
+  <p class="hint">
+    Click a boundary to select it (<i class="dot cyan"></i> highlight, evidence below). Click inside a cell to inspect it.
+    Colours: solid green = confirmed, orange = inferred, red = uncertain, blue = manual (solid = split, dashed = merge).
+  </p>
+
+  <div id="edgePanel" hidden>
+    Selected boundary:
+    <button data-act="split">Split here</button>
+    <button data-act="merge">Merge across</button>
+    <button data-act="auto">Back to automatic</button>
+  </div>
+  <div id="cellPanel" hidden>
+    Selected cell:
+    <button id="addV">Add vertical boundary</button>
+    <button id="addH">Add horizontal boundary</button>
+    <span id="armHint"></span>
+  </div>
+
+  <div id="info">Nothing selected.</div>
+
+  <h3>Detected Cells: <span id="count">0</span></h3>
+  <div id="cellTableWrap">
+    <table>
+      <thead><tr><th>#</th><th>x</th><th>y</th><th>w</th><th>h</th><th>status</th><th>merged</th><th>edited</th></tr></thead>
+      <tbody id="cellTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // ======================================================================
+    // GRID-CORE-START
+    // Pure JavaScript (no OpenCV, no DOM): operates on plain Uint8Array masks
+    // so it can be unit-tested outside the browser.
+    //
+    // Model
+    //  1. Deskew (estimateSkew) so lines are axis-aligned.
+    //  2. Extract LOCAL line segments (kept with their own extents).
+    //  3. Accept a segment if it is long, or if it is short but ends on a
+    //     perpendicular line (a real short boundary has a junction; a letter
+    //     stroke or underline does not).
+    //  4. Cluster accepted segments into candidate row/column coordinates.
+    //     A coordinate only needs support somewhere; it does NOT need to span
+    //     the table. Every edge between two coordinates is then judged
+    //     individually from image evidence.
+    //  5. Cells = fine-grid cells merged across edges that are not boundaries.
+    // ======================================================================
+    const GRID_CFG = {
+      // preprocessing (OpenCV part of the page)
+      maxWorkingSide: 2000,   // larger images are downscaled for processing
+      strictC: 10,            // adaptive-threshold offset for confident ink
+      faintC: 4,              // lower offset: also keeps faint ink
+      lineKernelDiv: 70,      // strict line kernel = dimension / this
+      faintKernelDiv: 40,     // faint line kernel = dimension / this (longer: noise is more common)
+      minKernel: 12,
+      skewMaxDeg: 4,
+      skewMinApplyDeg: 0.15,  // do not rotate for smaller angles
+      skewMinGain: 1.02,      // projection sharpness must improve by 2%
+
+      // segments
+      segMinRun: 8,
+      maxLineThickness: 9,
+      minSegFrac: 0.03,       // shortest accepted segment, fraction of the image dimension
+      longSegFrac: 0.12,      // at least this long: accepted without a junction
+      clusterTolFrac: 0.005,
+      jitterFactor: 2.5,      // nearby coordinates that never overlap are one wall with local jitter
+      maxLines: 150,
+
+      // edge measurement
+      endPad: 3,
+      bridgeGap: 3,
+      minFaintRun: 10,
+      minFaintRunFrac: 0.08,
+
+      // classification thresholds (not calibrated on real data - tune with the debug layers)
+      confirmedCov: 0.85,
+      faintMaskCov: 0.9,
+      faintLineCov: 0.5,
+      fragmentCov: 0.2,
+      textCrossCov: 0.1,
+      contentMin: 0.01,       // ink density below this = blank
+
+      minCellSize: 12
+    };
+
+    // ---------- affine helpers: [a, b, tx, c, d, ty] ----------
+    function affineMul(A, B) { // apply B first, then A
+      return [
+        A[0] * B[0] + A[1] * B[3], A[0] * B[1] + A[1] * B[4], A[0] * B[2] + A[1] * B[5] + A[2],
+        A[3] * B[0] + A[4] * B[3], A[3] * B[1] + A[4] * B[4], A[3] * B[2] + A[4] * B[5] + A[5]
+      ];
+    }
+    function invertAffine(M) {
+      const det = M[0] * M[4] - M[1] * M[3];
+      const i0 = M[4] / det, i1 = -M[1] / det, i3 = -M[3] / det, i4 = M[0] / det;
+      return [i0, i1, -(i0 * M[2] + i1 * M[5]), i3, i4, -(i3 * M[2] + i4 * M[5])];
+    }
+    function applyAffine(M, x, y) { return [M[0] * x + M[1] * y + M[2], M[3] * x + M[4] * y + M[5]]; }
+    // identical to cv.getRotationMatrix2D(center, angleDeg, 1): positive = counter-clockwise
+    function rotationAffine(angleDeg, cx, cy) {
+      const a = Math.cos(angleDeg * Math.PI / 180), b = Math.sin(angleDeg * Math.PI / 180);
+      return [a, b, (1 - a) * cx - b * cy, -b, a, b * cx + (1 - a) * cy];
+    }
+
+    // ---------- skew estimation (projection-profile sharpness) ----------
+    // Returns the angle (degrees) to pass to rotationAffine()/warpAffine to make lines horizontal.
+    function estimateSkew(ink, W, H, cfg) {
+      let total = 0;
+      for (let i = 0; i < ink.length; i++) if (ink[i]) total++;
+      if (total < 50) return { angle: 0, score: 0, baseScore: 0 };
+      const stride = Math.max(1, Math.floor(total / 160000));
+      const px = new Int32Array(Math.ceil(total / stride) + 1);
+      const py = new Int32Array(px.length);
+      let n = 0, seen = 0;
+      for (let y = 0; y < H; y++) {
+        const row = y * W;
+        for (let x = 0; x < W; x++) {
+          if (ink[row + x]) {
+            if (seen % stride === 0) { px[n] = x; py[n] = y; n++; }
+            seen++;
+          }
+        }
+      }
+      const pad = Math.ceil(W * 0.12) + 2;
+      const hist = new Int32Array(H + 2 * pad + 2);
+      const cx = W / 2;
+      const score = (deg) => {
+        const s = Math.tan(deg * Math.PI / 180);
+        hist.fill(0);
+        for (let i = 0; i < n; i++) hist[Math.round(py[i] - s * (px[i] - cx)) + pad]++;
+        let sc = 0;
+        for (let i = 0; i < hist.length; i++) sc += hist[i] * hist[i];
+        return sc;
+      };
+      let best = 0, bestScore = -1;
+      for (let d = -cfg.skewMaxDeg; d <= cfg.skewMaxDeg + 1e-9; d += 0.25) {
+        const sc = score(d);
+        if (sc > bestScore) { bestScore = sc; best = d; }
+      }
+      const center = best;
+      for (let d = center - 0.25; d <= center + 0.25 + 1e-9; d += 0.025) {
+        const sc = score(d);
+        if (sc > bestScore) { bestScore = sc; best = d; }
+      }
+      return { angle: Math.round(best * 1000) / 1000, score: bestScore, baseScore: score(0) };
+    }
+
+    function transposeMask(mask, W, H) {
+      const out = new Uint8Array(W * H);
+      for (let y = 0; y < H; y++) {
+        const row = y * W;
+        for (let x = 0; x < W; x++) if (mask[row + x]) out[x * H + y] = 1;
+      }
+      return out;
+    }
+
+    // Horizontal segments = connected groups of runs in adjacent rows. [{pos, a, b, thick}]
+    function extractSegments(mask, W, H, minRun, maxThick) {
+      const parent = [], runs = [];
+      const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+      const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+      let prev = [];
+      for (let y = 0; y < H; y++) {
+        const cur = [];
+        const row = y * W;
+        let x = 0;
+        while (x < W) {
+          if (mask[row + x]) {
+            const s = x;
+            while (x < W && mask[row + x]) x++;
+            if (x - s >= minRun) { const id = runs.length; runs.push({ y, x1: s, x2: x - 1 }); parent.push(id); cur.push(id); }
+          } else x++;
+        }
+        let p = 0;
+        for (const id of cur) {
+          const r = runs[id];
+          for (let q = p; q < prev.length; q++) {
+            const pr = runs[prev[q]];
+            if (pr.x2 < r.x1) { p = q + 1; continue; }
+            if (pr.x1 > r.x2) break;
+            union(id, prev[q]);
+          }
+        }
+        prev = cur;
+      }
+      const groups = new Map();
+      for (let i = 0; i < runs.length; i++) {
+        const root = find(i), r = runs[i], len = r.x2 - r.x1 + 1;
+        let g = groups.get(root);
+        if (!g) { g = { ySum: 0, wSum: 0, y1: Infinity, y2: -Infinity, a: Infinity, b: -Infinity }; groups.set(root, g); }
+        g.ySum += r.y * len; g.wSum += len;
+        g.y1 = Math.min(g.y1, r.y); g.y2 = Math.max(g.y2, r.y);
+        g.a = Math.min(g.a, r.x1); g.b = Math.max(g.b, r.x2);
+      }
+      const out = [];
+      for (const g of groups.values()) {
+        const thick = g.y2 - g.y1 + 1;
+        if (thick > maxThick) continue;
+        out.push({ pos: g.ySum / g.wSum, a: g.a, b: g.b, thick });
+      }
+      return out;
+    }
+
+    // Stage 2+3: extract and accept local segments (cacheable; independent of manual edits)
+    function detectSegments(hAll, vAll, W, H, cfg) {
+      const minDim = Math.min(W, H);
+      const tol = Math.max(3, Math.round(minDim * cfg.clusterTolFrac));
+      const maxThick = Math.max(cfg.maxLineThickness, Math.round(minDim * 0.012));
+      const hSegs = extractSegments(hAll, W, H, cfg.segMinRun, maxThick);
+      const vSegs = extractSegments(transposeMask(vAll, W, H), H, W, cfg.segMinRun, maxThick);
+
+      const minH = Math.max(cfg.minKernel, Math.round(cfg.minSegFrac * W));
+      const minV = Math.max(cfg.minKernel, Math.round(cfg.minSegFrac * H));
+      const longH = cfg.longSegFrac * W, longV = cfg.longSegFrac * H;
+      const slack = tol + 2;
+
+      const vCand = vSegs.filter(s => s.b - s.a + 1 >= minV);
+      const hCand = hSegs.filter(s => s.b - s.a + 1 >= minH);
+
+      // a short segment is a real boundary only if one end lies on a perpendicular segment
+      const endsOn = (s, perps) => {
+        for (const p of perps) {
+          if (s.pos < p.a - slack || s.pos > p.b + slack) continue; // s must lie within p's extent
+          if (Math.abs(p.pos - s.a) <= slack || Math.abs(p.pos - s.b) <= slack) return true;
+        }
+        return false;
+      };
+
+      for (const s of hSegs) {
+        const len = s.b - s.a + 1;
+        if (len < minH) { s.accepted = false; s.reason = 'too short'; }
+        else if (len >= longH) { s.accepted = true; s.reason = 'long'; }
+        else if (endsOn(s, vCand)) { s.accepted = true; s.reason = 'junction'; }
+        else { s.accepted = false; s.reason = 'no junction'; }
+      }
+      for (const s of vSegs) {
+        const len = s.b - s.a + 1;
+        if (len < minV) { s.accepted = false; s.reason = 'too short'; }
+        else if (len >= longV) { s.accepted = true; s.reason = 'long'; }
+        else if (endsOn(s, hCand)) { s.accepted = true; s.reason = 'junction'; }
+        else { s.accepted = false; s.reason = 'no junction'; }
+      }
+
+      // intersections between accepted segments (for the debug layer)
+      const hA = hSegs.filter(s => s.accepted), vA = vSegs.filter(s => s.accepted);
+      const intersections = [];
+      for (const h of hA) {
+        for (const v of vA) {
+          if (v.pos >= h.a - slack && v.pos <= h.b + slack && h.pos >= v.a - slack && h.pos <= v.b + slack) {
+            if (intersections.length < 6000) intersections.push({ x: v.pos, y: h.pos });
+          }
+        }
+      }
+      return { tol, W, H, hSegs, vSegs, intersections };
+    }
+
+    function overlapLen(I1, I2) {
+      let i = 0, j = 0, tot = 0;
+      while (i < I1.length && j < I2.length) {
+        const lo = Math.max(I1[i][0], I2[j][0]), hi = Math.min(I1[i][1], I2[j][1]);
+        if (hi > lo) tot += hi - lo + 1;
+        if (I1[i][1] < I2[j][1]) i++; else j++;
+      }
+      return tot;
+    }
+    function mergeIntervals(list) {
+      const sorted = list.map(s => [s.a, s.b]).sort((p, q) => p[0] - q[0]);
+      const out = [];
+      for (const [a, b] of sorted) {
+        const last = out[out.length - 1];
+        if (last && a <= last[1] + 1) last[1] = Math.max(last[1], b);
+        else out.push([a, b]);
+      }
+      return out;
+    }
+
+    // Group nearly aligned segments into coordinates. No relative-length filter:
+    // short boundaries are legitimate. Nearby coordinates whose extents never overlap
+    // are the same wall with local offset (residual tilt / uneven drawing) and are merged.
+    function clusterSegments(segs, tol, jitterTol) {
+      const sorted = segs.slice().sort((p, q) => p.pos - q.pos);
+      let clusters = [];
+      for (const s of sorted) {
+        const w = s.b - s.a + 1, last = clusters[clusters.length - 1];
+        if (last && Math.abs(s.pos - last.pos) <= tol) {
+          last.segs.push(s); last.wSum += w; last.pSum += s.pos * w; last.pos = last.pSum / last.wSum;
+        } else clusters.push({ segs: [s], wSum: w, pSum: s.pos * w, pos: s.pos });
+      }
+      const finalize = (c) => {
+        c.intervals = mergeIntervals(c.segs);
+        c.covered = c.intervals.reduce((n, [a, b]) => n + (b - a + 1), 0);
+      };
+      clusters.forEach(finalize);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (let i = 0; i < clusters.length - 1; i++) {
+          const A = clusters[i], B = clusters[i + 1];
+          if (B.pos - A.pos <= jitterTol &&
+              overlapLen(A.intervals, B.intervals) <= 0.1 * Math.min(A.covered, B.covered)) {
+            A.segs = A.segs.concat(B.segs); A.wSum += B.wSum; A.pSum += B.pSum; A.pos = A.pSum / A.wSum;
+            finalize(A);
+            clusters.splice(i + 1, 1);
+            changed = true;
+            break;
+          }
+        }
+      }
+      return clusters.map(c => ({ pos: c.pos, intervals: c.intervals, covered: c.covered, manual: c.segs.some(s => s.manual) }));
+    }
+
+    function makeIntegral(mask, W, H) {
+      const I = new Uint32Array((W + 1) * (H + 1));
+      for (let y = 0; y < H; y++) {
+        let rowSum = 0;
+        for (let x = 0; x < W; x++) {
+          if (mask[y * W + x]) rowSum++;
+          I[(y + 1) * (W + 1) + (x + 1)] = I[y * (W + 1) + (x + 1)] + rowSum;
+        }
+      }
+      return I;
+    }
+    function boxSum(I, W, H, x1, y1, x2, y2) {
+      x1 = Math.max(0, Math.round(x1)); y1 = Math.max(0, Math.round(y1));
+      x2 = Math.min(W, Math.round(x2)); y2 = Math.min(H, Math.round(y2));
+      if (x2 <= x1 || y2 <= y1) return 0;
+      const S = W + 1;
+      return I[y2 * S + x2] - I[y1 * S + x2] - I[y2 * S + x1] + I[y1 * S + x1];
+    }
+
+    // Evidence along one fine-grid edge.
+    //   strictCov    : fraction covered by the strict line mask
+    //   faintMaskCov : fraction covered by the faint line mask (long, continuous faint runs)
+    //   faintCov     : fraction covered by thin collinear ink runs (tracks a line that wobbles by <=1px; text breaks the track)
+    //   inkCov       : fraction of positions with ANY ink in the band (text counts here)
+    //   spread       : thirds of the edge containing ink (text sits in one third, a broken line is spread out)
+    function measureEdge(horizontal, pos, a, b, W, H, strictMask, faintMask, inkMask, cfg, bandTol) {
+      const alongMax = horizontal ? W : H, perpMax = horizontal ? H : W;
+      const start = Math.round(a) + cfg.endPad, end = Math.round(b) - cfg.endPad;
+      const len = end - start + 1;
+      const empty = { len: Math.max(len, 0), strictCov: 0, faintMaskCov: 0, faintCov: 0, inkCov: 0, spread: 0 };
+      if (len < 4) return empty;
+
+      const p = Math.round(pos);
+      const lo = Math.max(0, p - bandTol), hi = Math.min(perpMax - 1, p + bandTol);
+      const minRun = Math.max(cfg.minFaintRun, Math.ceil(len * cfg.minFaintRunFrac));
+
+      let strictHits = 0, faintMaskHits = 0, inkTotal = 0, covered = 0;
+      const thirdInk = [0, 0, 0], thirdLen = [0, 0, 0];
+      let runStart = -1, runLast = -1, py = p;
+      const endRun = () => {
+        if (runStart >= 0 && (runLast - runStart + 1) >= minRun) covered += runLast - runStart + 1;
+        runStart = -1;
+      };
+
+      for (let i = 0; i < len; i++) {
+        const t = start + i;
+        const third = Math.min(2, Math.floor((i * 3) / len));
+        thirdLen[third]++;
+        if (t < 0 || t >= alongMax) continue;
+        let strict = false, fm = false, best = -1, bestD = Infinity;
+        const ref = runStart >= 0 ? py : p;
+        for (let q = lo; q <= hi; q++) {
+          const idx = horizontal ? q * W + t : t * W + q;
+          if (strictMask[idx]) strict = true;
+          if (faintMask[idx]) fm = true;
+          if (inkMask[idx]) { const d = Math.abs(q - ref); if (d < bestD) { bestD = d; best = q; } }
+        }
+        if (strict) strictHits++;
+        if (fm) faintMaskHits++;
+        if (best >= 0) {
+          inkTotal++; thirdInk[third]++;
+          if (runStart < 0) { runStart = i; runLast = i; py = best; }
+          else if (bestD <= 1) { runLast = i; py = best; }
+          else { endRun(); runStart = i; runLast = i; py = best; }
+        } else if (runStart >= 0 && i - runLast > cfg.bridgeGap) endRun();
+      }
+      endRun();
+
+      let spread = 0;
+      for (let s = 0; s < 3; s++) if (thirdLen[s] > 0 && thirdInk[s] / thirdLen[s] >= 0.25) spread++;
+      return { len, strictCov: strictHits / len, faintMaskCov: faintMaskHits / len, faintCov: covered / len, inkCov: inkTotal / len, spread };
+    }
+
+    function computeComps(grid, wallFn) {
+      const { nx, ny, hE, vE } = grid;
+      const nR = ny - 1, nC = nx - 1;
+      const parent = Array.from({ length: nR * nC }, (_, i) => i);
+      const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+      const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+      for (let k = 1; k < ny - 1; k++) for (let c = 0; c < nC; c++) if (!wallFn(hE[k][c])) union((k - 1) * nC + c, k * nC + c);
+      for (let j = 1; j < nx - 1; j++) for (let r = 0; r < nR; r++) if (!wallFn(vE[j][r])) union(r * nC + (j - 1), r * nC + j);
+      const compOf = new Int32Array(nR * nC);
+      const comps = new Map();
+      for (let r = 0; r < nR; r++) {
+        for (let c = 0; c < nC; c++) {
+          const root = find(r * nC + c);
+          compOf[r * nC + c] = root;
+          let g = comps.get(root);
+          if (!g) { g = { r0: r, r1: r, c0: c, c1: c, members: [] }; comps.set(root, g); }
+          g.r0 = Math.min(g.r0, r); g.r1 = Math.max(g.r1, r);
+          g.c0 = Math.min(g.c0, c); g.c1 = Math.max(g.c1, c);
+          g.members.push([r, c]);
+        }
+      }
+      for (const g of comps.values()) g.rect = g.members.length === (g.r1 - g.r0 + 1) * (g.c1 - g.c0 + 1);
+      return { compOf, comps, nC };
+    }
+
+    const autoWall = (e) => e.manualLine || e.status === 'confirmed' || e.status === 'inferred';
+
+    // Stage 4+5: coordinates, fine grid, per-edge evidence and classification
+    function buildGrid(det, M, W, H, cfg, extraLines) {
+      extraLines = extraLines || [];
+      const tol = det.tol, jitterTol = tol * cfg.jitterFactor;
+      const toSeg = (l) => ({ pos: l.pos, a: l.a, b: l.b, thick: 1, manual: true });
+      const hLines = clusterSegments(det.hSegs.filter(s => s.accepted).concat(extraLines.filter(l => l.horizontal).map(toSeg)), tol, jitterTol);
+      const vLines = clusterSegments(det.vSegs.filter(s => s.accepted).concat(extraLines.filter(l => !l.horizontal).map(toSeg)), tol, jitterTol);
+
+      if (hLines.length < 2 || vLines.length < 2) {
+        throw new Error(`Could not find a grid (found ${hLines.length} horizontal and ${vLines.length} vertical lines).`);
+      }
+      if (hLines.length > cfg.maxLines || vLines.length > cfg.maxLines) {
+        throw new Error(`Too many candidate lines (${hLines.length} horizontal, ${vLines.length} vertical): the image is probably noisy. Raise the thresholds.`);
+      }
+
+      const ys = hLines.map(l => l.pos), xs = vLines.map(l => l.pos);
+      const ny = ys.length, nx = xs.length;
+      const bandTol = tol;
+      const hE = [], vE = [], edges = [];
+      let nextId = 1;
+      const integral = makeIntegral(M.ink, W, H);
+
+      for (let k = 0; k < ny; k++) {
+        hE[k] = [];
+        for (let c = 0; c < nx - 1; c++) {
+          const m = measureEdge(true, ys[k], xs[c], xs[c + 1], W, H, M.hStrict, M.hFaint, M.ink, cfg, bandTol);
+          const e = Object.assign({ id: nextId++, horizontal: true, pos: ys[k], a: xs[c], b: xs[c + 1], k, c,
+            status: null, source: '', reason: '', contin: null, corners: null, override: null, manualLine: false,
+            contentA: null, contentB: null }, m);
+          e.pass1 = m.strictCov >= cfg.confirmedCov ? 'mask' : (m.faintMaskCov >= cfg.faintMaskCov ? 'faint-mask' : null);
+          hE[k][c] = e; edges.push(e);
+        }
+      }
+      for (let j = 0; j < nx; j++) {
+        vE[j] = [];
+        for (let r = 0; r < ny - 1; r++) {
+          const m = measureEdge(false, xs[j], ys[r], ys[r + 1], W, H, M.vStrict, M.vFaint, M.ink, cfg, bandTol);
+          const e = Object.assign({ id: nextId++, horizontal: false, pos: xs[j], a: ys[r], b: ys[r + 1], j, r,
+            status: null, source: '', reason: '', contin: null, corners: null, override: null, manualLine: false,
+            contentA: null, contentB: null }, m);
+          e.pass1 = m.strictCov >= cfg.confirmedCov ? 'mask' : (m.faintMaskCov >= cfg.faintMaskCov ? 'faint-mask' : null);
+          vE[j][r] = e; edges.push(e);
+        }
+      }
+
+      const conf = (e) => !!e && !!e.pass1;
+      const margin = tol + 2;
+      const density = (r, c) => {
+        const x1 = xs[c] + margin, x2 = xs[c + 1] - margin, y1 = ys[r] + margin, y2 = ys[r + 1] - margin;
+        const area = (x2 - x1) * (y2 - y1);
+        if (area < 16) return null;
+        return boxSum(integral, W, H, x1, y1, x2, y2) / area;
+      };
+
+      // ---- Pass 2: classify using image evidence + neighbouring CONFIRMED edges only ----
+      for (const e of edges) {
+        if (e.pass1) {
+          e.status = 'confirmed';
+          e.source = e.pass1 === 'mask' ? 'line mask' : 'faint line mask';
+          e.reason = e.pass1 === 'mask' ? 'strict line mask covers the edge' : 'a continuous faint line covers the edge';
+          continue;
+        }
+        let contin, corners, A = null, B = null;
+        if (e.horizontal) {
+          const { k, c } = e;
+          const left = c > 0 ? hE[k][c - 1] : null, right = c < nx - 2 ? hE[k][c + 1] : null;
+          contin = !!left && !!right && conf(left) && conf(right);
+          const endOK = (j) => conf(k > 0 ? vE[j][k - 1] : null) || conf(k < ny - 1 ? vE[j][k] : null);
+          corners = endOK(c) && endOK(c + 1);
+          if (k > 0) A = density(k - 1, c);
+          if (k < ny - 1) B = density(k, c);
+        } else {
+          const { j, r } = e;
+          const up = r > 0 ? vE[j][r - 1] : null, dn = r < ny - 2 ? vE[j][r + 1] : null;
+          contin = !!up && !!dn && conf(up) && conf(dn);
+          const endOK = (kk) => conf(j > 0 ? hE[kk][j - 1] : null) || conf(j < nx - 1 ? hE[kk][j] : null);
+          corners = endOK(r) && endOK(r + 1);
+          if (j > 0) A = density(r, j - 1);
+          if (j < nx - 1) B = density(r, j);
+        }
+        e.contin = contin; e.corners = corners; e.contentA = A; e.contentB = B;
+
+        const lineCov = Math.max(e.strictCov, e.faintMaskCov, e.faintCov);
+        const structure = contin || corners;
+        const how = contin && corners ? 'collinear neighbours and corner support' : contin ? 'collinear neighbours' : 'corner support';
+
+        if (lineCov >= cfg.faintLineCov) {
+          if (structure) { e.status = 'inferred'; e.source = 'faint ink + structure'; e.reason = `broken or faint line-like ink along the edge, plus ${how}`; }
+          else { e.status = 'uncertain'; e.source = 'faint ink'; e.reason = 'line-like ink, but not tied into the surrounding grid'; }
+        } else if (lineCov >= cfg.fragmentCov && e.spread >= 2) {
+          if (structure) { e.status = 'uncertain'; e.source = 'fragmentary ink'; e.reason = 'fragmentary line-like ink spread along the edge; text cannot be ruled out'; }
+          else { e.status = 'none'; e.source = 'fragmentary ink'; e.reason = 'fragmentary ink without structural support'; }
+        } else if (e.inkCov >= cfg.textCrossCov) {
+          e.status = 'none'; e.source = 'text crossing'; e.reason = 'non-line ink crosses this position (text inside a merged region)';
+        } else if (contin && corners) {
+          e.status = 'uncertain'; e.source = 'structure only';
+          e.reason = 'neighbours and corners predict a boundary but there is no pixel evidence and no text crosses it';
+        } else {
+          e.status = 'none'; e.source = 'no evidence'; e.reason = 'no evidence of a boundary';
+        }
+      }
+
+      // manual lines: mark edges lying on a user-added line
+      for (const l of extraLines) {
+        for (const e of edges) {
+          if (e.horizontal !== l.horizontal || Math.abs(e.pos - l.pos) > jitterTol + 1) continue;
+          const mid = (e.a + e.b) / 2;
+          if (mid >= l.a - 1 && mid <= l.b + 1) e.manualLine = true;
+        }
+      }
+
+      // ---- Pass 3a: aligned absence. If SEVERAL distinct lines are all absent over the same
+      // rectangular stretch (while confirmed on both sides), that is how a merged block looks:
+      // faintness is a property of a line, so independent lines rarely fail in the same place.
+      // A single absent edge (e.g. a 2-period lab) is NOT resolved here. ----
+      {
+        const nCa = nx - 1, nRa = ny - 1;
+        const baseA = computeComps({ nx, ny, hE, vE }, autoWall);
+        for (const g of baseA.comps.values()) {
+          if (!g.rect || g.members.length < 3) continue;
+          const inComp = new Set(g.members.map(([r, c]) => r * nCa + c));
+          const absent = [], lineIds = new Set();
+          for (const [r, c] of g.members) {
+            if (c + 1 < nCa && inComp.has(r * nCa + c + 1)) { absent.push(vE[c + 1][r]); lineIds.add('v' + (c + 1)); }
+            if (r + 1 < nRa && inComp.has((r + 1) * nCa + c)) { absent.push(hE[r + 1][c]); lineIds.add('h' + (r + 1)); }
+          }
+          if (lineIds.size < 2) continue;
+          for (const e of absent) {
+            if (e.status === 'uncertain' && !e.manualLine) {
+              e.status = 'none'; e.source = 'aligned absence';
+              e.reason = `${lineIds.size} separate boundary lines are all absent over this same stretch while present on both sides: consistent with one merged region`;
+            }
+          }
+        }
+      }
+
+      // ---- Pass 3b: rectangularity. Resolve a run of uncertain collinear edges only if exactly
+      // one reading (boundary vs. no boundary) yields rectangular regions. ----
+      const runs = [];
+      for (let k = 1; k < ny - 1; k++) {
+        let cur = null;
+        for (let c = 0; c < nx - 1; c++) {
+          const e = hE[k][c];
+          if (e.status === 'uncertain' && !e.manualLine) { if (!cur) { cur = []; runs.push(cur); } cur.push(e); } else cur = null;
+        }
+      }
+      for (let j = 1; j < nx - 1; j++) {
+        let cur = null;
+        for (let r = 0; r < ny - 1; r++) {
+          const e = vE[j][r];
+          if (e.status === 'uncertain' && !e.manualLine) { if (!cur) { cur = []; runs.push(cur); } cur.push(e); } else cur = null;
+        }
+      }
+      const nC = nx - 1;
+      const cellsOf = (e) => e.horizontal
+        ? [(e.k - 1) * nC + e.c, e.k * nC + e.c]
+        : [e.r * nC + (e.j - 1), e.r * nC + e.j];
+      const grid = { nx, ny, hE, vE };
+      for (let iter = 0; iter < 3; iter++) {
+        const live = runs.filter(run => run[0].status === 'uncertain');
+        if (!live.length) break;
+        const base = computeComps(grid, autoWall);
+        let changed = false;
+        const decisions = [];
+        for (const run of live) {
+          const set = new Set(run);
+          const pairs = run.map(cellsOf);
+          const mergeRect = pairs.every(([p, q]) => base.comps.get(base.compOf[p]).rect && base.comps.get(base.compOf[q]).rect);
+          const sp = computeComps(grid, (e) => autoWall(e) || set.has(e));
+          const splitRect = pairs.every(([p, q]) => {
+            const gp = sp.comps.get(sp.compOf[p]), gq = sp.comps.get(sp.compOf[q]);
+            if (sp.compOf[p] === sp.compOf[q]) return false;           // a lone wall inside a region is not a partition
+            if (!gp.rect || !gq.rect) return false;
+            const w = (g) => xs[g.c1 + 1] - xs[g.c0], h = (g) => ys[g.r1 + 1] - ys[g.r0];
+            return w(gp) >= cfg.minCellSize && h(gp) >= cfg.minCellSize && w(gq) >= cfg.minCellSize && h(gq) >= cfg.minCellSize;
+          });
+          if (!mergeRect && splitRect) decisions.push([run, 'inferred', 'merging across this boundary would create a non-rectangular region, while a boundary yields two rectangles']);
+          else if (mergeRect && !splitRect) decisions.push([run, 'none', 'a boundary here would not partition the region into rectangles']);
+        }
+        for (const [run, status, why] of decisions) {
+          for (const e of run) { e.status = status; e.source = 'rectangularity'; e.reason = why; }
+          changed = true;
+        }
+        if (!changed) break;
+      }
+
+      return { xs, ys, nx, ny, hE, vE, edges, tol, W, H, integral, hLineCount: ny, vLineCount: nx, cfg };
+    }
+
+    // Manual decisions. Overrides are geometric records, so they survive re-analysis.
+    function overrideMatches(o, e, tol) {
+      if (o.horizontal !== e.horizontal || Math.abs(o.pos - e.pos) > 3 * tol) return false;
+      const mid = (e.a + e.b) / 2;
+      return mid >= o.a - 1 && mid <= o.b + 1;
+    }
+    function applyOverrides(grid, overrides) {
+      for (const e of grid.edges) {
+        e.override = e.manualLine ? 'split' : null;
+        for (const o of overrides) if (overrideMatches(o, e, grid.tol)) e.override = o.mode;
+      }
+    }
+    function isWall(e) {
+      if (e.override === 'split') return true;
+      if (e.override === 'merge') return false;
+      return e.status === 'confirmed' || e.status === 'inferred';
+    }
+    function effStatus(e) { return e.override ? 'manual' : e.status; }
+
+    function sideStatus(list) {
+      let unc = false, inf = false, man = false;
+      for (const e of list) {
+        const st = effStatus(e);
+        if (st === 'uncertain' || st === 'none') unc = true;
+        else if (st === 'inferred') inf = true;
+        else if (st === 'manual') man = true;
+      }
+      return unc ? 'uncertain' : inf ? 'inferred' : man ? 'manual' : 'confirmed';
+    }
+    function wallFraction(list) {
+      let wall = 0, tot = 0;
+      for (const e of list) { const l = e.b - e.a; tot += l; if (isWall(e)) wall += l; }
+      return tot > 0 ? wall / tot : 0;
+    }
+
+    function buildCells(grid, cfg) {
+      cfg = cfg || GRID_CFG;
+      const { xs, ys, nx, ny, hE, vE, edges, W, H, integral, tol } = grid;
+      const cp = computeComps(grid, isWall);
+      const nR = ny - 1, nC = nx - 1;
+      const margin = tol + 2;
+
+      const items = [];
+      let droppedSlivers = 0;
+      for (const g of cp.comps.values()) {
+        const w = xs[g.c1 + 1] - xs[g.c0], h = ys[g.r1 + 1] - ys[g.r0];
+        if (w < cfg.minCellSize || h < cfg.minCellSize) { droppedSlivers++; continue; }
+        items.push({ g, x: xs[g.c0], y: ys[g.r0], w, h });
+      }
+      items.sort((p, q) => (p.g.r0 - q.g.r0) || (p.g.c0 - q.g.c0));
+
+      const cells = [], cellEdges = new Map();
+      let droppedOutside = 0;
+      for (const item of items) {
+        const { g } = item;
+        const top = [], bottom = [], left = [], right = [];
+        for (let c = g.c0; c <= g.c1; c++) { top.push(hE[g.r0][c]); bottom.push(hE[g.r1 + 1][c]); }
+        for (let r = g.r0; r <= g.r1; r++) { left.push(vE[g.c0][r]); right.push(vE[g.c1 + 1][r]); }
+
+        const inComp = new Set(g.members.map(([r, c]) => r * nC + c));
+        const internal = [];
+        for (const [r, c] of g.members) {
+          if (c + 1 < nC && inComp.has(r * nC + c + 1)) internal.push(vE[c + 1][r]);
+          if (r + 1 < nR && inComp.has((r + 1) * nC + c)) internal.push(hE[r + 1][c]);
+        }
+        const internalUncertain = internal.filter(e => effStatus(e) === 'uncertain').length;
+
+        const boundaries = { top: sideStatus(top), right: sideStatus(right), bottom: sideStatus(bottom), left: sideStatus(left) };
+        const sideVals = Object.values(boundaries);
+        const hasWallH = wallFraction(top) >= 0.5 || wallFraction(bottom) >= 0.5;
+        const hasWallV = wallFraction(left) >= 0.5 || wallFraction(right) >= 0.5;
+
+        const area = Math.max(1, (item.w - 2 * margin) * (item.h - 2 * margin));
+        const dens = (item.w - 2 * margin > 4 && item.h - 2 * margin > 4)
+          ? boxSum(integral, W, H, item.x + margin, item.y + margin, item.x + item.w - margin, item.y + item.h - margin) / area : 0;
+        const blank = dens < cfg.contentMin;
+
+        // a blank region without both a horizontal and a vertical wall is page margin / title spacing, not a cell
+        if (blank && !(hasWallH && hasWallV)) { droppedOutside++; continue; }
+
+        let boundaryStatus;
+        if (!g.rect || internalUncertain > 0 || sideVals.includes('uncertain')) boundaryStatus = 'uncertain';
+        else if (sideVals.includes('inferred')) boundaryStatus = 'inferred';
+        else boundaryStatus = 'confirmed';
+
+        const all = top.concat(bottom, left, right, internal);
+        const id = cells.length + 1;
+        cells.push({
+          id,
+          x: Math.round(item.x), y: Math.round(item.y),
+          width: Math.round(item.w), height: Math.round(item.h),
+          boundaries,
+          boundaryStatus,
+          merged: g.r1 > g.r0 || g.c1 > g.c0,
+          manualEdit: all.some(e => e.override || e.manualLine),
+          blank,
+          irregular: !g.rect,
+          uncertainInternalEdges: internalUncertain,
+          row: null, column: null,   // semantic row/column are not guessed at this stage
+          gridSpan: { rowStart: g.r0, rowEnd: g.r1, colStart: g.c0, colEnd: g.c1 }
+        });
+        const seen = new Set();
+        const rec = [];
+        for (const e of top.concat(bottom, left, right)) if (!seen.has(e.id)) { seen.add(e.id); rec.push({ edge: e, internal: false }); }
+        for (const e of internal) if (!seen.has(e.id)) { seen.add(e.id); rec.push({ edge: e, internal: true }); }
+        cellEdges.set(id, rec);
+      }
+
+      const edgeCounts = { confirmed: 0, inferred: 0, uncertain: 0, none: 0, manual: 0 };
+      for (const e of edges) edgeCounts[effStatus(e)]++;
+      const cellCounts = { confirmed: 0, inferred: 0, uncertain: 0 };
+      for (const c of cells) cellCounts[c.boundaryStatus]++;
+      return { cells, cellEdges, stats: { edgeCounts, cellCounts, droppedSlivers, droppedOutside, blankCells: cells.filter(c => c.blank).length } };
+    }
+
+    // Layout export. T = { M: orig->working affine, origW, origH, workW, workH, scale, angle }
+    function buildExport(result, T, cfgUsed) {
+      const inv = invertAffine(T.M);
+      const toO = (x, y) => { const [ox, oy] = applyAffine(inv, x, y); return [Math.round(ox * 10) / 10, Math.round(oy * 10) / 10]; };
+      const cells = result.cells.map(c => {
+        const quad = [toO(c.x, c.y), toO(c.x + c.width, c.y), toO(c.x + c.width, c.y + c.height), toO(c.x, c.y + c.height)];
+        const xsq = quad.map(p => p[0]), ysq = quad.map(p => p[1]);
+        const x = Math.min(...xsq), y = Math.min(...ysq);
+        return {
+          id: c.id,
+          x: Math.round(x), y: Math.round(y),
+          width: Math.round(Math.max(...xsq) - x), height: Math.round(Math.max(...ysq) - y),
+          quad,
+          boundaries: c.boundaries,
+          boundaryStatus: c.boundaryStatus,
+          merged: c.merged,
+          manualEdit: c.manualEdit,
+          blank: c.blank,
+          irregular: c.irregular,
+          gridSpan: c.gridSpan,
+          row: null, column: null
+        };
+      });
+      const edges = result.grid.edges
+        .filter(e => effStatus(e) !== 'none')
+        .map(e => {
+          const p = e.horizontal ? toO(e.a, e.pos) : toO(e.pos, e.a);
+          const q = e.horizontal ? toO(e.b, e.pos) : toO(e.pos, e.b);
+          return {
+            orientation: e.horizontal ? 'horizontal' : 'vertical',
+            from: p, to: q,
+            status: effStatus(e),
+            automaticStatus: e.status,
+            source: e.override ? 'manual' : e.source,
+            override: e.override || null
+          };
+        });
+      return {
+        image: { width: T.origW, height: T.origH },
+        processing: { workingWidth: T.workW, workingHeight: T.workH, scale: T.scale, deskewDegrees: T.angle },
+        params: cfgUsed || null,
+        cells,
+        edges
+      };
+    }
+    // ======================================================================
+    // GRID-CORE-END
+    // ======================================================================
+
+
+    // ======================================================================
+    // Page / UI code
+    // ======================================================================
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $("status"), upload = $("upload"), detect = $("detect"), reset = $("reset"), exportBtn = $("export");
+    const canvas = $("canvas"), ctx = canvas.getContext("2d");
+    const countEl = $("count"), summaryEl = $("summary"), infoEl = $("info"), cellTable = $("cellTable");
+    const undoBtn = $("undoBtn"), redoBtn = $("redoBtn"), resetEditsBtn = $("resetEditsBtn");
+    const edgePanel = $("edgePanel"), cellPanel = $("cellPanel"), armHint = $("armHint");
+
+    // The untouched original always lives here
+    const srcCanvas = document.createElement("canvas");
+    const srcCtx = srcCanvas.getContext("2d", { willReadFrequently: true });
+
+    const COLORS = { confirmed: "#00a83b", inferred: "#ff9100", uncertain: "#e53935", none: "rgba(110,110,110,0.75)", manual: "#1976d2" };
+    const layers = {
+      original: true, regions: false, cells: true, confirmed: true, inferred: true, uncertain: true,
+      none: false, manual: true, threshold: false, masks: false, segments: false, intersections: false
+    };
+
+    let originalImage = null, cvReady = false, imageURL = null;
+    let detection = null;      // { W, H, arrays, det, T, workCanvas, cfg }
+    let result = null;         // { grid, cells, cellEdges, stats }
+    let edits = { overrides: [], extraLines: [] };
+    let history = [], histIdx = 0;
+    let selectedCellId = null, selectedEdgeKey = null, armed = null;
+    const layerCache = {};
+
+    // ---- OpenCV initialisation ----
+    const cvStart = Date.now();
+    const checkCV = setInterval(() => {
+      if (window.cvLoadFailed) {
+        clearInterval(checkCV);
+        statusEl.textContent = "Could not download OpenCV.js (check your connection or host a local copy).";
+      } else if (window.cv && cv.Mat && typeof cv.Mat === "function") {
+        clearInterval(checkCV);
+        cvReady = true;
+        statusEl.textContent = "OpenCV ready. Upload your timetable.";
+        detect.disabled = !originalImage;
+      } else if (Date.now() - cvStart > 40000) {
+        clearInterval(checkCV);
+        statusEl.textContent = "OpenCV is taking too long to initialise. Reload the page.";
+      }
+    }, 300);
+
+    // ---- Upload ----
+    upload.addEventListener("change", () => {
+      const file = upload.files[0];
+      if (!file) return;
+      if (imageURL) URL.revokeObjectURL(imageURL);
+      const img = new Image();
+      img.onload = () => {
+        originalImage = img;
+        srcCanvas.width = img.naturalWidth;
+        srcCanvas.height = img.naturalHeight;
+        srcCtx.drawImage(img, 0, 0);
+        clearResult();
+        detect.disabled = !cvReady;
+        reset.disabled = false;
+        statusEl.textContent = cvReady ? "Image loaded. Ready." : "Image loaded. Waiting for OpenCV...";
+      };
+      img.onerror = () => { statusEl.textContent = "Could not read that file as an image."; };
+      imageURL = URL.createObjectURL(file);
+      img.src = imageURL;
+    });
+
+    function clearResult() {
+      detection = null; result = null;
+      edits = { overrides: [], extraLines: [] };
+      history = [JSON.stringify(edits)]; histIdx = 0;
+      selectedCellId = null; selectedEdgeKey = null; armed = null;
+      Object.keys(layerCache).forEach(k => delete layerCache[k]);
+      countEl.textContent = "0"; cellTable.innerHTML = ""; summaryEl.textContent = "";
+      infoEl.textContent = "Nothing selected.";
+      exportBtn.disabled = true;
+      edgePanel.hidden = true; cellPanel.hidden = true;
+      updateEditButtons();
+      if (originalImage) { canvas.width = srcCanvas.width; canvas.height = srcCanvas.height; }
+      render();
+    }
+    reset.addEventListener("click", () => { clearResult(); statusEl.textContent = "Original image shown."; });
+
+    document.querySelectorAll("input[data-layer]").forEach(box => {
+      box.addEventListener("change", () => { layers[box.dataset.layer] = box.checked; render(); });
+    });
+
+    // ---- Detection ----
+    function readSettings() {
+      const cfg = Object.assign({}, GRID_CFG);
+      const num = (id, dflt) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : dflt; };
+      cfg.faintC = num("setFaintC", cfg.faintC);
+      cfg.lineKernelDiv = num("setKernel", cfg.lineKernelDiv);
+      cfg.minSegFrac = num("setMinSeg", cfg.minSegFrac * 100) / 100;
+      return cfg;
+    }
+    const oddAtLeast = (value, min) => { const v = Math.max(min, Math.round(value)); return v % 2 === 1 ? v : v + 1; };
+
+    detect.addEventListener("click", () => {
+      if (!originalImage || !cvReady) return;
+      detect.disabled = true;
+      statusEl.textContent = "Detecting cells...";
+      setTimeout(runDetection, 30);   // let the browser paint the status first
+    });
+
+    function binarize(rgba, W, H, cfg, track) {
+      const gray = track(new cv.Mat()), blur = track(new cv.Mat());
+      const strictBin = track(new cv.Mat()), faintBin = track(new cv.Mat());
+      cv.cvtColor(rgba, gray, cv.COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);   // a median filter would erase 1px lines
+      const block = oddAtLeast(Math.min(W, H) / 40, 15);
+      cv.adaptiveThreshold(blur, strictBin, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, block, cfg.strictC);
+      cv.adaptiveThreshold(blur, faintBin, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, block, cfg.faintC);
+      return { strictBin, faintBin };
+    }
+    function lineMasks(bin, W, H, cfg, track) {
+      const open = (src, kw, kh) => {
+        const k = track(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kw, kh)));
+        const dst = track(new cv.Mat());
+        cv.morphologyEx(src, dst, cv.MORPH_OPEN, k);
+        return new Uint8Array(dst.data);   // copy out of WASM memory
+      };
+      const Lh = Math.max(cfg.minKernel, Math.round(W / cfg.lineKernelDiv));
+      const Lv = Math.max(cfg.minKernel, Math.round(H / cfg.lineKernelDiv));
+      const Lhf = Math.max(cfg.minKernel, Math.round(W / cfg.faintKernelDiv));
+      const Lvf = Math.max(cfg.minKernel, Math.round(H / cfg.faintKernelDiv));
+      return {
+        hStrict: open(bin.strictBin, Lh, 1), vStrict: open(bin.strictBin, 1, Lv),
+        hFaint: open(bin.faintBin, Lhf, 1), vFaint: open(bin.faintBin, 1, Lvf),
+        ink: new Uint8Array(bin.faintBin.data), strictBin: new Uint8Array(bin.strictBin.data)
+      };
+    }
+
+    function runDetection() {
+      const mats = [];
+      const track = (m) => { mats.push(m); return m; };
+      try {
+        const cfg = readSettings();
+        const origW = srcCanvas.width, origH = srcCanvas.height;
+        const scale = Math.min(1, cfg.maxWorkingSide / Math.max(origW, origH));
+        const W = Math.round(origW * scale), H = Math.round(origH * scale);
+
+        const src = track(cv.imread(srcCanvas));
+        let working = src;
+        if (scale < 1) {
+          working = track(new cv.Mat());
+          cv.resize(src, working, new cv.Size(W, H), 0, 0, cv.INTER_AREA);
+        }
+        const S = [W / origW, 0, 0, 0, H / origH, 0];
+        let M = S, angle = 0;
+
+        let bin = binarize(working, W, H, cfg, track);
+        const sk = estimateSkew(new Uint8Array(bin.strictBin.data), W, H, cfg);
+        if (Math.abs(sk.angle) >= cfg.skewMinApplyDeg && sk.score > sk.baseScore * cfg.skewMinGain) {
+          const R = rotationAffine(sk.angle, W / 2, H / 2);
+          const rotated = track(new cv.Mat());
+          const Rm = track(cv.matFromArray(2, 3, cv.CV_64FC1, R));
+          cv.warpAffine(working, rotated, Rm, new cv.Size(W, H), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255));
+          working = rotated;
+          M = affineMul(R, S);
+          angle = sk.angle;
+          bin = binarize(working, W, H, cfg, track);
+        }
+
+        const workCanvas = document.createElement("canvas");
+        cv.imshow(workCanvas, working);
+
+        const arrays = lineMasks(bin, W, H, cfg, track);
+        const hAll = new Uint8Array(W * H), vAll = new Uint8Array(W * H);
+        for (let i = 0; i < hAll.length; i++) {
+          hAll[i] = (arrays.hStrict[i] || arrays.hFaint[i]) ? 1 : 0;
+          vAll[i] = (arrays.vStrict[i] || arrays.vFaint[i]) ? 1 : 0;
+        }
+        const det = detectSegments(hAll, vAll, W, H, cfg);
+
+        detection = { W, H, arrays, det, cfg, workCanvas,
+          T: { M, origW, origH, workW: W, workH: H, scale, angle } };
+        edits = { overrides: [], extraLines: [] };
+        history = [JSON.stringify(edits)]; histIdx = 0;
+        selectedCellId = null; selectedEdgeKey = null; armed = null;
+        Object.keys(layerCache).forEach(k => delete layerCache[k]);
+        canvas.width = W; canvas.height = H;
+
+        recompute();
+        const c = result.stats.cellCounts;
+        statusEl.textContent =
+          `Detection complete: ${result.cells.length} cells (${c.confirmed} confirmed, ${c.inferred} inferred, ${c.uncertain} uncertain)` +
+          (angle ? `; deskewed by ${angle.toFixed(2)}°` : "") + (scale < 1 ? `; processed at ${Math.round(scale * 100)}% size` : "") + ".";
+      } catch (error) {
+        console.error(error);
+        statusEl.textContent = "Error: " + (error && error.message ? error.message : error);
+      } finally {
+        mats.forEach(m => { try { m.delete(); } catch (e) { /* already freed */ } });
+        detect.disabled = false;
+      }
+    }
+
+    // Recompute grid + cells from the cached detection and the current edits
+    function recompute() {
+      if (!detection) return;
+      const { det, arrays, W, H, cfg } = detection;
+      const grid = buildGrid(det, arrays, W, H, cfg, edits.extraLines);
+      applyOverrides(grid, edits.overrides);
+      const built = buildCells(grid, cfg);
+      result = { grid, cells: built.cells, cellEdges: built.cellEdges, stats: built.stats };
+      if (selectedCellId != null && !result.cells.some(c => c.id === selectedCellId)) selectedCellId = null;
+      if (selectedEdgeKey && !findSelectedEdge()) selectedEdgeKey = null;
+      refreshUI();
+    }
+
+    // ---- Edits, history ----
+    function updateEditButtons() {
+      undoBtn.disabled = histIdx <= 0;
+      redoBtn.disabled = histIdx >= history.length - 1;
+      resetEditsBtn.disabled = !(edits.overrides.length || edits.extraLines.length);
+    }
+    function commitEdits(next) {
+      history = history.slice(0, histIdx + 1);
+      history.push(JSON.stringify(next));
+      histIdx = history.length - 1;
+      edits = next;
+      recompute();
+    }
+    function gotoHistory(i) {
+      if (i < 0 || i >= history.length) return;
+      histIdx = i;
+      edits = JSON.parse(history[histIdx]);
+      recompute();
+    }
+    undoBtn.addEventListener("click", () => gotoHistory(histIdx - 1));
+    redoBtn.addEventListener("click", () => gotoHistory(histIdx + 1));
+    resetEditsBtn.addEventListener("click", () => commitEdits({ overrides: [], extraLines: [] }));
+    document.addEventListener("keydown", (ev) => {
+      if (!(ev.ctrlKey || ev.metaKey)) return;
+      const t = ev.target && ev.target.tagName;
+      if (t === "INPUT" || t === "TEXTAREA") return;
+      if (ev.key === "z" && !ev.shiftKey) { ev.preventDefault(); gotoHistory(histIdx - 1); }
+      else if (ev.key === "y" || (ev.key === "z" && ev.shiftKey)) { ev.preventDefault(); gotoHistory(histIdx + 1); }
+    });
+
+    const edgeKey = (e) => ({ horizontal: e.horizontal, pos: e.pos, a: e.a, b: e.b });
+    function findSelectedEdge() {
+      if (!result || !selectedEdgeKey) return null;
+      const k = selectedEdgeKey;
+      let best = null, bestD = Infinity;
+      for (const e of result.grid.edges) {
+        if (e.horizontal !== k.horizontal) continue;
+        const d = Math.abs(e.pos - k.pos) + Math.abs(e.a - k.a) + Math.abs(e.b - k.b);
+        if (d < bestD) { bestD = d; best = e; }
+      }
+      return bestD <= 2 * result.grid.tol * 3 ? best : null;
+    }
+
+    edgePanel.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const e = findSelectedEdge();
+        if (!e) return;
+        const act = btn.dataset.act;
+        const tol = result.grid.tol;
+        const next = JSON.parse(JSON.stringify(edits));
+        next.overrides = next.overrides.filter(o => !overrideMatches(o, e, tol));
+        const wasManualLine = e.manualLine;
+        if (wasManualLine) {
+          next.extraLines = next.extraLines.filter(l => !(l.horizontal === e.horizontal && Math.abs(l.pos - e.pos) <= 3 * tol
+            && (e.a + e.b) / 2 >= l.a - 1 && (e.a + e.b) / 2 <= l.b + 1));
+        }
+        if (!wasManualLine && (act === "split" || act === "merge")) {
+          next.overrides.push({ horizontal: e.horizontal, pos: e.pos, a: e.a, b: e.b, mode: act });
+        }
+        commitEdits(next);
+      });
+    });
+
+    function setArmed(kind) {
+      armed = kind;
+      armHint.textContent = kind ? `Click inside the highlighted cell to place the ${kind === "v" ? "vertical" : "horizontal"} boundary.` : "";
+    }
+    $("addV").addEventListener("click", () => setArmed("v"));
+    $("addH").addEventListener("click", () => setArmed("h"));
+
+    // ---- UI refresh ----
+    const pct = (v) => (v == null ? "n/a" : Math.round(v * 100) + "%");
+
+    function refreshUI() {
+      if (!result) return;
+      const { cells, stats, grid } = result;
+      countEl.textContent = cells.length;
+      exportBtn.disabled = cells.length === 0;
+      const e = stats.edgeCounts, c = stats.cellCounts;
+      summaryEl.innerHTML =
+        `Candidate lines: <b>${grid.hLineCount}</b> horizontal, <b>${grid.vLineCount}</b> vertical ` +
+        `(fine grid ${(grid.ny - 1) * (grid.nx - 1)} cells; <b>${detection.det.intersections.length}</b> intersections).<br>` +
+        `Boundary edges &mdash; <span class="st-confirmed">confirmed ${e.confirmed}</span>, ` +
+        `<span class="st-inferred">inferred ${e.inferred}</span>, <span class="st-uncertain">uncertain ${e.uncertain}</span>, ` +
+        `<span class="st-manual">manual ${e.manual}</span>, no boundary ${e.none}.<br>` +
+        `Cells &mdash; <span class="st-confirmed">confirmed ${c.confirmed}</span>, <span class="st-inferred">inferred ${c.inferred}</span>, ` +
+        `<span class="st-uncertain">uncertain ${c.uncertain}</span>; ${stats.blankCells} blank` +
+        (stats.droppedOutside ? `; ${stats.droppedOutside} blank margin region(s) dropped` : "") +
+        (stats.droppedSlivers ? `; ${stats.droppedSlivers} sliver(s) dropped` : "") + ".";
+
+      cellTable.innerHTML = "";
+      cells.forEach(cell => {
+        const tr = document.createElement("tr");
+        tr.className = "row" + (cell.id === selectedCellId ? " sel" : "");
+        tr.dataset.id = cell.id;
+        tr.innerHTML = `<td>${cell.id}</td><td>${cell.x}</td><td>${cell.y}</td><td>${cell.width}</td><td>${cell.height}</td>` +
+          `<td class="st-${cell.boundaryStatus}">${cell.boundaryStatus}${cell.blank ? " (blank)" : ""}</td>` +
+          `<td>${cell.merged ? "yes" : "no"}</td><td>${cell.manualEdit ? "yes" : ""}</td>`;
+        tr.addEventListener("click", () => selectCell(cell.id));
+        cellTable.appendChild(tr);
+      });
+      updateEditButtons();
+      describeSelection();
+      render();
+    }
+
+    function describeSelection() {
+      const edge = findSelectedEdge();
+      edgePanel.hidden = !edge;
+      const cell = result && result.cells.find(c => c.id === selectedCellId);
+      cellPanel.hidden = !cell;
+      if (!cell) setArmed(null);
+
+      const lines = [];
+      if (edge) {
+        const st = effStatus(edge);
+        lines.push(
+          `BOUNDARY  ${edge.horizontal ? "horizontal" : "vertical"} @${Math.round(edge.pos)}, span ${Math.round(edge.a)}..${Math.round(edge.b)}`,
+          `status: ${st}${edge.override ? `  (manual ${edge.override}${edge.manualLine ? ", user-added line" : ""}; automatic result was ${edge.status})` : ""}`,
+          `source: ${edge.override ? "manual" : edge.source}`,
+          `why: ${edge.reason}`,
+          `evidence: strict mask ${pct(edge.strictCov)}, faint mask ${pct(edge.faintMaskCov)}, thin-line ink ${pct(edge.faintCov)}, any ink ${pct(edge.inkCov)}, ink in ${edge.spread}/3 thirds`,
+          `structure: collinear neighbours confirmed on both sides = ${edge.contin}, corner support at both ends = ${edge.corners}`,
+          `content on either side (ink density): ${pct(edge.contentA)} / ${pct(edge.contentB)}`, ""
+        );
+      }
+      if (cell) {
+        const g = cell.gridSpan, b = cell.boundaries;
+        lines.push(
+          `CELL ${cell.id}: x=${cell.x}, y=${cell.y}, width=${cell.width}, height=${cell.height}   (working-image pixels)`,
+          `status: ${cell.boundaryStatus}${cell.irregular ? " (non-rectangular merge)" : ""}${cell.blank ? ", blank" : ""}${cell.manualEdit ? ", manually edited" : ""}`,
+          `sides: top ${b.top}, right ${b.right}, bottom ${b.bottom}, left ${b.left}`,
+          `merged: ${cell.merged}   fine-grid span rows ${g.rowStart}-${g.rowEnd}, cols ${g.colStart}-${g.colEnd}`
+        );
+        const notable = (result.cellEdges.get(cell.id) || []).filter(({ edge: e }) => effStatus(e) !== "confirmed" && !(effStatus(e) === "none" && !edge && false));
+        const shown = notable.filter(({ edge: e }) => effStatus(e) !== "none");
+        if (shown.length) {
+          lines.push("", "Non-confirmed boundaries of this cell:");
+          shown.forEach(({ edge: e, internal }) => lines.push(
+            `  ${e.horizontal ? "horizontal" : "vertical"} @${Math.round(e.pos)} [${Math.round(e.a)}..${Math.round(e.b)}] ${internal ? "INTERNAL" : "perimeter"}: ${effStatus(e)} - ${e.override ? "manual" : e.reason}`));
+        }
+      }
+      infoEl.textContent = lines.length ? lines.join("\n") : "Nothing selected.";
+    }
+
+    function selectCell(id) {
+      selectedCellId = id;
+      if (id == null) setArmed(null);
+      document.querySelectorAll("#cellTable tr").forEach(tr => tr.classList.toggle("sel", Number(tr.dataset.id) === id));
+      describeSelection();
+      render();
+    }
+
+    // ---- Rendering (all geometry is drawn in working-image pixels; CSS scaling keeps it aligned) ----
+    function strokeEdges(list, color, width, dash) {
+      if (!list.length) return;
+      ctx.beginPath();
+      list.forEach(e => {
+        if (e.horizontal) { ctx.moveTo(e.a, e.pos); ctx.lineTo(e.b, e.pos); }
+        else { ctx.moveTo(e.pos, e.a); ctx.lineTo(e.pos, e.b); }
+      });
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    function maskCanvas(name, build) {
+      if (!layerCache[name]) {
+        const c = document.createElement("canvas");
+        c.width = detection.W; c.height = detection.H;
+        const cx = c.getContext("2d");
+        const img = cx.createImageData(detection.W, detection.H);
+        build(img.data);
+        cx.putImageData(img, 0, 0);
+        layerCache[name] = c;
+      }
+      return layerCache[name];
+    }
+
+    function render() {
+      if (!originalImage) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const base = detection ? detection.workCanvas : srcCanvas;
+
+      if (detection && layers.threshold) {
+        ctx.drawImage(maskCanvas("threshold", (d) => {
+          const { ink, strictBin } = detection.arrays;
+          for (let i = 0; i < ink.length; i++) {
+            const p = i * 4;
+            const v = strictBin[i] ? 0 : (ink[i] ? 175 : 255);
+            d[p] = d[p + 1] = d[p + 2] = v; d[p + 3] = 255;
+          }
+        }), 0, 0);
+      } else if (layers.original) {
+        ctx.drawImage(base, 0, 0);
+      } else {
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      if (!result) return;
+
+      if (layers.masks) {
+        ctx.drawImage(maskCanvas("masks", (d) => {
+          const a = detection.arrays;
+          for (let i = 0; i < a.hStrict.length; i++) {
+            const p = i * 4;
+            if (a.hStrict[i]) { d[p] = 0; d[p + 1] = 90; d[p + 2] = 255; d[p + 3] = 200; }
+            else if (a.hFaint[i]) { d[p] = 0; d[p + 1] = 200; d[p + 2] = 220; d[p + 3] = 170; }
+            if (a.vStrict[i]) { d[p] = 200; d[p + 1] = 0; d[p + 2] = 200; d[p + 3] = 200; }
+            else if (a.vFaint[i] && !d[p + 3]) { d[p] = 255; d[p + 1] = 130; d[p + 2] = 200; d[p + 3] = 170; }
+          }
+        }), 0, 0);
+      }
+
+      const lw = Math.max(2, Math.round(canvas.width / 450));
+
+      if (layers.regions) {
+        const fills = { confirmed: "rgba(0,168,59,0.18)", inferred: "rgba(255,145,0,0.22)", uncertain: "rgba(229,57,53,0.22)" };
+        result.cells.forEach(c => { ctx.fillStyle = fills[c.boundaryStatus]; ctx.fillRect(c.x, c.y, c.width, c.height); });
+      }
+
+      if (layers.segments) {
+        const { hSegs, vSegs } = detection.det;
+        ctx.lineWidth = 1; ctx.strokeStyle = "rgba(150,150,150,0.9)"; ctx.beginPath();
+        hSegs.filter(s => s.reason === "no junction").forEach(s => { ctx.moveTo(s.a, s.pos); ctx.lineTo(s.b, s.pos); });
+        vSegs.filter(s => s.reason === "no junction").forEach(s => { ctx.moveTo(s.pos, s.a); ctx.lineTo(s.pos, s.b); });
+        ctx.stroke();
+        ctx.lineWidth = 2; ctx.strokeStyle = "#0057ff"; ctx.beginPath();
+        hSegs.filter(s => s.accepted).forEach(s => { ctx.moveTo(s.a, s.pos); ctx.lineTo(s.b, s.pos); });
+        ctx.stroke();
+        ctx.strokeStyle = "#c200c2"; ctx.beginPath();
+        vSegs.filter(s => s.accepted).forEach(s => { ctx.moveTo(s.pos, s.a); ctx.lineTo(s.pos, s.b); });
+        ctx.stroke();
+      }
+
+      const edges = result.grid.edges;
+      const by = (status) => edges.filter(e => !e.override && e.status === status);
+      if (layers.none) strokeEdges(by("none"), COLORS.none, Math.max(1, lw - 1), [6, 5]);
+      if (layers.confirmed) strokeEdges(by("confirmed"), COLORS.confirmed, lw);
+      if (layers.inferred) strokeEdges(by("inferred"), COLORS.inferred, lw + 1);
+      if (layers.uncertain) strokeEdges(by("uncertain"), COLORS.uncertain, lw + 1);
+      if (layers.manual) {
+        const man = edges.filter(e => e.override);
+        strokeEdges(man.filter(e => e.override === "split"), COLORS.manual, lw + 2);
+        strokeEdges(man.filter(e => e.override === "merge"), COLORS.manual, lw + 2, [5, 5]);
+      }
+
+      if (layers.intersections) {
+        ctx.fillStyle = "#ffd600"; ctx.strokeStyle = "#000"; ctx.lineWidth = 1;
+        const r = Math.max(3, lw + 1);
+        detection.det.intersections.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
+      }
+
+      if (layers.cells) {
+        const fs = Math.max(12, Math.round(canvas.width / 75));
+        ctx.font = `bold ${fs}px Arial`;
+        result.cells.forEach(cell => {
+          ctx.strokeStyle = "rgba(21,101,192,0.5)"; ctx.lineWidth = 1;
+          ctx.strokeRect(cell.x + 0.5, cell.y + 0.5, cell.width, cell.height);
+          const label = String(cell.id), tw = ctx.measureText(label).width + 8;
+          ctx.fillStyle = "rgba(21,101,192,0.85)"; ctx.fillRect(cell.x + 1, cell.y + 1, tw, fs + 6);
+          ctx.fillStyle = "#fff"; ctx.fillText(label, cell.x + 5, cell.y + fs + 1);
+        });
+      }
+
+      const sel = result.cells.find(c => c.id === selectedCellId);
+      if (sel) {
+        ctx.fillStyle = "rgba(255,235,0,0.30)"; ctx.fillRect(sel.x, sel.y, sel.width, sel.height);
+        ctx.strokeStyle = "#ffb300"; ctx.lineWidth = lw + 2; ctx.strokeRect(sel.x, sel.y, sel.width, sel.height);
+      }
+
+      const se = findSelectedEdge();
+      if (se) {
+        const t = result.grid.tol;
+        ctx.setLineDash([4, 3]); ctx.strokeStyle = "rgba(0,188,212,0.9)"; ctx.lineWidth = 1;
+        if (se.horizontal) ctx.strokeRect(se.a, se.pos - t, se.b - se.a, 2 * t);
+        else ctx.strokeRect(se.pos - t, se.a, 2 * t, se.b - se.a);
+        ctx.setLineDash([]);
+        strokeEdges([se], "#00bcd4", lw + 3);
+      }
+    }
+
+    // ---- Clicking ----
+    function distanceToEdge(e, px, py) {
+      if (e.horizontal) return Math.hypot(px < e.a ? e.a - px : (px > e.b ? px - e.b : 0), py - e.pos);
+      return Math.hypot(px - e.pos, py < e.a ? e.a - py : (py > e.b ? py - e.b : 0));
+    }
+    function edgeVisible(e) {
+      if (e.override) return layers.manual;
+      return !!layers[e.status];
+    }
+
+    canvas.addEventListener("click", (ev) => {
+      if (!result) return;
+      const rect = canvas.getBoundingClientRect();
+      const scale = canvas.width / rect.width;
+      const px = (ev.clientX - rect.left) * scale, py = (ev.clientY - rect.top) * scale;
+
+      // placing a user-added boundary inside the selected cell
+      if (armed) {
+        const cell = result.cells.find(c => c.id === selectedCellId);
+        if (cell && px > cell.x && px < cell.x + cell.width && py > cell.y && py < cell.y + cell.height) {
+          const next = JSON.parse(JSON.stringify(edits));
+          next.extraLines.push(armed === "v"
+            ? { horizontal: false, pos: Math.round(px), a: cell.y, b: cell.y + cell.height }
+            : { horizontal: true, pos: Math.round(py), a: cell.x, b: cell.x + cell.width });
+          setArmed(null);
+          commitEdits(next);
+        } else {
+          armHint.textContent = "Click INSIDE the highlighted cell.";
+        }
+        return;
+      }
+
+      // nearest visible boundary within ~6 screen pixels
+      let best = null, bestD = 6 * scale;
+      for (const e of result.grid.edges) {
+        if (!edgeVisible(e)) continue;
+        const d = distanceToEdge(e, px, py);
+        if (d <= bestD) { bestD = d; best = e; }
+      }
+      if (best) {
+        selectedEdgeKey = edgeKey(best);
+        refreshUI();
+        return;
+      }
+      selectedEdgeKey = null;
+      const hit = result.cells.find(c => px >= c.x && px <= c.x + c.width && py >= c.y && py <= c.y + c.height);
+      selectCell(hit ? hit.id : null);
+      refreshUI();
+    });
+
+    // ---- Export ----
+    exportBtn.addEventListener("click", () => {
+      if (!result || !detection) return;
+      const payload = buildExport(result, detection.T, detection.cfg);
+      payload.summary = result.stats;
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "bunkkro-layout.json"; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+  </script>
+</body>
+</html>

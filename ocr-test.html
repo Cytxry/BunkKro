@@ -1,0 +1,94 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BunkKro OCR Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    button, input { margin: 10px 0; padding: 10px; }
+    img { max-width: 100%; margin-top: 15px; }
+    pre {
+      white-space: pre-wrap;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h2>BunkKro Timetable OCR Test</h2>
+  <p>Upload your timetable image to extract its text.</p>
+
+  <input type="file" id="imageInput" accept="image/*">
+  <br>
+  <img id="preview" hidden>
+  <br>
+  <button id="scanBtn" disabled>Scan Timetable</button>
+
+  <p id="status">Select an image to begin.</p>
+  <pre id="result"></pre>
+
+  <script>
+    const input = document.getElementById("imageInput");
+    const preview = document.getElementById("preview");
+    const scanBtn = document.getElementById("scanBtn");
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+
+    let imageUrl = null;
+
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      if (!file) return;
+
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      imageUrl = URL.createObjectURL(file);
+
+      preview.src = imageUrl;
+      preview.hidden = false;
+      scanBtn.disabled = false;
+      result.textContent = "";
+      status.textContent = "Image ready.";
+    });
+
+    scanBtn.addEventListener("click", async () => {
+      scanBtn.disabled = true;
+      result.textContent = "";
+      status.textContent = "Loading OCR...";
+
+      try {
+        const { data } = await Tesseract.recognize(
+          preview,
+          "eng",
+          {
+            logger: (message) => {
+              status.textContent =
+                message.status +
+                (message.progress != null
+                  ? " " + Math.round(message.progress * 100) + "%"
+                  : "");
+            }
+          }
+        );
+
+        result.textContent = data.text;
+        status.textContent = "Scan complete!";
+      } catch (error) {
+        console.error(error);
+        status.textContent = "Error: " + error.message;
+      } finally {
+        scanBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

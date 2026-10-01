@@ -892,6 +892,291 @@ nav{padding:12px 0;flex:1;overflow-y:auto}
   background: var(--accent-dim);
 }
 
+/* ══════════════════════════════════════════
+   MULTI-ENGINE STUDIO & CANVAS VISUALIZER
+══════════════════════════════════════════ */
+.engine-status-pills {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.eng-pill {
+  font-size: .58rem;
+  font-family: 'DM Mono', monospace;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  transition: all .2s;
+}
+.eng-pill.ok {
+  color: var(--accent);
+  border-color: rgba(200,241,53,.3);
+  background: var(--accent-dim);
+}
+.eng-pill.warn {
+  color: var(--warn);
+  border-color: rgba(255,184,48,.3);
+  background: var(--warn-dim);
+}
+
+/* 5-Phase Scanning Grid */
+.ocr-phases-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-top: 14px;
+}
+.ocr-phase-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 6px 4px;
+  font-size: .56rem;
+  color: var(--muted);
+  text-align: center;
+  transition: all .2s;
+}
+.ocr-phase-item span {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  line-height: 14px;
+  border-radius: 50%;
+  background: var(--surface3);
+  color: var(--text2);
+  font-size: .52rem;
+  margin-right: 3px;
+}
+.ocr-phase-item.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.ocr-phase-item.active span {
+  background: var(--accent);
+  color: #000;
+  font-weight: 700;
+}
+.ocr-phase-item.done {
+  border-color: rgba(200,241,53,.2);
+  color: var(--text2);
+}
+.ocr-phase-item.done span {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Studio Tabs */
+.tt-view-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+}
+.tt-tab-btn {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  font-family: 'Syne', sans-serif;
+  font-size: .76rem;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tt-tab-btn:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.tt-tab-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tab-badge {
+  font-size: .55rem;
+  background: var(--warn);
+  color: #000;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-weight: 800;
+}
+
+/* Studio Card & Canvas */
+.tt-studio-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+}
+.studio-layers {
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: .68rem;
+  color: var(--text2);
+}
+.studio-layers legend {
+  font-size: .6rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 0 4px;
+}
+.studio-layers label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 12px;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.studio-sep {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: var(--border2);
+  margin: 0 6px;
+  vertical-align: middle;
+}
+.dot-ind {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.dot-ind.green { background: #00a83b; }
+.dot-ind.orange { background: #ff9100; }
+.dot-ind.red { background: #e53935; }
+.dot-ind.blue { background: #1976d2; }
+
+.studio-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.studio-canvas-container {
+  background: #050507;
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  max-height: 480px;
+  overflow: auto;
+  text-align: center;
+  padding: 10px;
+}
+#studio-canvas {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+.studio-info-box {
+  margin-top: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: .7rem;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+/* Disagreements Card */
+.tt-disagree-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+}
+.disagree-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border2);
+  margin-bottom: 8px;
+  font-size: .74rem;
+}
+.disagree-item.warn {
+  border-left: 3px solid var(--warn);
+}
+.disagree-item.info {
+  border-left: 3px solid #4fc3f7;
+}
+
+/* Multi-Engine Cell Inspector Modal */
+.insp-crop-preview-wrap {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.insp-crop-box {
+  max-height: 140px;
+  overflow: auto;
+  background: #000;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+}
+#insp-crop-canvas {
+  max-width: 100%;
+  height: auto;
+}
+.insp-evidence-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.insp-ev-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+.insp-ev-item label {
+  font-size: .55rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 2px;
+}
+.insp-ev-val {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: .78rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.insp-actions-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
 /* Frequency Sync Modal Rows */
 .sync-freq-row {
   display: flex;

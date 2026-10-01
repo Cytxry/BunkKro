@@ -9,9 +9,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BunkKro — Can I bunk today?</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-<!-- ✨ Supabase CDN & Tesseract.js OCR -->
+<!-- ✨ Supabase CDN, Tesseract.js OCR & OpenCV.js -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script async id="cvScript" src="https://docs.opencv.org/4.x/opencv.js" onerror="window.cvLoadFailed = true"></script>
 </head>
 <body>
  
@@ -203,10 +204,16 @@
     <div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
       <div>
         <h2>Smart Timetable ⚡</h2>
-        <p>Upload a photo of your schedule or edit your weekly periods manually.</p>
+        <p>Multi-engine document understanding: OpenCV Geometry + Tesseract OCR + Structural Fusion.</p>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn-pri" onclick="document.getElementById('tt-file-input').click()">📸 Upload & Scan</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <!-- Engine Status Indicators -->
+        <div class="engine-status-pills">
+          <span id="badge-cv-status" class="eng-pill">⚙️ OpenCV.js</span>
+          <span id="badge-tess-status" class="eng-pill ok">👁️ Tesseract.js</span>
+          <span id="badge-fusion-status" class="eng-pill ok">🧠 Fusion Engine</span>
+        </div>
+        <button class="btn-pri" onclick="document.getElementById('tt-file-input').click()">📸 Upload Timetable</button>
         <button class="btn-sec" onclick="openAddSlotModal()">+ Add Class</button>
         <button class="btn-sec" onclick="openSyncFrequenciesModal()">📊 Auto-Calc / Week</button>
       </div>
@@ -218,51 +225,179 @@
       <div class="tt-dropzone" id="tt-dropzone" onclick="document.getElementById('tt-file-input').click()">
         <div class="tt-drop-icon">📷</div>
         <div class="tt-drop-text">
-          <strong>Drop your timetable screenshot here</strong> or <span style="color:var(--accent);text-decoration:underline">browse files</span>
+          <strong>Drop your timetable image here</strong> or <span style="color:var(--accent);text-decoration:underline">browse files</span>
         </div>
-        <div class="tt-drop-hint">Supports PNG, JPG, JPEG. Clean text, table grids and college photos work best.</div>
+        <div class="tt-drop-hint">Works with photos, screenshots, and exported schedules. Multi-engine analysis extracts rows, periods, labs, and breaks.</div>
       </div>
 
-      <!-- OCR Scanning Progress State -->
+      <!-- Multi-Engine Scanning Progress State -->
       <div class="ocr-progress-box" id="ocr-progress-box" style="display:none">
         <div class="ocr-spinner"></div>
         <div class="ocr-status-text" id="ocr-status-text">Scanning timetable image...</div>
         <div class="ocr-bar"><div class="ocr-bar-fill" id="ocr-bar-fill" style="width:0%"></div></div>
-        <div class="ocr-details" id="ocr-details">Analyzing timetable layout and text blocks...</div>
+        <div class="ocr-details" id="ocr-details">Analyzing image geometry, line segments and text blocks...</div>
+        
+        <!-- Granular Phase Indicators -->
+        <div class="ocr-phases-grid">
+          <div class="ocr-phase-item" id="phase-prep"><span>1</span> Preprocessing</div>
+          <div class="ocr-phase-item" id="phase-geom"><span>2</span> OpenCV Grid</div>
+          <div class="ocr-phase-item" id="phase-ocr"><span>3</span> Tesseract OCR</div>
+          <div class="ocr-phase-item" id="phase-fusion"><span>4</span> Result Fusion</div>
+          <div class="ocr-phase-item" id="phase-valid"><span>5</span> Validation</div>
+        </div>
       </div>
+    </div>
 
-      <!-- OCR Image Preview & Controls -->
-      <div class="tt-preview-box" id="tt-preview-box" style="display:none">
-        <div class="tt-preview-header">
-          <span style="font-size:.78rem;font-weight:700">Uploaded Timetable Preview</span>
+    <!-- STUDIO VIEW TABS -->
+    <div class="tt-view-tabs" style="margin-top:20px">
+      <button class="tt-tab-btn active" id="tab-btn-schedule" onclick="switchTimetableTab('schedule')">📅 Weekly Schedule</button>
+      <button class="tt-tab-btn" id="tab-btn-studio" onclick="switchTimetableTab('studio')">🔬 Multi-Engine Studio & Overlay</button>
+      <button class="tt-tab-btn" id="tab-btn-disagree" onclick="switchTimetableTab('disagree')">⚠️ Validation & Warnings <span id="disagree-badge-count" class="tab-badge" style="display:none">0</span></button>
+    </div>
+
+    <!-- TAB 1: WEEKLY SCHEDULE GRID -->
+    <div class="tt-tab-pane active" id="tab-pane-schedule">
+      <div class="tt-grid-container">
+        <div class="tt-grid-header">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700">Weekly Schedule Grid</h3>
+            <span id="tt-stats-badge" class="tt-badge">0 classes scheduled</span>
+          </div>
           <div style="display:flex;gap:8px">
-            <button class="btn-sec" style="padding:4px 10px;font-size:.68rem" onclick="reScanTimetable()">↺ Re-scan</button>
-            <button class="btn-sec" style="padding:4px 10px;font-size:.68rem;color:var(--danger)" onclick="clearScannedImage()">✕ Remove</button>
+            <button class="btn-sec" style="font-size:.7rem" onclick="toggleSundayDisplay()" id="btn-toggle-sunday">+ Sunday</button>
+            <button class="btn-sec" style="font-size:.7rem;color:var(--danger)" onclick="confirmClearTimetable()">🗑️ Clear</button>
           </div>
         </div>
-        <div class="tt-img-wrap">
-          <img id="tt-scanned-preview-img" alt="Scanned timetable preview">
+        <div class="tt-grid-wrap" id="tt-grid-wrap"></div>
+      </div>
+    </div>
+
+    <!-- TAB 2: MULTI-ENGINE STUDIO & CANVAS VISUALIZER -->
+    <div class="tt-tab-pane" id="tab-pane-studio" style="display:none">
+      <div class="tt-studio-card">
+        <!-- Studio Layer Toolbar -->
+        <fieldset class="studio-layers">
+          <legend>Visual Evidence & Debug Layers</legend>
+          <label><input type="checkbox" id="layer-original" checked onchange="toggleStudioLayer('original', this.checked)"> Original Image</label>
+          <label><input type="checkbox" id="layer-cells" checked onchange="toggleStudioLayer('cells', this.checked)"> Cell Boxes (#)</label>
+          <label><input type="checkbox" id="layer-regions" onchange="toggleStudioLayer('regions', this.checked)"> Region Fills</label>
+          <span class="studio-sep"></span>
+          <label><i class="dot-ind green"></i><input type="checkbox" id="layer-confirmed" checked onchange="toggleStudioLayer('confirmed', this.checked)"> Confirmed</label>
+          <label><i class="dot-ind orange"></i><input type="checkbox" id="layer-inferred" checked onchange="toggleStudioLayer('inferred', this.checked)"> Inferred</label>
+          <label><i class="dot-ind red"></i><input type="checkbox" id="layer-uncertain" checked onchange="toggleStudioLayer('uncertain', this.checked)"> Uncertain</label>
+          <label><i class="dot-ind blue"></i><input type="checkbox" id="layer-manual" checked onchange="toggleStudioLayer('manual', this.checked)"> Manual</label>
+          <span class="studio-sep"></span>
+          <label><input type="checkbox" id="layer-threshold" onchange="toggleStudioLayer('threshold', this.checked)"> Threshold</label>
+          <label><input type="checkbox" id="layer-masks" onchange="toggleStudioLayer('masks', this.checked)"> H/V Masks</label>
+          <label><input type="checkbox" id="layer-segments" onchange="toggleStudioLayer('segments', this.checked)"> Raw Segments</label>
+          <label><input type="checkbox" id="layer-intersections" onchange="toggleStudioLayer('intersections', this.checked)"> Intersections</label>
+          <label><input type="checkbox" id="layer-ocrwords" onchange="toggleStudioLayer('ocrwords', this.checked)"> OCR Word Boxes</label>
+        </fieldset>
+
+        <!-- Studio Action Bar -->
+        <div class="studio-action-bar">
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn-sec" id="btn-studio-undo" onclick="studioUndo()" disabled>↶ Undo</button>
+            <button class="btn-sec" id="btn-studio-redo" onclick="studioRedo()" disabled>↷ Redo</button>
+            <button class="btn-sec" id="btn-studio-reset-edits" onclick="studioResetEdits()" disabled>Discard Edits</button>
+            <button class="btn-sec" onclick="exportScannerJSON()">📥 Export JSON</button>
+          </div>
+          <div id="studio-quick-hint" style="font-size:.65rem;color:var(--text2)">
+            Click any cell to inspect OCR text, boundary evidence, or split/merge.
+          </div>
+        </div>
+
+        <!-- Studio Canvas -->
+        <div class="studio-canvas-container">
+          <canvas id="studio-canvas"></canvas>
+        </div>
+
+        <!-- Selected Element Details Box -->
+        <div class="studio-info-box" id="studio-info-box">
+          <div style="color:var(--muted);font-size:.72rem">No cell or boundary selected. Click on the image above to inspect.</div>
         </div>
       </div>
     </div>
 
-    <!-- Weekly Timetable Grid View -->
-    <div class="tt-grid-container" id="tt-grid-container" style="margin-top:20px">
-      <div class="tt-grid-header">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700">Weekly Schedule Grid</h3>
-          <span id="tt-stats-badge" class="tt-badge">0 classes scheduled</span>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn-sec" style="font-size:.7rem" onclick="toggleSundayDisplay()" id="btn-toggle-sunday">+ Sunday</button>
-          <button class="btn-sec" style="font-size:.7rem;color:var(--danger)" onclick="confirmClearTimetable()">🗑️ Clear</button>
-        </div>
+    <!-- TAB 3: DISAGREEMENTS & VALIDATION WARNINGS -->
+    <div class="tt-tab-pane" id="tab-pane-disagree" style="display:none">
+      <div class="tt-disagree-card">
+        <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:6px">Cross-Engine Disagreements & Validation Report</h3>
+        <p style="font-size:.74rem;color:var(--text2);margin-bottom:16px">Independent analysis comparison between OpenCV Geometry, Tesseract OCR, and Structural Layout.</p>
+        <div id="disagree-items-list"></div>
       </div>
-
-      <div class="tt-grid-wrap" id="tt-grid-wrap"></div>
     </div>
+
   </div>
 
+</div>
+
+<!-- ══════ MULTI-ENGINE CELL INSPECTOR MODAL ══════ -->
+<div class="overlay" id="cell-inspector-overlay">
+  <div class="modal" style="max-width:500px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h2 id="insp-cell-title" style="margin:0">Cell Evidence Inspector 🔬</h2>
+      <span id="insp-status-tag" class="tt-badge">Confirmed</span>
+    </div>
+    <p class="sub" id="insp-cell-sub">Inspect multi-engine evidence: original crop, OCR confidence, and OpenCV boundaries.</p>
+
+    <!-- Original Crop Preview -->
+    <div class="insp-crop-preview-wrap">
+      <div style="font-size:.62rem;color:var(--muted);margin-bottom:4px">ORIGINAL IMAGE REGION CROP</div>
+      <div class="insp-crop-box" id="insp-crop-box">
+        <canvas id="insp-crop-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Evidence breakdown -->
+    <div class="insp-evidence-grid">
+      <div class="insp-ev-item">
+        <label>OCR Text</label>
+        <div id="insp-ocr-text" class="insp-ev-val">—</div>
+      </div>
+      <div class="insp-ev-item">
+        <label>OCR Confidence</label>
+        <div id="insp-ocr-conf" class="insp-ev-val">—</div>
+      </div>
+      <div class="insp-ev-item">
+        <label>Boundary Evidence</label>
+        <div id="insp-bound-status" class="insp-ev-val">—</div>
+      </div>
+      <div class="insp-ev-item">
+        <label>Grid Coordinates</label>
+        <div id="insp-grid-pos" class="insp-ev-val">—</div>
+      </div>
+    </div>
+
+    <!-- Subject Assignment & Mapping -->
+    <div class="mf" style="margin-top:14px">
+      <label>Mapped Subject</label>
+      <div style="display:flex;gap:8px">
+        <select id="insp-subject-select" style="flex:1" onchange="onInspectorSubjectChange(this.value)">
+          <option value="">-- Select Existing Subject --</option>
+        </select>
+        <button class="btn-sec" style="font-size:.68rem" onclick="createSubjectFromInspector()">+ New</button>
+      </div>
+    </div>
+
+    <div class="mf">
+      <label>Override Subject Name / Text</label>
+      <input type="text" id="insp-subject-name-input" placeholder="e.g. Computer Networks">
+    </div>
+
+    <!-- Actions: Split / Merge / Break -->
+    <div class="insp-actions-row">
+      <button class="btn-sec" onclick="inspectorSplitCell('v')" title="Split into 2 periods">✂️ Split Vertical</button>
+      <button class="btn-sec" onclick="inspectorSplitCell('h')" title="Split into 2 rows">✂️ Split Horizontal</button>
+      <button class="btn-sec" onclick="inspectorToggleBreak()">☕ Mark Break</button>
+      <button class="btn-sec" style="color:var(--danger)" onclick="inspectorDeleteCell()">🗑️ Delete</button>
+    </div>
+
+    <div class="modal-btns" style="margin-top:18px">
+      <button class="btn-sec" onclick="closeCellInspector()">Cancel</button>
+      <button class="btn-pri" onclick="saveCellInspectorChanges()">Apply Changes ✓</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══════ TIMETABLE SLOT EDIT / ADD MODAL ══════ -->
@@ -540,6 +675,7 @@
   </div>
 </div>
 
+<script src="timetable-scanner.js"></script>
 <script src="bunkke.js"></script>
 </body>
 </html>

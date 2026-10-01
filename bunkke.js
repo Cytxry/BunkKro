@@ -1784,11 +1784,79 @@ function setupTimetableDragDrop() {
 
 
 // ══════════════════════════════════════════════════════
-//  FEATURE 1 & 2: SMART TIMETABLE OCR & SCANNING
+//  FEATURE 1 & 2: MULTI-ENGINE SMART TIMETABLE SCANNER & STUDIO
 // ══════════════════════════════════════════════════════
 
 let pendingOCRFile = null;
 let currentScannedImageBlob = null;
+
+// Global Studio & Scanner State
+let scannerState = {
+  rawImage: null,
+  originalWidth: 0,
+  originalHeight: 0,
+  preprocessed: null,
+  grid: null,
+  cells: [],
+  ocrResult: null,
+  layout: null,
+  fusedSlots: [],
+  validation: { warnings: [], errors: [], disagreements: [] },
+  history: [],
+  historyIndex: -1,
+  selectedCellId: null,
+  hoveredCellId: null,
+  activeTab: 'schedule',
+  activeLayers: {
+    original: true,
+    cells: true,
+    regions: false,
+    confirmed: true,
+    inferred: true,
+    uncertain: true,
+    manual: true,
+    threshold: false,
+    masks: false,
+    segments: false,
+    intersections: false,
+    ocrwords: false
+  }
+};
+
+// Check Engine Status for Badges
+function checkEngineStatus() {
+  const cvPill = document.getElementById('badge-cv-status');
+  const tessPill = document.getElementById('badge-tess-status');
+  const fusionPill = document.getElementById('badge-fusion-status');
+
+  if (window.cv && window.cv.Mat) {
+    if (cvPill) {
+      cvPill.className = 'eng-pill ok';
+      cvPill.textContent = '⚙️ OpenCV.js Ready';
+    }
+  } else {
+    if (cvPill) {
+      cvPill.className = 'eng-pill';
+      cvPill.textContent = '⚙️ OpenCV.js (Morphology)';
+    }
+  }
+
+  if (window.Tesseract) {
+    if (tessPill) {
+      tessPill.className = 'eng-pill ok';
+      tessPill.textContent = '👁️ Tesseract OCR';
+    }
+  }
+
+  if (window.TimetableScanner) {
+    if (fusionPill) {
+      fusionPill.className = 'eng-pill ok';
+      fusionPill.textContent = '🧠 Fusion Engine';
+    }
+  }
+}
+setInterval(checkEngineStatus, 2000);
+setTimeout(checkEngineStatus, 500);
 
 function handleTimetableFileUpload(file) {
   if (!file) return;
@@ -1822,30 +1890,154 @@ function confirmProceedScan() {
   }
 }
 
-async function processTimetableImage(file) {
-  currentScannedImageBlob = file;
-
-  // Show preview
-  const previewBox = document.getElementById('tt-preview-box');
-  const previewImg = document.getElementById('tt-scanned-preview-img');
+function setScannerPhase(phaseName, pct, detailText) {
   const progressBox = document.getElementById('ocr-progress-box');
   const progressBar = document.getElementById('ocr-bar-fill');
   const statusText = document.getElementById('ocr-status-text');
-  const detailsText = document.getElementById('ocr-details');
+  const details = document.getElementById('ocr-details');
 
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    if (previewImg) previewImg.src = e.target.result;
-    if (previewBox) previewBox.style.display = 'block';
+  if (progressBox) progressBox.style.display = 'block';
+  if (progressBar) progressBar.style.width = pct + '%';
+  if (statusText) statusText.textContent = `Scanning Timetable... ${pct}%`;
+  if (details && detailText) details.textContent = detailText;
 
-    if (progressBox) progressBox.style.display = 'block';
-    if (progressBar) progressBar.style.width = '10%';
-    if (statusText) statusText.textContent = 'Initializing OCR Scanner...';
-    if (detailsText) detailsText.textContent = 'Preparing image data for local recognition...';
+  const phases = ['prep', 'geom', 'ocr', 'fusion', 'valid'];
+  const currentIdx = phases.indexOf(phaseName);
 
-    await runTesseractScan(e.target.result);
-  };
-  reader.readAsDataURL(file);
+  phases.forEach((p, idx) => {
+    const el = document.getElementById(`phase-${p}`);
+    if (el) {
+      if (idx < currentIdx) {
+        el.className = 'ocr-phase-item done';
+      } else if (idx === currentIdx) {
+        el.className = 'ocr-phase-item active';
+      } else {
+        el.className = 'ocr-phase-item';
+      }
+    }
+  });
+}
+
+async function processTimetableImage(file) {
+  currentScannedImageBlob = file;
+  const progressBox = document.getElementById('ocr-progress-box');
+  if (progressBox) progressBox.style.display = 'block';
+
+  try {
+    if (!window.TimetableScanner) {
+      throw new Error('TimetableScanner module not initialized.');
+    }
+
+    // 0. Load Image
+    setScannerPhase('prep', 10, 'Loading image file and analyzing dimensions...');
+    const imgDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = imgDataUrl;
+    });
+
+    scannerState.rawImage = img;
+    scannerState.originalWidth = img.naturalWidth || img.width;
+    scannerState.originalHeight = img.naturalHeight || img.height;
+
+    // 1. Engine A: Preprocessing & Deskew
+    setScannerPhase('prep', 20, 'Deskewing, grayscaling, and computing integral maps...');
+    const preprocessed = await TimetableScanner.Preprocessor.deskewAndEnhance(img, {
+      maxWorkingSide: 2000
+    });
+    scannerState.preprocessed = preprocessed;
+
+    // 2. Engine B: OpenCV Geometry & Line Morphometry
+    setScannerPhase('geom', 40, 'Extracting morphological lines, intersections, and cells...');
+    let grid = null;
+    let cells = [];
+    try {
+      grid = TimetableScanner.GeometryEngine.buildGrid(
+        preprocessed.canvas,
+        preprocessed.gray,
+        preprocessed.T
+      );
+      scannerState.grid = grid;
+
+      cells = TimetableScanner.GeometryEngine.buildCells(
+        grid,
+        preprocessed.integral,
+        preprocessed.T
+      );
+      scannerState.cells = cells;
+    } catch (gErr) {
+      console.warn('Geometry engine note:', gErr.message);
+    }
+
+    // 3. Engine C: Whole-Image + Targeted OCR
+    setScannerPhase('ocr', 60, 'Recognizing subject codes, timings, and day tokens via Tesseract...');
+    const ocrResult = await TimetableScanner.OCREngine.recognizeWholeImage(
+      preprocessed.canvas,
+      (p) => {
+        const ocrPct = 40 + Math.round(p * 25);
+        setScannerPhase('ocr', ocrPct, `Recognizing text blocks (${Math.round(p * 100)}%)...`);
+      }
+    );
+    scannerState.ocrResult = ocrResult;
+
+    // 4. Engine D & Fusion: Structural Layout Analysis & Multimodal Merging
+    setScannerPhase('fusion', 80, 'Fusing geometric cells with OCR tokens, labs, and breaks...');
+    const layout = TimetableScanner.LayoutEngine.analyzeTextLayout(
+      ocrResult,
+      { width: preprocessed.canvas.width, height: preprocessed.canvas.height }
+    );
+    scannerState.layout = layout;
+
+    const fusedSlots = TimetableScanner.FusionEngine.fuseAndReconstruct(
+      scannerState.cells,
+      ocrResult,
+      layout,
+      subjects
+    );
+    scannerState.fusedSlots = fusedSlots;
+
+    // 5. Validation Engine: Cross-Engine Disagreements & Consistency
+    setScannerPhase('valid', 95, 'Validating period assignments and cross-engine disagreements...');
+    const validation = TimetableScanner.ValidationEngine.validate(
+      fusedSlots,
+      scannerState.grid ? scannerState.grid.disagreements : [],
+      subjects
+    );
+    scannerState.validation = validation;
+
+    // Initialize history stack
+    scannerState.history = [JSON.parse(JSON.stringify(fusedSlots))];
+    scannerState.historyIndex = 0;
+    updateStudioHistoryButtons();
+
+    // Persist and render
+    timetable = fusedSlots;
+    saveTimetableToStorageAndDB();
+    renderTimetable();
+    renderValidationReport();
+    renderStudioCanvas();
+
+    // Finish
+    setScannerPhase('valid', 100, '✓ Multi-engine scan complete!');
+    setTimeout(() => {
+      if (progressBox) progressBox.style.display = 'none';
+    }, 1200);
+
+    toast('Timetable reconstructed successfully! Inspect in Studio or review below.');
+
+  } catch (err) {
+    console.error('Scan Error:', err);
+    if (progressBox) progressBox.style.display = 'none';
+    toast('Scanner error: ' + (err.message || err), 'err');
+  }
 }
 
 function reScanTimetable() {
@@ -1867,192 +2059,677 @@ function clearScannedImage() {
   document.getElementById('tt-file-input').value = '';
 }
 
-async function runTesseractScan(imageSrc) {
-  const progressBox = document.getElementById('ocr-progress-box');
-  const progressBar = document.getElementById('ocr-bar-fill');
-  const statusText = document.getElementById('ocr-status-text');
-  const detailsText = document.getElementById('ocr-details');
+// ══════════════════════════════════════════════════════
+//  STUDIO TABS, CANVAS VISUALIZER & LAYER TOGGLES
+// ══════════════════════════════════════════════════════
 
-  try {
-    if (!window.Tesseract) {
-      throw new Error('Tesseract OCR engine is loading or unavailable. Please check your connection.');
-    }
+function switchTimetableTab(tabKey) {
+  scannerState.activeTab = tabKey;
 
-    if (statusText) statusText.textContent = 'Reading timetable structure...';
+  const btnSchedule = document.getElementById('tab-btn-schedule');
+  const btnStudio = document.getElementById('tab-btn-studio');
+  const btnDisagree = document.getElementById('tab-btn-disagree');
 
-    const result = await Tesseract.recognize(imageSrc, 'eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          const pct = Math.round(m.progress * 100);
-          if (progressBar) progressBar.style.width = `${pct}%`;
-          if (statusText) statusText.textContent = `Scanning timetable... ${pct}%`;
-          if (detailsText) detailsText.textContent = `Recognizing periods and subject codes (${pct}% complete)`;
-        }
-      }
-    });
+  const paneSchedule = document.getElementById('tab-pane-schedule');
+  const paneStudio = document.getElementById('tab-pane-studio');
+  const paneDisagree = document.getElementById('tab-pane-disagree');
 
-    if (progressBar) progressBar.style.width = '100%';
-    if (statusText) statusText.textContent = '✓ Timetable Scanned Successfully!';
-    if (detailsText) detailsText.textContent = 'Review detected schedule below. Tap any slot to edit.';
+  if (btnSchedule) btnSchedule.className = tabKey === 'schedule' ? 'tt-tab-btn active' : 'tt-tab-btn';
+  if (btnStudio) btnStudio.className = tabKey === 'studio' ? 'tt-tab-btn active' : 'tt-tab-btn';
+  if (btnDisagree) btnDisagree.className = tabKey === 'disagree' ? 'tt-tab-btn active' : 'tt-tab-btn';
 
-    setTimeout(() => {
-      if (progressBox) progressBox.style.display = 'none';
-    }, 1800);
+  if (paneSchedule) paneSchedule.style.display = tabKey === 'schedule' ? 'block' : 'none';
+  if (paneStudio) paneStudio.style.display = tabKey === 'studio' ? 'block' : 'none';
+  if (paneDisagree) paneDisagree.style.display = tabKey === 'disagree' ? 'block' : 'none';
 
-    // Parse extracted OCR text
-    parseOCRResultToSchedule(result.data);
-    toast('Timetable extracted! Review and adjust below.');
-
-  } catch (err) {
-    console.error('OCR Error:', err);
-    if (progressBox) progressBox.style.display = 'none';
-    toast('Failed to scan image: ' + err.message, 'err');
+  if (tabKey === 'studio') {
+    initStudioCanvasListeners();
+    renderStudioCanvas();
   }
 }
 
-// Intelligent parser: identifies days, periods, times, breaks, subject codes
-function parseOCRResultToSchedule(ocrData) {
-  const text = ocrData.text || '';
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+function toggleStudioLayer(layerName, isChecked) {
+  scannerState.activeLayers[layerName] = isChecked;
+  renderStudioCanvas();
+}
 
-  console.log('OCR Extracted Lines:', lines);
+function initStudioCanvasListeners() {
+  const canvas = document.getElementById('studio-canvas');
+  if (!canvas || canvas._listenersAttached) return;
+  canvas._listenersAttached = true;
 
-  const dayKeywords = [
-    { day: 1, name: 'Monday', regex: /\b(mon|monday)\b/i },
-    { day: 2, name: 'Tuesday', regex: /\b(tue|tues|tuesday)\b/i },
-    { day: 3, name: 'Wednesday', regex: /\b(wed|wednes|wednesday)\b/i },
-    { day: 4, name: 'Thursday', regex: /\b(thu|thur|thurs|thursday)\b/i },
-    { day: 5, name: 'Friday', regex: /\b(fri|friday)\b/i },
-    { day: 6, name: 'Saturday', regex: /\b(sat|saturday)\b/i },
-    { day: 7, name: 'Sunday', regex: /\b(sun|sunday)\b/i }
-  ];
+  canvas.addEventListener('mousemove', (e) => {
+    if (!scannerState.preprocessed) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
-  const extractedSlots = [];
-  let currentDay = 1;
-  let currentPeriod = 1;
+    // Check if hovering over any cell
+    const hovered = (scannerState.cells || []).find(c =>
+      x >= c.xmin && x <= c.xmax && y >= c.ymin && y <= c.ymax
+    );
 
-  // Extract common period times if present (e.g. 09:00 - 10:00, 10:15 - 11:15)
-  const timeRegex = /(\d{1,2}[:.]\d{2})\s*(?:-|to)\s*(\d{1,2}[:.]\d{2})/i;
-  const periodTimes = [];
-
-  lines.forEach(line => {
-    const tm = line.match(timeRegex);
-    if (tm && periodTimes.length < 8) {
-      periodTimes.push({
-        start: tm[1].replace('.', ':'),
-        end: tm[2].replace('.', ':')
-      });
+    if (hovered && hovered.id !== scannerState.hoveredCellId) {
+      scannerState.hoveredCellId = hovered.id;
+      canvas.style.cursor = 'pointer';
+      renderStudioCanvas();
+    } else if (!hovered && scannerState.hoveredCellId) {
+      scannerState.hoveredCellId = null;
+      canvas.style.cursor = 'default';
+      renderStudioCanvas();
     }
   });
 
-  // Line-by-line parsing
-  lines.forEach(line => {
-    // Check if line specifies a day
-    const matchedDay = dayKeywords.find(d => d.regex.test(line));
-    if (matchedDay) {
-      currentDay = matchedDay.day;
-      currentPeriod = 1;
-      // Strip the day keyword from line to see if subjects follow
-      line = line.replace(matchedDay.regex, '').trim();
-      if (!line) return;
+  canvas.addEventListener('mouseleave', () => {
+    if (scannerState.hoveredCellId) {
+      scannerState.hoveredCellId = null;
+      renderStudioCanvas();
     }
+  });
 
-    // Check for lunch / break
-    if (/\b(lunch|break|recess|interval|tiffin)\b/i.test(line)) {
-      extractedSlots.push({
-        id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        day: currentDay,
-        period: currentPeriod++,
-        startTime: '',
-        endTime: '',
-        subjectId: null,
-        subjectName: 'Lunch / Break',
-        isBreak: true,
-        isUncertain: false
-      });
-      return;
+  canvas.addEventListener('click', (e) => {
+    if (!scannerState.preprocessed) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    const clicked = (scannerState.cells || []).find(c =>
+      x >= c.xmin && x <= c.xmax && y >= c.ymin && y <= c.ymax
+    );
+
+    if (clicked) {
+      scannerState.selectedCellId = clicked.id;
+      updateStudioInfoBox(clicked);
+      renderStudioCanvas();
     }
+  });
 
-    // Split line by separators (| , ; tabs or multiple spaces)
-    const tokens = line.split(/[|;,]|\s{2,}/).map(t => t.trim()).filter(t => t.length > 1);
+  canvas.addEventListener('dblclick', (e) => {
+    if (!scannerState.preprocessed) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
-    tokens.forEach(tok => {
-      // Ignore pure timestamps or headers
-      if (timeRegex.test(tok) || /^(period|time|day|hour|sem|room)\b/i.test(tok)) return;
+    const clicked = (scannerState.cells || []).find(c =>
+      x >= c.xmin && x <= c.xmax && y >= c.ymin && y <= c.ymax
+    );
 
-      // Check for break token
-      if (/\b(lunch|break|free|recess)\b/i.test(tok)) {
-        extractedSlots.push({
-          id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-          day: currentDay,
-          period: currentPeriod++,
-          startTime: '',
-          endTime: '',
-          subjectId: null,
-          subjectName: 'Break',
-          isBreak: true,
-          isUncertain: false
-        });
-        return;
+    if (clicked) {
+      openCellInspector(clicked.id);
+    }
+  });
+}
+
+function renderStudioCanvas() {
+  const canvas = document.getElementById('studio-canvas');
+  if (!canvas || !scannerState.preprocessed) return;
+
+  const prep = scannerState.preprocessed;
+  const ctx = canvas.getContext('2d');
+
+  canvas.width = prep.canvas.width;
+  canvas.height = prep.canvas.height;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 1. Base Image Layer
+  if (scannerState.activeLayers.original) {
+    ctx.drawImage(prep.canvas, 0, 0);
+  } else {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // 2. Binary Threshold Layer
+  if (scannerState.activeLayers.threshold && prep.thresholdCanvas) {
+    ctx.save();
+    ctx.globalAlpha = 0.6;
+    ctx.drawImage(prep.thresholdCanvas, 0, 0);
+    ctx.restore();
+  }
+
+  // 3. Grid Lines & Boundaries Layer
+  if (scannerState.grid) {
+    const drawLineSegment = (p1, p2, type) => {
+      ctx.save();
+      ctx.lineWidth = type === 'confirmed' ? 2 : (type === 'inferred' ? 1.5 : 1);
+
+      if (type === 'confirmed') {
+        if (!scannerState.activeLayers.confirmed) { ctx.restore(); return; }
+        ctx.strokeStyle = '#10b981'; // solid green
+        ctx.setLineDash([]);
+      } else if (type === 'inferred') {
+        if (!scannerState.activeLayers.inferred) { ctx.restore(); return; }
+        ctx.strokeStyle = '#06b6d4'; // dashed cyan
+        ctx.setLineDash([6, 4]);
+      } else if (type === 'uncertain') {
+        if (!scannerState.activeLayers.uncertain) { ctx.restore(); return; }
+        ctx.strokeStyle = '#f59e0b'; // dotted amber
+        ctx.setLineDash([3, 3]);
+      } else if (type === 'manual') {
+        if (!scannerState.activeLayers.manual) { ctx.restore(); return; }
+        ctx.strokeStyle = '#a855f7'; // purple
+        ctx.setLineDash([]);
+      } else {
+        ctx.strokeStyle = '#ef4444'; // red absent
+        ctx.setLineDash([2, 4]);
       }
 
-      // Check if token matches an existing subject
-      const cleanToken = tok.replace(/[^a-zA-Z0-9\s-]/g, '').trim();
-      if (!cleanToken) return;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.restore();
+    };
 
-      let matchedSubj = subjects.find(s => 
-        s.name.toLowerCase() === cleanToken.toLowerCase() ||
-        (s.code && s.code.toLowerCase() === cleanToken.toLowerCase())
-      );
-
-      // Substring fuzzy match
-      if (!matchedSubj) {
-        matchedSubj = subjects.find(s => 
-          cleanToken.toLowerCase().includes(s.name.toLowerCase()) || 
-          s.name.toLowerCase().includes(cleanToken.toLowerCase())
-        );
-      }
-
-      const pTime = periodTimes[currentPeriod - 1] || { start: '', end: '' };
-
-      extractedSlots.push({
-        id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        day: currentDay,
-        period: currentPeriod++,
-        startTime: pTime.start || '',
-        endTime: pTime.end || '',
-        subjectId: matchedSubj ? matchedSubj.id : null,
-        subjectName: matchedSubj ? matchedSubj.name : cleanToken,
-        isBreak: false,
-        isUncertain: !matchedSubj // Highlight for review if not matched to existing subject
+    // Draw horizontal and vertical grid lines
+    if (scannerState.grid.horizontalLines) {
+      scannerState.grid.horizontalLines.forEach(l => {
+        drawLineSegment({ x: 0, y: l.y }, { x: canvas.width, y: l.y }, l.type || 'confirmed');
       });
+    }
+
+    if (scannerState.grid.verticalLines) {
+      scannerState.grid.verticalLines.forEach(l => {
+        drawLineSegment({ x: l.x, y: 0 }, { x: l.x, y: canvas.height }, l.type || 'confirmed');
+      });
+    }
+  }
+
+  // 4. Intersections Layer
+  if (scannerState.activeLayers.intersections && scannerState.grid && scannerState.grid.intersections) {
+    ctx.save();
+    ctx.fillStyle = '#ef4444';
+    scannerState.grid.intersections.forEach(pt => {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+      ctx.fill();
     });
-  });
+    ctx.restore();
+  }
 
-  // Fallback: If OCR produced very few slots, generate a standard template
-  if (extractedSlots.length === 0) {
-    dayKeywords.slice(0, 5).forEach(d => {
-      for (let p = 1; p <= 4; p++) {
-        const defaultSubj = subjects[(p - 1) % (subjects.length || 1)];
-        extractedSlots.push({
-          id: 'tt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-          day: d.day,
-          period: p,
-          startTime: '',
-          endTime: '',
-          subjectId: defaultSubj ? defaultSubj.id : null,
-          subjectName: defaultSubj ? defaultSubj.name : `Period ${p}`,
-          isBreak: false,
-          isUncertain: true
-        });
+  // 5. OCR Words Layer
+  if (scannerState.activeLayers.ocrwords && scannerState.ocrResult && scannerState.ocrResult.words) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
+    ctx.fillStyle = 'rgba(6, 182, 212, 0.9)';
+    ctx.font = '10px "DM Mono", monospace';
+    scannerState.ocrResult.words.forEach(w => {
+      if (!w.bbox) return;
+      ctx.strokeRect(w.bbox.x0, w.bbox.y0, w.bbox.x1 - w.bbox.x0, w.bbox.y1 - w.bbox.y0);
+    });
+    ctx.restore();
+  }
+
+  // 6. Cell Regions & Boxes
+  if (scannerState.cells && scannerState.cells.length > 0) {
+    scannerState.cells.forEach(cell => {
+      const w = cell.xmax - cell.xmin;
+      const h = cell.ymax - cell.ymin;
+      const isHovered = scannerState.hoveredCellId === cell.id;
+      const isSelected = scannerState.selectedCellId === cell.id;
+
+      // Region Fill
+      if (scannerState.activeLayers.regions) {
+        ctx.save();
+        ctx.fillStyle = cell.classification === 'confirmed' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)';
+        ctx.fillRect(cell.xmin, cell.ymin, w, h);
+        ctx.restore();
+      }
+
+      // Cell Boundary Box
+      if (scannerState.activeLayers.cells) {
+        ctx.save();
+        ctx.strokeStyle = isSelected ? '#f59e0b' : (isHovered ? '#38bdf8' : 'rgba(255, 255, 255, 0.3)');
+        ctx.lineWidth = isSelected ? 3 : (isHovered ? 2 : 1);
+        ctx.strokeRect(cell.xmin, cell.ymin, w, h);
+
+        // Draw Cell Label & OCR Text Preview
+        if (w > 40 && h > 20) {
+          const matchedSlot = (scannerState.fusedSlots || []).find(s => s.cellId === cell.id);
+          const labelText = matchedSlot ? matchedSlot.subjectName : (cell.ocrText || `C#${cell.id}`);
+
+          ctx.fillStyle = isSelected ? '#f59e0b' : (isHovered ? '#38bdf8' : 'rgba(15, 23, 42, 0.85)');
+          ctx.fillRect(cell.xmin + 2, cell.ymin + 2, Math.min(w - 4, 110), 16);
+
+          ctx.fillStyle = isSelected || isHovered ? '#000' : '#fff';
+          ctx.font = 'bold 9px "DM Mono", monospace';
+          ctx.fillText(labelText.slice(0, 14), cell.xmin + 5, cell.ymin + 13);
+        }
+        ctx.restore();
       }
     });
   }
+}
 
-  timetable = extractedSlots;
+function updateStudioInfoBox(cell) {
+  const box = document.getElementById('studio-info-box');
+  if (!box) return;
+
+  const matchedSlot = (scannerState.fusedSlots || []).find(s => s.cellId === cell.id);
+  const matchedSubj = matchedSlot ? subjects.find(s => s.id === matchedSlot.subjectId) : null;
+  const dayName = matchedSlot ? DAYS_MAP.find(d => d.num === matchedSlot.day)?.name : 'Unassigned';
+
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:.85rem;font-weight:700;color:var(--accent)">Cell #${cell.id} &nbsp;·&nbsp; [Row ${cell.row !== undefined ? cell.row : '?'}, Col ${cell.col !== undefined ? cell.col : '?'}]</div>
+        <div style="font-size:.68rem;color:var(--text2);margin-top:2px">
+          Bounds: x: ${Math.round(cell.xmin)}..${Math.round(cell.xmax)}, y: ${Math.round(cell.ymin)}..${Math.round(cell.ymax)} (${Math.round(cell.xmax - cell.xmin)} × ${Math.round(cell.ymax - cell.ymin)}px)
+        </div>
+      </div>
+      <button class="btn-pri" style="font-size:.68rem;padding:4px 10px" onclick="openCellInspector('${cell.id}')">🔬 Open Cell Inspector</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;margin-top:8px">
+      <div style="background:rgba(255,255,255,.03);padding:6px 8px;border-radius:6px;border:1px solid var(--border)">
+        <span style="font-size:.58rem;color:var(--muted);display:block">OCR RECOGNITION</span>
+        <strong style="font-size:.74rem;color:#fff">${cell.ocrText || (matchedSlot ? matchedSlot.subjectName : '—')}</strong>
+        <div style="font-size:.58rem;color:var(--accent)">Conf: ${cell.ocrConfidence || (matchedSlot ? Math.round(matchedSlot.ocrConfidence || 85) : 0)}%</div>
+      </div>
+      <div style="background:rgba(255,255,255,.03);padding:6px 8px;border-radius:6px;border:1px solid var(--border)">
+        <span style="font-size:.58rem;color:var(--muted);display:block">ASSIGNED SCHEDULE</span>
+        <strong style="font-size:.74rem;color:#fff">${dayName} · Period ${matchedSlot ? matchedSlot.period : '?'}</strong>
+        <div style="font-size:.58rem;color:var(--text2)">${matchedSubj ? `✓ ${matchedSubj.name}` : (matchedSlot?.isBreak ? '☕ Break' : 'Unmapped')}</div>
+      </div>
+      <div style="background:rgba(255,255,255,.03);padding:6px 8px;border-radius:6px;border:1px solid var(--border)">
+        <span style="font-size:.58rem;color:var(--muted);display:block">BOUNDARIES</span>
+        <div style="font-size:.62rem;color:var(--text2);margin-top:2px">
+          T: <span style="color:#10b981">${cell.edges?.top?.type || 'conf'}</span> · 
+          R: <span style="color:#10b981">${cell.edges?.right?.type || 'conf'}</span><br>
+          B: <span style="color:#10b981">${cell.edges?.bottom?.type || 'conf'}</span> · 
+          L: <span style="color:#10b981">${cell.edges?.left?.type || 'conf'}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ══════════════════════════════════════════════════════
+//  HISTORY, UNDO / REDO & EXPORT
+// ══════════════════════════════════════════════════════
+
+function pushScannerHistory(actionName) {
+  if (scannerState.historyIndex < scannerState.history.length - 1) {
+    scannerState.history = scannerState.history.slice(0, scannerState.historyIndex + 1);
+  }
+
+  const snapshot = {
+    fusedSlots: JSON.parse(JSON.stringify(scannerState.fusedSlots)),
+    cells: JSON.parse(JSON.stringify(scannerState.cells))
+  };
+
+  scannerState.history.push(snapshot);
+  if (scannerState.history.length > 30) scannerState.history.shift();
+  scannerState.historyIndex = scannerState.history.length - 1;
+
+  updateStudioHistoryButtons();
+}
+
+function updateStudioHistoryButtons() {
+  const btnUndo = document.getElementById('btn-studio-undo');
+  const btnRedo = document.getElementById('btn-studio-redo');
+  const btnReset = document.getElementById('btn-studio-reset-edits');
+
+  if (btnUndo) btnUndo.disabled = scannerState.historyIndex <= 0;
+  if (btnRedo) btnRedo.disabled = scannerState.historyIndex >= scannerState.history.length - 1;
+  if (btnReset) btnReset.disabled = scannerState.history.length <= 1;
+}
+
+function studioUndo() {
+  if (scannerState.historyIndex > 0) {
+    scannerState.historyIndex--;
+    const state = scannerState.history[scannerState.historyIndex];
+    scannerState.fusedSlots = JSON.parse(JSON.stringify(state.fusedSlots));
+    if (state.cells) scannerState.cells = JSON.parse(JSON.stringify(state.cells));
+    timetable = scannerState.fusedSlots;
+    saveTimetableToStorageAndDB();
+    renderTimetable();
+    renderStudioCanvas();
+    updateStudioHistoryButtons();
+    toast('Undo successful');
+  }
+}
+
+function studioRedo() {
+  if (scannerState.historyIndex < scannerState.history.length - 1) {
+    scannerState.historyIndex++;
+    const state = scannerState.history[scannerState.historyIndex];
+    scannerState.fusedSlots = JSON.parse(JSON.stringify(state.fusedSlots));
+    if (state.cells) scannerState.cells = JSON.parse(JSON.stringify(state.cells));
+    timetable = scannerState.fusedSlots;
+    saveTimetableToStorageAndDB();
+    renderTimetable();
+    renderStudioCanvas();
+    updateStudioHistoryButtons();
+    toast('Redo successful');
+  }
+}
+
+function studioResetEdits() {
+  if (scannerState.history.length > 0) {
+    const initialState = scannerState.history[0];
+    scannerState.fusedSlots = JSON.parse(JSON.stringify(initialState.fusedSlots));
+    if (initialState.cells) scannerState.cells = JSON.parse(JSON.stringify(initialState.cells));
+    timetable = scannerState.fusedSlots;
+    scannerState.historyIndex = 0;
+    saveTimetableToStorageAndDB();
+    renderTimetable();
+    renderStudioCanvas();
+    updateStudioHistoryButtons();
+    toast('Edits discarded, restored scanned schedule');
+  }
+}
+
+function exportScannerJSON() {
+  const exportPayload = {
+    version: '2.0.0',
+    timestamp: new Date().toISOString(),
+    image: {
+      width: scannerState.originalWidth,
+      height: scannerState.originalHeight,
+      skewAngle: scannerState.preprocessed ? scannerState.preprocessed.skewAngle : 0
+    },
+    geometry: {
+      horizontalLinesCount: scannerState.grid?.horizontalLines?.length || 0,
+      verticalLinesCount: scannerState.grid?.verticalLines?.length || 0,
+      cellsCount: scannerState.cells?.length || 0
+    },
+    layout: scannerState.layout,
+    timetable: scannerState.fusedSlots,
+    validation: scannerState.validation
+  };
+
+  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportPayload, null, 2));
+  const downloadAnchor = document.createElement('a');
+  downloadAnchor.setAttribute('href', dataStr);
+  downloadAnchor.setAttribute('download', `bunkkro-timetable-${Date.now()}.json`);
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+  toast('Exported timetable analysis JSON 📥');
+}
+
+// ══════════════════════════════════════════════════════
+//  MULTI-ENGINE CELL INSPECTOR MODAL & MUTATIONS
+// ══════════════════════════════════════════════════════
+
+let currentInspectedCellId = null;
+
+function openCellInspector(cellId) {
+  currentInspectedCellId = cellId;
+  const cell = (scannerState.cells || []).find(c => c.id === cellId);
+  const slot = (scannerState.fusedSlots || []).find(s => s.cellId === cellId);
+
+  const title = document.getElementById('insp-cell-title');
+  const sub = document.getElementById('insp-cell-sub');
+  const ocrTextEl = document.getElementById('insp-ocr-text');
+  const ocrConfEl = document.getElementById('insp-ocr-conf');
+  const boundStatusEl = document.getElementById('insp-bound-status');
+  const gridPosEl = document.getElementById('insp-grid-pos');
+  const select = document.getElementById('insp-subject-select');
+  const nameInput = document.getElementById('insp-subject-name-input');
+  const overlay = document.getElementById('cell-inspector-overlay');
+
+  if (title) title.textContent = `Cell Evidence Inspector #${cellId} 🔬`;
+  if (sub) {
+    const dayName = slot ? DAYS_MAP.find(d => d.num === slot.day)?.name : 'Day ?';
+    sub.textContent = `${dayName} · Period ${slot ? slot.period : '?'}`;
+  }
+
+  const ocrText = cell?.ocrText || slot?.subjectName || '—';
+  const ocrConf = cell?.ocrConfidence || slot?.ocrConfidence || 85;
+
+  if (ocrTextEl) ocrTextEl.textContent = ocrText;
+  if (ocrConfEl) ocrConfEl.textContent = `${Math.round(ocrConf)}% confidence`;
+  if (boundStatusEl) boundStatusEl.textContent = cell?.classification || 'Confirmed';
+  if (gridPosEl) gridPosEl.textContent = `Row ${cell?.row !== undefined ? cell.row : '?'}, Col ${cell?.col !== undefined ? cell.col : '?'}`;
+
+  // Populate Subject Dropdown
+  if (select) {
+    select.innerHTML = '<option value="">-- Choose Existing Subject --</option>' +
+      subjects.map(s => `<option value="${s.id}" ${slot && slot.subjectId === s.id ? 'selected' : ''}>${s.name} (${pct(s)}%)</option>`).join('');
+  }
+
+  if (nameInput) {
+    nameInput.value = slot ? slot.subjectName : (cell?.ocrText || '');
+  }
+
+  // Draw Cell Region Crop Preview
+  renderCellCropPreview(cell);
+
+  if (overlay) overlay.classList.add('show');
+}
+
+function renderCellCropPreview(cell) {
+  const cropCanvas = document.getElementById('insp-crop-canvas');
+  if (!cropCanvas || !scannerState.preprocessed || !cell) return;
+
+  const srcCanvas = scannerState.preprocessed.canvas;
+  const padding = 10;
+  const cropX = Math.max(0, cell.xmin - padding);
+  const cropY = Math.max(0, cell.ymin - padding);
+  const cropW = Math.min(srcCanvas.width - cropX, (cell.xmax - cell.xmin) + padding * 2);
+  const cropH = Math.min(srcCanvas.height - cropY, (cell.ymax - cell.ymin) + padding * 2);
+
+  cropCanvas.width = cropW;
+  cropCanvas.height = cropH;
+
+  const ctx = cropCanvas.getContext('2d');
+  ctx.drawImage(srcCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+  // Draw border around cell within crop
+  ctx.strokeStyle = '#10b981';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cell.xmin - cropX, cell.ymin - cropY, cell.xmax - cell.xmin, cell.ymax - cell.ymin);
+}
+
+function closeCellInspector() {
+  const overlay = document.getElementById('cell-inspector-overlay');
+  if (overlay) overlay.classList.remove('show');
+  currentInspectedCellId = null;
+}
+
+function onInspectorSubjectChange(subjId) {
+  if (!subjId) return;
+  const s = subjects.find(x => x.id === subjId);
+  if (s) {
+    const nameInput = document.getElementById('insp-subject-name-input');
+    if (nameInput) nameInput.value = s.name;
+  }
+}
+
+async function createSubjectFromInspector() {
+  const nameInput = document.getElementById('insp-subject-name-input');
+  const rawName = nameInput ? nameInput.value.trim() : '';
+
+  const subjName = prompt('Create new subject in BunkKro:', rawName || 'New Subject');
+  if (!subjName) return;
+
+  const ok = await addSubject({
+    name: subjName,
+    code: subjName.slice(0, 3).toUpperCase() + '101',
+    perWeek: 3,
+    total: 0,
+    present: 0
+  });
+
+  if (ok) {
+    const created = subjects[subjects.length - 1];
+    const select = document.getElementById('insp-subject-select');
+    if (select && created) {
+      select.innerHTML += `<option value="${created.id}" selected>${created.name} (0%)</option>`;
+      select.value = created.id;
+    }
+    toast(`Created subject "${subjName}" ✓`);
+  }
+}
+
+function inspectorSplitCell(direction) {
+  if (!currentInspectedCellId) return;
+
+  const cellIdx = (scannerState.cells || []).findIndex(c => c.id === currentInspectedCellId);
+  if (cellIdx === -1) return;
+
+  const cell = scannerState.cells[cellIdx];
+  const slotIdx = (scannerState.fusedSlots || []).findIndex(s => s.cellId === currentInspectedCellId);
+
+  if (direction === 'v') {
+    // Split vertically (into 2 periods)
+    const midX = (cell.xmin + cell.xmax) / 2;
+    const cell1 = { ...cell, xmax: midX, id: cell.id + '_a' };
+    const cell2 = { ...cell, xmin: midX, id: cell.id + '_b' };
+
+    scannerState.cells.splice(cellIdx, 1, cell1, cell2);
+
+    if (slotIdx !== -1) {
+      const slot = scannerState.fusedSlots[slotIdx];
+      const slot1 = { ...slot, id: 'tt_' + Date.now() + '_1', cellId: cell1.id };
+      const slot2 = { ...slot, id: 'tt_' + Date.now() + '_2', cellId: cell2.id, period: slot.period + 1 };
+      scannerState.fusedSlots.splice(slotIdx, 1, slot1, slot2);
+    }
+  } else {
+    // Split horizontally (into 2 rows)
+    const midY = (cell.ymin + cell.ymax) / 2;
+    const cell1 = { ...cell, ymax: midY, id: cell.id + '_a' };
+    const cell2 = { ...cell, ymin: midY, id: cell.id + '_b' };
+
+    scannerState.cells.splice(cellIdx, 1, cell1, cell2);
+  }
+
+  pushScannerHistory('Split Cell');
+  timetable = scannerState.fusedSlots;
   saveTimetableToStorageAndDB();
   renderTimetable();
+  renderStudioCanvas();
+  closeCellInspector();
+  toast('Cell split into two slots ✓');
 }
+
+function inspectorToggleBreak() {
+  if (!currentInspectedCellId) return;
+  const slot = (scannerState.fusedSlots || []).find(s => s.cellId === currentInspectedCellId);
+  if (!slot) return;
+
+  slot.isBreak = !slot.isBreak;
+  if (slot.isBreak) {
+    slot.subjectName = 'Break / Lunch';
+    slot.subjectId = null;
+  }
+
+  pushScannerHistory('Toggle Break');
+  timetable = scannerState.fusedSlots;
+  saveTimetableToStorageAndDB();
+  renderTimetable();
+  renderStudioCanvas();
+  closeCellInspector();
+  toast(slot.isBreak ? 'Marked as Break ☕' : 'Marked as Class Slot');
+}
+
+function inspectorDeleteCell() {
+  if (!currentInspectedCellId) return;
+
+  scannerState.cells = (scannerState.cells || []).filter(c => c.id !== currentInspectedCellId);
+  scannerState.fusedSlots = (scannerState.fusedSlots || []).filter(s => s.cellId !== currentInspectedCellId);
+
+  pushScannerHistory('Delete Cell');
+  timetable = scannerState.fusedSlots;
+  saveTimetableToStorageAndDB();
+  renderTimetable();
+  renderStudioCanvas();
+  closeCellInspector();
+  toast('Cell deleted');
+}
+
+async function saveCellInspectorChanges() {
+  if (!currentInspectedCellId) return;
+
+  const select = document.getElementById('insp-subject-select');
+  const nameInput = document.getElementById('insp-subject-name-input');
+
+  const subjId = select ? select.value : '';
+  const customName = nameInput ? nameInput.value.trim() : '';
+
+  const slot = (scannerState.fusedSlots || []).find(s => s.cellId === currentInspectedCellId);
+  if (slot) {
+    slot.subjectId = subjId || null;
+    slot.subjectName = customName || (subjects.find(s => s.id === subjId)?.name || 'Unassigned');
+    slot.isUncertain = false;
+  }
+
+  pushScannerHistory('Edit Cell Properties');
+  timetable = scannerState.fusedSlots;
+  await saveTimetableToStorageAndDB();
+  renderTimetable();
+  renderStudioCanvas();
+  closeCellInspector();
+  toast('Changes applied ✓');
+}
+
+// ══════════════════════════════════════════════════════
+//  CROSS-ENGINE DISAGREEMENT & VALIDATION REPORT
+// ══════════════════════════════════════════════════════
+
+function renderValidationReport() {
+  const container = document.getElementById('disagree-items-list');
+  const badge = document.getElementById('disagree-badge-count');
+  if (!container) return;
+
+  const val = scannerState.validation || { warnings: [], errors: [], disagreements: [] };
+  const allIssues = [
+    ...(val.errors || []).map(e => ({ type: 'error', ...e })),
+    ...(val.warnings || []).map(w => ({ type: 'warn', ...w })),
+    ...(val.disagreements || []).map(d => ({ type: 'disagree', ...d }))
+  ];
+
+  if (badge) {
+    if (allIssues.length > 0) {
+      badge.textContent = allIssues.length;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  if (allIssues.length === 0) {
+    container.innerHTML = `
+      <div class="empty" style="padding:24px 10px">
+        <div class="empty-icon">✅</div>
+        <h3>All Timetable Entries Verified</h3>
+        <p>No structural layout conflicts, boundary disagreements, or low-confidence OCR words detected.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = allIssues.map((item, idx) => {
+    const isErr = item.type === 'error';
+    const isDisagree = item.type === 'disagree';
+    const icon = isErr ? '⛔' : (isDisagree ? '⚡' : '⚠️');
+    const color = isErr ? 'var(--danger)' : (isDisagree ? 'var(--accent)' : 'var(--warn)');
+
+    return `
+      <div class="disagree-item-card">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:1.1rem">${icon}</span>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px">
+              <strong style="color:${color};font-size:.82rem">${item.type.toUpperCase()}: ${item.message || item.text || 'Cross-engine discrepancy'}</strong>
+            </div>
+            <div style="font-size:.68rem;color:var(--text2);margin-top:3px">${item.details || item.recommendation || 'Compare geometric lines with OCR token bounding boxes in Multi-Engine Studio.'}</div>
+          </div>
+          ${item.cellId ? `<button class="btn-sec" style="font-size:.64rem" onclick="switchTimetableTab('studio'); scannerState.selectedCellId = '${item.cellId}'; renderStudioCanvas();">Inspect Cell #${item.cellId}</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 
 // ══════════════════════════════════════════════════════
 //  FEATURE 2: WEEKLY TIMETABLE GRID & EDITOR
