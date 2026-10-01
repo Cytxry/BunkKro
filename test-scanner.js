@@ -1,61 +1,44 @@
 // Scratch script to test TimetableScanner in Node.js environment
 
-// 1. Mock minimal DOM environment
+// 1. Mock minimal DOM environment — define classes first so createElement can use them
 global.window = global;
-global.document = {
-  createElement(tag) {
-    if (tag === 'canvas') {
-      return {
-        width: 800,
-        height: 600,
-        getContext(type) {
-          return {
-            drawImage() {},
-            getImageData(x, y, w, h) {
-              const data = new Uint8ClampedArray(w * h * 4);
-              // Fill with mock timetable grid image data (white background with black lines)
-              for (let i = 0; i < data.length; i += 4) {
-                const px = (i / 4) % w;
-                const py = Math.floor((i / 4) / w);
-                // Draw some grid lines
-                const isLine = (px % 150 === 0) || (py % 80 === 0);
-                const val = isLine ? 0 : 255;
-                data[i] = val;
-                data[i + 1] = val;
-                data[i + 2] = val;
-                data[i + 3] = 255;
-              }
-              return { data, width: w, height: h };
-            },
-            createImageData(w, h) {
-              return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
-            },
-            putImageData() {},
-            clearRect() {},
-            fillRect() {},
-            save() {},
-            restore() {},
-            translate() {},
-            rotate() {},
-            strokeRect() {},
-            beginPath() {},
-            moveTo() {},
-            lineTo() {},
-            stroke() {},
-            arc() {},
-            fill() {},
-            fillText() {}
-          };
+global.HTMLImageElement = class HTMLImageElement {};
+global.HTMLCanvasElement = class HTMLCanvasElement {
+  constructor() {
+    this.width = 800;
+    this.height = 600;
+  }
+  getContext(type) {
+    return {
+      drawImage() {},
+      getImageData(x, y, w, h) {
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let i = 0; i < data.length; i += 4) {
+          const px = (i / 4) % w;
+          const py = Math.floor((i / 4) / w);
+          const isLine = (px % 150 === 0) || (py % 80 === 0);
+          const val = isLine ? 0 : 255;
+          data[i] = val; data[i+1] = val; data[i+2] = val; data[i+3] = 255;
         }
-      };
-    }
-    return {};
+        return { data, width: w, height: h };
+      },
+      createImageData(w, h) {
+        return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+      },
+      putImageData() {}, clearRect() {}, fillRect() {},
+      save() {}, restore() {}, translate() {}, rotate() {},
+      strokeRect() {}, beginPath() {}, moveTo() {}, lineTo() {},
+      stroke() {}, arc() {}, fill() {}, fillText() {}
+    };
   }
 };
 
-// Mock Image
-global.HTMLImageElement = class HTMLImageElement {};
-global.HTMLCanvasElement = class HTMLCanvasElement {};
+global.document = {
+  createElement(tag) {
+    if (tag === 'canvas') return new global.HTMLCanvasElement();
+    return {};
+  }
+};
 
 // 2. Load timetable-scanner.js
 require('./timetable-scanner.js');
