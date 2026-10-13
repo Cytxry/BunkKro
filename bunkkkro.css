@@ -893,6 +893,61 @@ nav{padding:12px 0;flex:1;overflow-y:auto}
 }
 
 /* ══════════════════════════════════════════
+   UPLOAD CARD — LOADED STATE & ENGINE ROW
+══════════════════════════════════════════ */
+.tt-loaded-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+}
+.tt-loaded-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+.tt-loaded-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.tt-loaded-label {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: .84rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tt-loaded-sub {
+  font-size: .64rem;
+  color: var(--muted);
+}
+.tt-rescan-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: .64rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+.tt-engine-status-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* ══════════════════════════════════════════
    MULTI-ENGINE STUDIO & CANVAS VISUALIZER
 ══════════════════════════════════════════ */
 .engine-status-pills {
@@ -1067,7 +1122,7 @@ nav{padding:12px 0;flex:1;overflow-y:auto}
   margin-bottom: 12px;
 }
 .studio-canvas-container {
-  background: #050507;
+  background: var(--bg);
   border: 1px solid var(--border2);
   border-radius: var(--r-sm);
   max-height: 480px;
@@ -1092,6 +1147,87 @@ nav{padding:12px 0;flex:1;overflow-y:auto}
   white-space: pre-wrap;
   line-height: 1.6;
 }
+
+/* Studio Advanced Diagnostics Section */
+.studio-advanced {
+  margin-top: 6px;
+  display: block;
+}
+.studio-advanced summary {
+  font-size: .62rem;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  cursor: pointer;
+  user-select: none;
+  padding: 3px 0;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.studio-advanced summary::before {
+  content: '▶';
+  font-size: .5rem;
+  transition: transform .15s;
+}
+.studio-advanced[open] summary::before {
+  transform: rotate(90deg);
+}
+.studio-advanced-inner {
+  padding-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Studio Canvas Empty State */
+.studio-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  gap: 8px;
+}
+.studio-empty-icon {
+  font-size: 2rem;
+  opacity: .5;
+}
+.studio-empty-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: .84rem;
+  color: var(--text2);
+}
+.studio-empty-hint {
+  font-size: .65rem;
+  color: var(--muted);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* Validation Severity Groups */
+.vgroup {
+  margin-bottom: 18px;
+}
+.vgroup-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.vgroup-heading.errors { color: var(--danger); }
+.vgroup-heading.warnings { color: var(--warn); }
+.vgroup-heading.info { color: #4fc3f7; }
 
 /* Disagreements Card */
 .tt-disagree-card {

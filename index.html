@@ -207,13 +207,6 @@
         <p>Multi-engine document understanding: OpenCV Geometry + Tesseract OCR + Structural Fusion.</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <!-- Engine Status Indicators -->
-        <div class="engine-status-pills">
-          <span id="badge-cv-status" class="eng-pill">⚙️ OpenCV.js</span>
-          <span id="badge-tess-status" class="eng-pill ok">👁️ Tesseract.js</span>
-          <span id="badge-fusion-status" class="eng-pill ok">🧠 Fusion Engine</span>
-        </div>
-        <button class="btn-pri" onclick="document.getElementById('tt-file-input').click()">📸 Upload Timetable</button>
         <button class="btn-sec" onclick="openAddSlotModal()">+ Add Class</button>
         <button class="btn-sec" onclick="openSyncFrequenciesModal()">📊 Auto-Calc / Week</button>
       </div>
@@ -228,6 +221,22 @@
           <strong>Drop your timetable image here</strong> or <span style="color:var(--accent);text-decoration:underline">browse files</span>
         </div>
         <div class="tt-drop-hint">Works with photos, screenshots, and exported schedules. Multi-engine analysis extracts rows, periods, labs, and breaks.</div>
+      </div>
+
+      <!-- Compact loaded bar (shown after scan completes) -->
+      <div class="tt-loaded-bar" id="tt-loaded-bar" style="display:none">
+        <div class="tt-loaded-icon">📷</div>
+        <div class="tt-loaded-meta">
+          <span class="tt-loaded-label" id="tt-loaded-label">Timetable loaded</span>
+          <span class="tt-loaded-sub">Scan complete &middot; <button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Upload a different image</button></span>
+        </div>
+      </div>
+
+      <!-- Engine status footer (always visible) -->
+      <div class="tt-engine-status-row">
+        <span id="badge-cv-status" class="eng-pill">⚙️ OpenCV.js</span>
+        <span id="badge-tess-status" class="eng-pill ok">👁️ Tesseract.js</span>
+        <span id="badge-fusion-status" class="eng-pill ok">🧠 Fusion Engine</span>
       </div>
 
       <!-- Multi-Engine Scanning Progress State -->
@@ -287,11 +296,16 @@
           <label><i class="dot-ind red"></i><input type="checkbox" id="layer-uncertain" checked onchange="toggleStudioLayer('uncertain', this.checked)"> Uncertain</label>
           <label><i class="dot-ind blue"></i><input type="checkbox" id="layer-manual" checked onchange="toggleStudioLayer('manual', this.checked)"> Manual</label>
           <span class="studio-sep"></span>
-          <label><input type="checkbox" id="layer-threshold" onchange="toggleStudioLayer('threshold', this.checked)"> Threshold</label>
-          <label><input type="checkbox" id="layer-masks" onchange="toggleStudioLayer('masks', this.checked)"> H/V Masks</label>
-          <label><input type="checkbox" id="layer-segments" onchange="toggleStudioLayer('segments', this.checked)"> Raw Segments</label>
-          <label><input type="checkbox" id="layer-intersections" onchange="toggleStudioLayer('intersections', this.checked)"> Intersections</label>
-          <label><input type="checkbox" id="layer-ocrwords" onchange="toggleStudioLayer('ocrwords', this.checked)"> OCR Word Boxes</label>
+          <details class="studio-advanced">
+            <summary>Advanced diagnostics</summary>
+            <div class="studio-advanced-inner">
+              <label><input type="checkbox" id="layer-threshold" onchange="toggleStudioLayer('threshold', this.checked)"> Threshold</label>
+              <label><input type="checkbox" id="layer-masks" onchange="toggleStudioLayer('masks', this.checked)"> H/V Masks</label>
+              <label><input type="checkbox" id="layer-segments" onchange="toggleStudioLayer('segments', this.checked)"> Raw Segments</label>
+              <label><input type="checkbox" id="layer-intersections" onchange="toggleStudioLayer('intersections', this.checked)"> Intersections</label>
+              <label><input type="checkbox" id="layer-ocrwords" onchange="toggleStudioLayer('ocrwords', this.checked)"> OCR Word Boxes</label>
+            </div>
+          </details>
         </fieldset>
 
         <!-- Studio Action Bar -->
@@ -308,8 +322,13 @@
         </div>
 
         <!-- Studio Canvas -->
-        <div class="studio-canvas-container">
-          <canvas id="studio-canvas"></canvas>
+        <div class="studio-canvas-container" id="studio-canvas-container">
+          <div class="studio-empty-state" id="studio-empty-state">
+            <div class="studio-empty-icon">🔬</div>
+            <div class="studio-empty-title">No image loaded</div>
+            <div class="studio-empty-hint">Upload a timetable to visualize cell detection, OCR word boundaries, and multi-engine evidence layers.</div>
+          </div>
+          <canvas id="studio-canvas" style="display:none"></canvas>
         </div>
 
         <!-- Selected Element Details Box -->
@@ -322,8 +341,8 @@
     <!-- TAB 3: DISAGREEMENTS & VALIDATION WARNINGS -->
     <div class="tt-tab-pane" id="tab-pane-disagree" style="display:none">
       <div class="tt-disagree-card">
-        <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:6px">Cross-Engine Disagreements & Validation Report</h3>
-        <p style="font-size:.74rem;color:var(--text2);margin-bottom:16px">Independent analysis comparison between OpenCV Geometry, Tesseract OCR, and Structural Layout.</p>
+        <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:6px">Validation Report</h3>
+        <p style="font-size:.74rem;color:var(--text2);margin-bottom:16px">Issues are grouped by severity. Errors must be reviewed; warnings are worth checking; info items are for reference.</p>
         <div id="disagree-items-list"></div>
       </div>
     </div>
