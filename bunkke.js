@@ -2021,6 +2021,13 @@ async function processTimetableImage(file) {
     setScannerPhase('valid', 100, '✓ Multi-engine scan complete!');
     setTimeout(() => {
       if (progressBox) progressBox.style.display = 'none';
+      // Collapse dropzone, show compact loaded bar
+      const dropzone = document.getElementById('tt-dropzone');
+      const loadedBar = document.getElementById('tt-loaded-bar');
+      const loadedLabel = document.getElementById('tt-loaded-label');
+      if (dropzone) dropzone.style.display = 'none';
+      if (loadedBar) loadedBar.style.display = 'flex';
+      if (loadedLabel && file && file.name) loadedLabel.textContent = file.name;
     }, 1200);
 
     toast('Timetable reconstructed successfully! Inspect in Studio or review below.');
@@ -2160,7 +2167,14 @@ function initStudioCanvasListeners() {
 
 function renderStudioCanvas() {
   const canvas = document.getElementById('studio-canvas');
-  if (!canvas || !scannerState.preprocessed) return;
+  const emptyState = document.getElementById('studio-empty-state');
+  if (!canvas || !scannerState.preprocessed) {
+    if (canvas) canvas.style.display = 'none';
+    if (emptyState) emptyState.style.display = 'flex';
+    return;
+  }
+  if (emptyState) emptyState.style.display = 'none';
+  canvas.style.display = 'inline-block';
 
   const prep = scannerState.preprocessed;
   const ctx = canvas.getContext('2d');
@@ -2174,7 +2188,7 @@ function renderStudioCanvas() {
   if (scannerState.activeLayers.original) {
     ctx.drawImage(prep.canvas, 0, 0);
   } else {
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = '#09090b';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
@@ -2699,27 +2713,42 @@ function renderValidationReport() {
     return;
   }
 
-  container.innerHTML = allIssues.map((item, idx) => {
+  const renderItem = (item) => {
     const isErr = item.type === 'error';
     const isDisagree = item.type === 'disagree';
     const icon = isErr ? '⛔' : (isDisagree ? '⚡' : '⚠️');
     const color = isErr ? 'var(--danger)' : (isDisagree ? 'var(--accent)' : 'var(--warn)');
-
+    const label = item.message || item.text || 'Cross-engine discrepancy';
+    const detail = item.details || item.recommendation || 'Compare geometric lines with OCR token bounding boxes in Multi-Engine Studio.';
     return `
       <div class="disagree-item-card">
         <div style="display:flex;align-items:flex-start;gap:10px">
-          <span style="font-size:1.1rem">${icon}</span>
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:8px">
-              <strong style="color:${color};font-size:.82rem">${item.type.toUpperCase()}: ${item.message || item.text || 'Cross-engine discrepancy'}</strong>
-            </div>
-            <div style="font-size:.68rem;color:var(--text2);margin-top:3px">${item.details || item.recommendation || 'Compare geometric lines with OCR token bounding boxes in Multi-Engine Studio.'}</div>
+          <span style="font-size:1.1rem;flex-shrink:0">${icon}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;color:${color};font-size:.82rem;word-break:break-word">${label}</div>
+            <div style="font-size:.68rem;color:var(--text2);margin-top:3px">${detail}</div>
           </div>
-          ${item.cellId ? `<button class="btn-sec" style="font-size:.64rem" onclick="switchTimetableTab('studio'); scannerState.selectedCellId = '${item.cellId}'; renderStudioCanvas();">Inspect Cell #${item.cellId}</button>` : ''}
+          ${item.cellId ? `<button class="btn-sec" style="font-size:.64rem;flex-shrink:0" onclick="switchTimetableTab('studio'); scannerState.selectedCellId = '${item.cellId}'; renderStudioCanvas();">Inspect</button>` : ''}
         </div>
       </div>
     `;
-  }).join('');
+  };
+
+  const errors = allIssues.filter(i => i.type === 'error');
+  const warnings = allIssues.filter(i => i.type === 'warn');
+  const info = allIssues.filter(i => i.type === 'disagree');
+
+  let html = '';
+  if (errors.length) {
+    html += `<div class="vgroup"><div class="vgroup-heading errors">⛔ Errors <span style="font-weight:400;color:var(--muted)">(${errors.length})</span></div>${errors.map(renderItem).join('')}</div>`;
+  }
+  if (warnings.length) {
+    html += `<div class="vgroup"><div class="vgroup-heading warnings">⚠️ Warnings <span style="font-weight:400;color:var(--muted)">(${warnings.length})</span></div>${warnings.map(renderItem).join('')}</div>`;
+  }
+  if (info.length) {
+    html += `<div class="vgroup"><div class="vgroup-heading info">⚡ Engine Disagreements <span style="font-weight:400;color:var(--muted)">(${info.length})</span></div>${info.map(renderItem).join('')}</div>`;
+  }
+  container.innerHTML = html;
 }
 
 
@@ -2737,12 +2766,30 @@ const DAYS_MAP = [
   { num: 7, name: 'Sunday', short: 'Sun' }
 ];
 
+function updateUploadCardState() {
+  const dropzone = document.getElementById('tt-dropzone');
+  const loadedBar = document.getElementById('tt-loaded-bar');
+  if (!dropzone || !loadedBar) return;
+  const hasData = timetable.length > 0;
+  dropzone.style.display = hasData ? 'none' : '';
+  loadedBar.style.display = hasData ? 'flex' : 'none';
+  if (hasData) {
+    const label = document.getElementById('tt-loaded-label');
+    const count = timetable.filter(s => !s.isBreak).length;
+    if (label && loadedBar.style.display === 'flex') {
+      label.textContent = `${count} class${count !== 1 ? 'es' : ''} loaded`;
+    }
+  }
+}
+
 function renderTimetable() {
   const container = document.getElementById('tt-grid-wrap');
   const badge = document.getElementById('tt-stats-badge');
   const sundayBtn = document.getElementById('btn-toggle-sunday');
 
   if (!container) return;
+
+  updateUploadCardState();
 
   const activeDays = DAYS_MAP.filter(d => d.num <= 6 || timetableMeta.showSunday);
 
