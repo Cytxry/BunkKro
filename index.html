@@ -201,148 +201,140 @@
 
   <!-- ░░ SMART TIMETABLE PAGE ░░ -->
   <div class="page" id="page-timetable">
-    <div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-      <div>
-        <h2>Smart Timetable ⚡</h2>
-        <p>Multi-engine document understanding: OpenCV Geometry + Tesseract OCR + Structural Fusion.</p>
-      </div>
+    <div class="ph tt-ph">
+      <h2>Smart Timetable ⚡</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn-sec" onclick="openAddSlotModal()">+ Add Class</button>
-        <button class="btn-sec" onclick="openSyncFrequenciesModal()">📊 Auto-Calc / Week</button>
+        <button class="btn-sec" onclick="openSyncFrequenciesModal()">📊 Auto-Calc</button>
       </div>
     </div>
 
-    <!-- Timetable Upload & OCR Card -->
+    <!-- Upload Card -->
     <div class="tt-upload-card" id="tt-upload-card">
       <input type="file" id="tt-file-input" accept="image/png, image/jpeg, image/jpg" style="display:none" onchange="handleTimetableFileUpload(this.files[0])">
+
+      <!-- Default: dropzone -->
       <div class="tt-dropzone" id="tt-dropzone" onclick="document.getElementById('tt-file-input').click()">
-        <div class="tt-drop-icon">📷</div>
-        <div class="tt-drop-text">
-          <strong>Drop your timetable image here</strong> or <span style="color:var(--accent);text-decoration:underline">browse files</span>
+        <div class="tt-drop-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);opacity:.7"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         </div>
-        <div class="tt-drop-hint">Works with photos, screenshots, and exported schedules. Multi-engine analysis extracts rows, periods, labs, and breaks.</div>
+        <div class="tt-drop-title">Upload your schedule</div>
+        <div class="tt-drop-sub">Photo or screenshot &middot; auto-detects periods, labs &amp; breaks</div>
       </div>
 
-      <!-- Compact loaded bar (shown after scan completes) -->
+      <!-- Loaded: compact bar -->
       <div class="tt-loaded-bar" id="tt-loaded-bar" style="display:none">
-        <div class="tt-loaded-icon">📷</div>
+        <div class="tt-loaded-check">✓</div>
         <div class="tt-loaded-meta">
-          <span class="tt-loaded-label" id="tt-loaded-label">Timetable loaded</span>
-          <span class="tt-loaded-sub">Scan complete &middot; <button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Upload a different image</button></span>
+          <span class="tt-loaded-label" id="tt-loaded-label">Schedule loaded</span>
+          <span class="tt-loaded-sub"><button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Replace image</button></span>
         </div>
       </div>
 
-      <!-- Engine status footer (always visible) -->
-      <div class="tt-engine-status-row">
-        <span id="badge-cv-status" class="eng-pill">⚙️ OpenCV.js</span>
-        <span id="badge-tess-status" class="eng-pill ok">👁️ Tesseract.js</span>
-        <span id="badge-fusion-status" class="eng-pill ok">🧠 Fusion Engine</span>
+      <!-- Hidden engine badges (used by JS only) -->
+      <div style="display:none">
+        <span id="badge-cv-status"></span>
+        <span id="badge-tess-status"></span>
+        <span id="badge-fusion-status"></span>
       </div>
 
-      <!-- Multi-Engine Scanning Progress State -->
+      <!-- Scanning progress -->
       <div class="ocr-progress-box" id="ocr-progress-box" style="display:none">
         <div class="ocr-spinner"></div>
-        <div class="ocr-status-text" id="ocr-status-text">Scanning timetable image...</div>
+        <div class="ocr-status-text" id="ocr-status-text">Reading your schedule...</div>
         <div class="ocr-bar"><div class="ocr-bar-fill" id="ocr-bar-fill" style="width:0%"></div></div>
-        <div class="ocr-details" id="ocr-details">Analyzing image geometry, line segments and text blocks...</div>
-        
-        <!-- Granular Phase Indicators -->
+        <div class="ocr-details" id="ocr-details">Analysing layout...</div>
         <div class="ocr-phases-grid">
-          <div class="ocr-phase-item" id="phase-prep"><span>1</span> Preprocessing</div>
-          <div class="ocr-phase-item" id="phase-geom"><span>2</span> OpenCV Grid</div>
-          <div class="ocr-phase-item" id="phase-ocr"><span>3</span> Tesseract OCR</div>
-          <div class="ocr-phase-item" id="phase-fusion"><span>4</span> Result Fusion</div>
-          <div class="ocr-phase-item" id="phase-valid"><span>5</span> Validation</div>
+          <div class="ocr-phase-item" id="phase-prep"><span>1</span> Preparing</div>
+          <div class="ocr-phase-item" id="phase-geom"><span>2</span> Detecting cells</div>
+          <div class="ocr-phase-item" id="phase-ocr"><span>3</span> Reading text</div>
+          <div class="ocr-phase-item" id="phase-fusion"><span>4</span> Building schedule</div>
+          <div class="ocr-phase-item" id="phase-valid"><span>5</span> Checking</div>
         </div>
       </div>
     </div>
 
-    <!-- STUDIO VIEW TABS -->
+    <!-- Tab Bar -->
     <div class="tt-view-tabs" style="margin-top:20px">
-      <button class="tt-tab-btn active" id="tab-btn-schedule" onclick="switchTimetableTab('schedule')">📅 Weekly Schedule</button>
-      <button class="tt-tab-btn" id="tab-btn-studio" onclick="switchTimetableTab('studio')">🔬 Multi-Engine Studio & Overlay</button>
-      <button class="tt-tab-btn" id="tab-btn-disagree" onclick="switchTimetableTab('disagree')">⚠️ Validation & Warnings <span id="disagree-badge-count" class="tab-badge" style="display:none">0</span></button>
+      <button class="tt-tab-btn active" id="tab-btn-schedule" onclick="switchTimetableTab('schedule')">Schedule</button>
+      <button class="tt-tab-btn" id="tab-btn-studio" onclick="switchTimetableTab('studio')">Inspector</button>
+      <button class="tt-tab-btn" id="tab-btn-disagree" onclick="switchTimetableTab('disagree')">Issues <span id="disagree-badge-count" class="tab-badge" style="display:none">0</span></button>
     </div>
 
-    <!-- TAB 1: WEEKLY SCHEDULE GRID -->
+    <!-- TAB 1: WEEKLY SCHEDULE -->
     <div class="tt-tab-pane active" id="tab-pane-schedule">
       <div class="tt-grid-container">
         <div class="tt-grid-header">
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700">Weekly Schedule Grid</h3>
-            <span id="tt-stats-badge" class="tt-badge">0 classes scheduled</span>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <h3 style="font-family:'Syne',sans-serif;font-size:1rem;font-weight:700">Weekly Schedule</h3>
+            <span id="tt-stats-badge" class="tt-badge">0 classes</span>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:6px">
             <button class="btn-sec" style="font-size:.7rem" onclick="toggleSundayDisplay()" id="btn-toggle-sunday">+ Sunday</button>
-            <button class="btn-sec" style="font-size:.7rem;color:var(--danger)" onclick="confirmClearTimetable()">🗑️ Clear</button>
+            <button class="btn-sec" style="font-size:.7rem;color:var(--danger)" onclick="confirmClearTimetable()">Clear</button>
           </div>
         </div>
         <div class="tt-grid-wrap" id="tt-grid-wrap"></div>
       </div>
     </div>
 
-    <!-- TAB 2: MULTI-ENGINE STUDIO & CANVAS VISUALIZER -->
+    <!-- TAB 2: INSPECTOR -->
     <div class="tt-tab-pane" id="tab-pane-studio" style="display:none">
       <div class="tt-studio-card">
-        <!-- Studio Layer Toolbar -->
-        <fieldset class="studio-layers">
-          <legend>Visual Evidence & Debug Layers</legend>
-          <label><input type="checkbox" id="layer-original" checked onchange="toggleStudioLayer('original', this.checked)"> Original Image</label>
-          <label><input type="checkbox" id="layer-cells" checked onchange="toggleStudioLayer('cells', this.checked)"> Cell Boxes (#)</label>
-          <label><input type="checkbox" id="layer-regions" onchange="toggleStudioLayer('regions', this.checked)"> Region Fills</label>
-          <span class="studio-sep"></span>
-          <label><i class="dot-ind green"></i><input type="checkbox" id="layer-confirmed" checked onchange="toggleStudioLayer('confirmed', this.checked)"> Confirmed</label>
-          <label><i class="dot-ind orange"></i><input type="checkbox" id="layer-inferred" checked onchange="toggleStudioLayer('inferred', this.checked)"> Inferred</label>
-          <label><i class="dot-ind red"></i><input type="checkbox" id="layer-uncertain" checked onchange="toggleStudioLayer('uncertain', this.checked)"> Uncertain</label>
-          <label><i class="dot-ind blue"></i><input type="checkbox" id="layer-manual" checked onchange="toggleStudioLayer('manual', this.checked)"> Manual</label>
-          <span class="studio-sep"></span>
+        <!-- Layer toggles -->
+        <div class="studio-layers">
+          <span class="studio-layers-label">Layers</span>
+          <label class="studio-toggle"><input type="checkbox" id="layer-original" checked onchange="toggleStudioLayer('original', this.checked)"><span>Image</span></label>
+          <label class="studio-toggle"><input type="checkbox" id="layer-cells" checked onchange="toggleStudioLayer('cells', this.checked)"><span>Grid</span></label>
+          <label class="studio-toggle"><input type="checkbox" id="layer-regions" onchange="toggleStudioLayer('regions', this.checked)"><span>Regions</span></label>
+          <div class="studio-sep-v"></div>
+          <label class="studio-toggle"><i class="dot-ind green"></i><input type="checkbox" id="layer-confirmed" checked onchange="toggleStudioLayer('confirmed', this.checked)"><span>Confirmed</span></label>
+          <label class="studio-toggle"><i class="dot-ind orange"></i><input type="checkbox" id="layer-inferred" checked onchange="toggleStudioLayer('inferred', this.checked)"><span>Inferred</span></label>
+          <label class="studio-toggle"><i class="dot-ind red"></i><input type="checkbox" id="layer-uncertain" checked onchange="toggleStudioLayer('uncertain', this.checked)"><span>Uncertain</span></label>
+          <label class="studio-toggle"><i class="dot-ind blue"></i><input type="checkbox" id="layer-manual" checked onchange="toggleStudioLayer('manual', this.checked)"><span>Manual</span></label>
           <details class="studio-advanced">
-            <summary>Advanced diagnostics</summary>
+            <summary>More</summary>
             <div class="studio-advanced-inner">
-              <label><input type="checkbox" id="layer-threshold" onchange="toggleStudioLayer('threshold', this.checked)"> Threshold</label>
-              <label><input type="checkbox" id="layer-masks" onchange="toggleStudioLayer('masks', this.checked)"> H/V Masks</label>
-              <label><input type="checkbox" id="layer-segments" onchange="toggleStudioLayer('segments', this.checked)"> Raw Segments</label>
-              <label><input type="checkbox" id="layer-intersections" onchange="toggleStudioLayer('intersections', this.checked)"> Intersections</label>
-              <label><input type="checkbox" id="layer-ocrwords" onchange="toggleStudioLayer('ocrwords', this.checked)"> OCR Word Boxes</label>
+              <label class="studio-toggle"><input type="checkbox" id="layer-threshold" onchange="toggleStudioLayer('threshold', this.checked)"><span>Threshold</span></label>
+              <label class="studio-toggle"><input type="checkbox" id="layer-masks" onchange="toggleStudioLayer('masks', this.checked)"><span>H/V Lines</span></label>
+              <label class="studio-toggle"><input type="checkbox" id="layer-segments" onchange="toggleStudioLayer('segments', this.checked)"><span>Segments</span></label>
+              <label class="studio-toggle"><input type="checkbox" id="layer-intersections" onchange="toggleStudioLayer('intersections', this.checked)"><span>Intersections</span></label>
+              <label class="studio-toggle"><input type="checkbox" id="layer-ocrwords" onchange="toggleStudioLayer('ocrwords', this.checked)"><span>Text Boxes</span></label>
             </div>
           </details>
-        </fieldset>
+        </div>
 
-        <!-- Studio Action Bar -->
+        <!-- Action bar -->
         <div class="studio-action-bar">
           <div style="display:flex;gap:6px;align-items:center">
             <button class="btn-sec" id="btn-studio-undo" onclick="studioUndo()" disabled>↶ Undo</button>
             <button class="btn-sec" id="btn-studio-redo" onclick="studioRedo()" disabled>↷ Redo</button>
-            <button class="btn-sec" id="btn-studio-reset-edits" onclick="studioResetEdits()" disabled>Discard Edits</button>
-            <button class="btn-sec" onclick="exportScannerJSON()">📥 Export JSON</button>
+            <button class="btn-sec" id="btn-studio-reset-edits" onclick="studioResetEdits()" disabled>Reset</button>
+            <button class="btn-sec" onclick="exportScannerJSON()">↓ Export</button>
           </div>
-          <div id="studio-quick-hint" style="font-size:.65rem;color:var(--text2)">
-            Click any cell to inspect OCR text, boundary evidence, or split/merge.
+          <div id="studio-quick-hint" style="font-size:.65rem;color:var(--muted)">
+            Tap a cell to edit or inspect
           </div>
         </div>
 
-        <!-- Studio Canvas -->
+        <!-- Canvas -->
         <div class="studio-canvas-container" id="studio-canvas-container">
           <div class="studio-empty-state" id="studio-empty-state">
-            <div class="studio-empty-icon">🔬</div>
-            <div class="studio-empty-title">No image loaded</div>
-            <div class="studio-empty-hint">Upload a timetable to visualize cell detection, OCR word boundaries, and multi-engine evidence layers.</div>
+            <div class="studio-empty-icon">📷</div>
+            <div class="studio-empty-title">Upload your schedule to view it here</div>
           </div>
           <canvas id="studio-canvas" style="display:none"></canvas>
         </div>
 
-        <!-- Selected Element Details Box -->
         <div class="studio-info-box" id="studio-info-box">
-          <div style="color:var(--muted);font-size:.72rem">No cell or boundary selected. Click on the image above to inspect.</div>
+          <div style="color:var(--muted);font-size:.72rem">Select a cell to inspect</div>
         </div>
       </div>
     </div>
 
-    <!-- TAB 3: DISAGREEMENTS & VALIDATION WARNINGS -->
+    <!-- TAB 3: ISSUES -->
     <div class="tt-tab-pane" id="tab-pane-disagree" style="display:none">
       <div class="tt-disagree-card">
-        <h3 style="font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:6px">Validation Report</h3>
-        <p style="font-size:.74rem;color:var(--text2);margin-bottom:16px">Issues are grouped by severity. Errors must be reviewed; warnings are worth checking; info items are for reference.</p>
         <div id="disagree-items-list"></div>
       </div>
     </div>
