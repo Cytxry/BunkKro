@@ -632,20 +632,13 @@ async function handleLogout() {
 function showAuthModal() {
   document.getElementById('auth-overlay').classList.add('show');
   document.getElementById('logout-btn').style.display = 'none';
-  const userRow = document.getElementById('user-row');
-  if (userRow) userRow.style.display = 'none';
+  toggleProfileMenu(false);
 }
 
 async function showApp() {
   document.getElementById('auth-overlay').classList.remove('show');
   document.getElementById('logout-btn').style.display = 'flex';
-  const email = currentUser?.email || '';
-  const userRow = document.getElementById('user-row');
-  if (userRow && email) {
-    document.getElementById('user-email').textContent = email;
-    document.getElementById('user-avatar').textContent = email.charAt(0);
-    userRow.style.display = 'flex';
-  }
+  renderProfile();
   selectedTrackerDate = getLocalDateString();
   await loadSubjects();
   await loadTimetable();
@@ -691,13 +684,7 @@ function hideAuthMessages() {
 
 // NOT RELATED TO SUPABASE DOWN BELOW
 
-const COLORS = ['#4555A5','#3F7A4A','#C4652A','#2F6FB0','#B5475A','#7353B5','#2C7F7B','#A87414'];
-
-const SUBJ_THEMES = [
-  { c: '#4555A5', bg: '#E8EAF8' }, { c: '#3F7A4A', bg: '#E4F2E1' }, { c: '#C4652A', bg: '#FCEBDD' },
-  { c: '#2F6FB0', bg: '#E3EEF9' }, { c: '#B5475A', bg: '#F9E3E7' }, { c: '#7353B5', bg: '#EEE7F8' },
-  { c: '#2C7F7B', bg: '#DFF1EF' }, { c: '#A87414', bg: '#FBF0D6' },
-];
+const SUBJ_THEMES = Array.from({ length: 8 }, (_, i) => ({ c: `var(--st${i + 1})`, bg: `var(--st${i + 1}-bg)` }));
 function subjTheme(i) { return SUBJ_THEMES[((i % SUBJ_THEMES.length) + SUBJ_THEMES.length) % SUBJ_THEMES.length]; }
 
 // Decorative icon chosen from the subject name only.
@@ -832,11 +819,12 @@ function savePrefs() {
 // ══════════════════════════════════════════════════════
 function pct(s) { return s.total > 0 ? Math.round(s.present / s.total * 100) : 0; }
 function getTarget(s) { return s?.target || globalTarget; }
-function bunkable(s) { return Math.max(0, Math.floor(s.present / getTarget(s) * 100) - s.total); }
+// Integer-first ordering avoids float error (e.g. 29/50*100 = 57.999…).
+function bunkable(s) { return Math.max(0, Math.floor(s.present * 100 / getTarget(s)) - s.total); }
 function needed(s, tgt) {
   const t = tgt ?? getTarget(s);
   if (pct(s) >= t) return 0;
-  return Math.max(0, Math.ceil((t / 100 * s.total - s.present) / (1 - t / 100)));
+  return Math.max(0, Math.ceil((t * s.total - 100 * s.present) / (100 - t)));
 }
 function pctColor(p, tgt) {
   tgt = tgt ?? globalTarget;
@@ -952,6 +940,8 @@ function goPage(page, id) {
   }
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('mob-menu')?.setAttribute('aria-expanded', 'false');
+  toggleProfileMenu(false);
+  closeSafeBunks(false);
   window.scrollTo(0, 0);
 }
 
@@ -978,9 +968,8 @@ function renderHome() {
   const name = userFirstName();
   document.getElementById('home-head').innerHTML = `${greetings[gi]}${name ? ', ' + escapeHTML(name) : ''}! <span class="wave" aria-hidden="true">${waves[gi]}</span>`;
   document.getElementById('home-sub').textContent = now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  const quoteEl = document.getElementById('home-quote');
-  if (quoteEl) quoteEl.textContent = `“${dailyPick(WISDOM, 3)}”`;
 
+  closeSafeBunks(false);
   renderHomeToday();
   renderStreak();
 
@@ -1006,46 +995,28 @@ function renderHome() {
   const atRisk = subjects.filter(s=>pct(s)<getTarget(s));
   const bestBunk = [...subjects].sort((a,b)=>bunkable(b)-bunkable(a))[0];
   const hasBest = bestBunk && bunkable(bestBunk) > 0;
-
-  const gap = ov - globalTarget;
-  const gapText = gap > 0 ? `${gap} percentage point${gap!==1?'s':''} above your target.`
-    : gap === 0 ? `Exactly at your target. Careful!`
-    : `${-gap} percentage point${gap!==-1?'s':''} below your target.`;
-  const ovPill = gap > 0 ? `<span class="trend-pill good">${ic('arrow-up','ic-sm')} Above target</span>`
-    : gap === 0 ? `<span class="trend-pill warn">On the line</span>`
-    : `<span class="trend-pill danger">${ic('arrow-down','ic-sm')} Below target</span>`;
-  const bestIdx = hasBest ? subjects.indexOf(bestBunk) : -1;
+  const ovCls = pctStatus(ov, globalTarget).cls;
 
   document.getElementById('stats-grid').innerHTML = `
-    <div class="sc sc-overall">
-      <div class="sc-top">
-        <span class="sc-title">Overall Attendance <span class="sc-info" title="Present ÷ total classes across all subjects">${ic('info','ic-sm')}</span></span>
-        <span class="sc-chip blue">${ic('bars','ic-sm')}</span>
-      </div>
-      <div class="sc-overall-row">
-        <div class="sc-big">${ov}<span class="unit">%</span></div>
-        ${ovPill}
-      </div>
-      <div class="progress thick" role="img" aria-label="Overall ${ov}% versus target ${globalTarget}%">
-        <div class="progress-fill" style="width:${Math.min(100,ov)}%;background:${pctColor(ov)}"></div>
-        <div class="progress-target" style="left:${Math.min(100,globalTarget)}%"></div>
-      </div>
-      <div class="sc-foot"><span>${gapText}</span><span>Target: ${globalTarget}%</span></div>
+    <div class="sc tone-${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">
+      <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl">Overall attendance</span><span class="sc-chip soft indigo sc-end">${ic('chart','ic-sm')}</span></div>
+      <div class="sc-val" style="color:${pctTextColor(ov)}">${ov}<span class="unit">%</span></div>
+      <div class="sc-sub">target: ${globalTarget}% · ${present}/${total} classes</div>
     </div>
-    <div class="sc sc-mini">
-      <div class="sc-top"><span class="sc-chip indigo">${ic('trend','ic-sm')}</span><span class="sc-title">Safe Bunks</span><span class="sc-orb green">${ic('coffee')}</span></div>
-      <div class="sc-big" style="color:${safeBunks>0?'var(--primary-deep)':'var(--danger)'}">${safeBunks}</div>
-      <div class="sc-sub">${safeBunks>0?'You can skip, responsibly.':'You are cooked. Attend.'}</div>
-    </div>
-    <div class="sc sc-mini">
-      <div class="sc-top"><span class="sc-chip pink">${ic('alert','ic-sm')}</span><span class="sc-title">At Risk</span><span class="sc-orb amber">${ic('alert')}</span></div>
-      <div class="sc-big" style="color:${atRisk.length>0?'var(--danger)':'var(--good)'}">${atRisk.length}</div>
-      <div class="sc-sub">${atRisk.length>0?escapeHTML(atRisk.map(s=>s.name).join(', ')):'All subjects safe ✓'}</div>
-    </div>
-    <${hasBest ? `button onclick="goPage('subject','${bestBunk.id}')"` : 'div'} class="sc sc-mini sc-best">
-      <div class="sc-top"><span class="sc-title">Best to Bunk</span><span class="sc-orb blue">${ic('layers')}</span></div>
-      <div class="sc-big sc-big-text" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</div>
-      <div class="sc-sub sc-sub-row"><span>${hasBest ? bunkable(bestBunk)+' bunk'+(bunkable(bestBunk)!==1?'s':'')+' left' : 'Nowhere is safe rn'}</span>${hasBest ? ic('chevron-right') : ''}</div>
+    <button class="sc tone-green" id="safe-card" onclick="openSafeBunks()" aria-haspopup="dialog" aria-expanded="false" aria-controls="safe-pop">
+      <span class="sc-top"><span class="sc-chip green">${ic('coffee','ic-sm')}</span><span class="sc-lbl">Safe bunks</span><span class="sc-go">${ic('chevron-right','ic-sm')}</span></span>
+      <span class="sc-val" style="color:${safeBunks>0?'var(--good)':'var(--danger)'}">${safeBunks}</span>
+      <span class="sc-sub">${safeBunks>0?'go ahead, skip something':'you are cooked. attend.'}</span>
+    </button>
+    <button class="sc tone-pink" onclick="openCooked()" title="Open Am I Cooked?">
+      <span class="sc-top"><span class="sc-chip pink">${ic('alert','ic-sm')}</span><span class="sc-lbl">At risk</span><span class="sc-go">${ic('chevron-right','ic-sm')}</span></span>
+      <span class="sc-val" style="color:${atRisk.length>0?'var(--danger)':'var(--good)'}">${atRisk.length}</span>
+      <span class="sc-sub sc-clip">${atRisk.length>0?escapeHTML(atRisk.map(s=>s.name).join(', ')):'all subjects safe ✓'}</span>
+    </button>
+    <${hasBest ? `button onclick="goPage('subject','${bestBunk.id}')"` : 'div'} class="sc tone-blue">
+      <span class="sc-top"><span class="sc-chip blue">${ic('star','ic-sm')}</span><span class="sc-lbl">Best to bunk</span>${hasBest ? `<span class="sc-go">${ic('chevron-right','ic-sm')}</span>` : ''}</span>
+      <span class="sc-val sc-val-text" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</span>
+      <span class="sc-sub">${hasBest ? bunkable(bestBunk)+' bunk'+(bunkable(bestBunk)!==1?'s':'')+' left' : 'nowhere is safe rn'}</span>
     </${hasBest ? 'button' : 'div'}>
   `;
  
@@ -1054,27 +1025,27 @@ function renderHome() {
   document.getElementById('subject-cards').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s);
     const risk = p < tgt;
-    const roast = getRoast(p, tgt);
-    const th = subjTheme(i);
+    const st = pctStatus(p, tgt);
     return `<button class="subj-card ${risk?'at-risk':'safe-zone'}" onclick="goPage('subject','${s.id}')">
-      <span class="subj-icon" style="background:${th.bg};color:${th.c}" aria-hidden="true">${ic(subjIcon(s.name))}</span>
+      <span class="subj-avatar" style="background:${subjTheme(i).c}" aria-hidden="true">${escapeHTML((s.name || '?').trim().charAt(0))}</span>
       <span class="subj-card-main">
         <span class="subj-card-name">${escapeHTML(s.name)}</span>
-        <span class="subj-card-roast">${roast}</span>
+        <span class="subj-card-roast">${getRoast(p, tgt)}</span>
         <span class="subj-bar"><span class="subj-bar-fill" style="width:${Math.min(100,p)}%;background:${pctColor(p, tgt)}"></span><span class="subj-bar-target" style="left:${Math.min(100,tgt)}%" title="Target ${tgt}%"></span></span>
       </span>
       <span class="subj-card-right">
         <span class="subj-card-pct" style="color:${pctTextColor(p, tgt)}">${p}%</span>
-        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:`need ${needed(s)} more`}</span>
+        <span class="status-pill ${st.cls}">${st.label}</span>
+        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:(risk?`need ${needed(s)} more`:'0 bunks left')}</span>
       </span>
-      <span class="subj-chev">${ic('chevron-right')}</span>
+      <span class="subj-chev">${ic('chevron-right','ic-sm')}</span>
     </button>`;
   }).join('');
  
   const maxV = Math.max(...subjects.map(s=>s.total), 1);
   document.getElementById('bar-chart').innerHTML = subjects.map((s,i) => {
-    const ph = Math.round(s.present/maxV*165);
-    const ah = Math.round((s.total-s.present)/maxV*165);
+    const ph = Math.round(s.present/maxV*112);
+    const ah = Math.round((s.total-s.present)/maxV*112);
     return `<button class="bg" onclick="goPage('subject','${s.id}')" title="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent" aria-label="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent">
       <span class="bw"><span class="b p" style="height:${ph}px"></span><span class="b a" style="height:${ah}px"></span></span>
       <span class="bl">${escapeHTML(s.name)}</span>
@@ -1092,7 +1063,70 @@ function renderHome() {
   }).join('');
 }
 
-// Read-only timeline of today's schedule; marking happens on Daily Classes.
+// ── Safe Bunks popover (uses bunkable()/getTarget() so it always matches the card) ──
+let safePopTrigger = null;
+function openSafeBunks() {
+  const pop = document.getElementById('safe-pop');
+  const card = document.getElementById('safe-card');
+  if (!pop || !card) return;
+  if (!pop.hidden) { closeSafeBunks(); return; }
+
+  const rows = subjects
+    .map((s, i) => ({ s, i, p: pct(s), tgt: getTarget(s), bk: bunkable(s) }))
+    .filter(r => r.s.total > 0 && r.p >= r.tgt)
+    .sort((a, b) => b.bk - a.bk || b.p - a.p);
+  const total = rows.reduce((a, r) => a + r.bk, 0);
+
+  pop.innerHTML = `
+    <div class="pop-head">
+      <span class="sc-chip green">${ic('coffee','ic-sm')}</span>
+      <h3 id="safe-pop-title">Subjects you can bunk</h3>
+      <button class="pop-close" onclick="closeSafeBunks()" aria-label="Close">${ic('x','ic-sm')}</button>
+    </div>
+    <p class="pop-sub">${rows.length
+      ? `You can safely skip <strong>${total}</strong> class${total !== 1 ? 'es' : ''} in total and still stay at or above each subject's target.`
+      : 'No subject is at or above its target right now, so there is nothing safe to skip.'}</p>
+    ${rows.length ? `<div class="pop-list">${rows.map(r => `
+      <button class="pop-item" onclick="closeSafeBunks(false); goPage('subject','${r.s.id}')">
+        <span class="subj-avatar sm" style="background:${subjTheme(r.i).c}" aria-hidden="true">${escapeHTML(r.s.name.trim().charAt(0))}</span>
+        <span class="pop-item-main">
+          <span class="pop-item-name">${escapeHTML(r.s.name)}</span>
+          <span class="pop-item-meta">${r.bk} bunk${r.bk !== 1 ? 's' : ''} left · target ${r.tgt}%</span>
+          <span class="pop-item-note">${r.bk > 0
+            ? `You can miss ${r.bk} more class${r.bk !== 1 ? 'es' : ''} and stay at ${r.tgt}% or above.`
+            : `You're right at target — missing one more drops you below ${r.tgt}%.`}</span>
+        </span>
+        <span class="status-pill ${r.bk > 0 ? 'good' : 'warn'}">${r.p}%</span>
+      </button>`).join('')}</div>`
+    : `<div class="pop-empty"><img src="assets/cat-peek.svg" alt=""><span>Attend a few more classes and this list will fill up.</span></div>`}
+  `;
+
+  pop.hidden = false;
+  const wrap = pop.parentElement.getBoundingClientRect();
+  const c = card.getBoundingClientRect();
+  const w = Math.min(380, wrap.width);
+  let left = c.left - wrap.left + c.width / 2 - w / 2;
+  left = Math.max(0, Math.min(left, wrap.width - w));
+  pop.style.width = w + 'px';
+  pop.style.left = left + 'px';
+  pop.style.top = (c.bottom - wrap.top + 12) + 'px';
+  pop.style.setProperty('--caret-x', (c.left - wrap.left + c.width / 2 - left) + 'px');
+
+  safePopTrigger = card;
+  card.setAttribute('aria-expanded', 'true');
+  pop.querySelector('.pop-close')?.focus();
+}
+
+function closeSafeBunks(restoreFocus = true) {
+  const pop = document.getElementById('safe-pop');
+  if (!pop || pop.hidden) return;
+  pop.hidden = true;
+  const card = document.getElementById('safe-card');
+  card?.setAttribute('aria-expanded', 'false');
+  if (restoreFocus && safePopTrigger && document.body.contains(safePopTrigger)) safePopTrigger.focus();
+}
+
+// Read-only list of today's schedule; marking happens on Daily Classes.
 function renderHomeToday() {
   const box = document.getElementById('home-today');
   if (!box) return;
@@ -1112,38 +1146,18 @@ function renderHomeToday() {
     return;
   }
 
-  const dow = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d; })();
-  const breaks = timetable.filter(t => t.day === dow && t.isBreak).map(t => ({ period: t.period, startTime: t.startTime, endTime: t.endTime, subjectName: t.subjectName || 'Break', isBreak: true }));
-  const rows = [...classes, ...breaks].sort((a, b) => (a.period || 99) - (b.period || 99));
+  const statusPill = st => st === 'p' ? `<span class="status-pill good">${ic('check','ic-xs')} Present</span>`
+    : st === 'a' ? `<span class="status-pill danger">${ic('x','ic-xs')} Absent</span>`
+    : st === 'cancelled' ? '<span class="status-pill warn">Cancelled</span>'
+    : '<span class="status-pill neutral">Not marked</span>';
 
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-  const toMin = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
-  let nextFound = false;
-  const shown = rows.slice(0, 7);
-
-  box.innerHTML = `<div class="timeline">${shown.map(c => {
-    const s = c.isBreak ? null : subjects.find(x => x.id === c.subjectId);
+  const shown = classes.slice(0, 6);
+  box.innerHTML = `<div class="today-list">${shown.map(c => {
+    const s = subjects.find(x => x.id === c.subjectId);
     const name = s ? s.name : c.subjectName;
     const time = c.startTime || (c.isExtra ? 'Extra' : `P${c.period}`);
-    const range = c.startTime && c.endTime ? `${c.startTime}–${c.endTime}` : (c.isExtra ? 'Extra class' : `Period ${c.period}`);
-    let dot = 'idle', pill;
-    if (c.isBreak) { pill = '<span class="status-pill neutral">Break</span>'; dot = 'break'; }
-    else if (c.status === 'p') { pill = '<span class="status-pill good">✓ Present</span>'; dot = 'done'; }
-    else if (c.status === 'a') { pill = '<span class="status-pill danger">✗ Absent</span>'; dot = 'miss'; }
-    else if (c.status === 'cancelled') { pill = '<span class="status-pill warn">Cancelled</span>'; dot = 'idle'; }
-    else {
-      const st = toMin(c.startTime);
-      if (st !== null && st > nowMin) {
-        if (!nextFound) { nextFound = true; pill = '<span class="status-pill info">Next</span>'; dot = 'next'; }
-        else pill = '<span class="status-pill amber">Upcoming</span>';
-      } else pill = '<span class="status-pill neutral">Not marked</span>';
-    }
-    return `<div class="tl-row ${dot === 'next' ? 'is-next' : ''}">
-      <span class="tl-time">${escapeHTML(time)}</span>
-      <span class="tl-dot ${dot}">${dot === 'done' ? ic('check','ic-sm') : dot === 'miss' ? ic('x','ic-sm') : ''}</span>
-      <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span>${pill}<span class="tl-meta">${escapeHTML(range)}</span></span>
-    </div>`;
-  }).join('')}</div>${rows.length > shown.length ? `<div class="today-more">+${rows.length - shown.length} more</div>` : ''}`;
+    return `<div class="today-row"><span class="today-time">${escapeHTML(time)}</span><span class="today-name">${escapeHTML(name)}</span>${statusPill(c.status)}</div>`;
+  }).join('')}</div>${classes.length > shown.length ? `<div class="today-more">+${classes.length - shown.length} more</div>` : ''}`;
 }
  
 function renderVerdictCard(ov, atRisk, safeBunks) {
@@ -1174,25 +1188,66 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
 }
  
 // ══════════════════════════════════════════════════════
-//  STREAK (rendered as the daily check-in quick action)
+//  STREAK
 // ══════════════════════════════════════════════════════
 function renderStreak() {
   const today = new Date().toISOString().split('T')[0];
   const checked = lastCheck === today;
   const examDays = daysUntil(examDate);
-  const sub = examDate
-    ? `🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'inherit'}">${examDays}</strong> days`
-    : (streak > 0 ? `${streak} day${streak!==1?'s':''} straight` : 'Start your streak today.');
-
+ 
   document.getElementById('streak-row').innerHTML = `
-    <button class="qa-tile peach streak-card ${checked?'checked':''}" ${checked ? 'aria-disabled="true"' : 'onclick="checkIn()"'}>
-      <span class="qa-icon">${ic('fire-solid')}</span>
-      <span class="qa-label">${checked ? '✓ Checked in' : 'Daily Check-in'}</span>
-      <span class="qa-sub"><strong class="streak-num">🔥 ${streak}</strong>-day streak${examDate ? `<br>${sub}` : ''}</span>
-    </button>
+    <div class="streak-card">
+      <div class="streak-icon" aria-hidden="true">🔥</div>
+      <div class="streak-info">
+        <div class="streak-num">${streak}<small>day streak</small></div>
+        <div class="streak-lbl">${examDate ? `🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'inherit'}">${examDays}</strong> days` : (streak>0 ? 'checked in ' + streak + ' day' + (streak!==1?'s':'') + ' straight' : 'start your streak today')}</div>
+      </div>
+      <button class="checkin-btn ${checked?'checked':''}" ${checked ? 'disabled' : 'onclick="checkIn()"'}>
+        ${checked ? '✓ Checked in' : 'Check in 👀'}
+      </button>
+    </div>
   `;
 }
- 
+
+// ══════════════════════════════════════════════════════
+//  ACCOUNT MENU & THEME
+// ══════════════════════════════════════════════════════
+function renderProfile() {
+  const email = currentUser?.email || '';
+  const name = userFirstName() || (email ? email.split('@')[0] : 'Account');
+  const initial = (name || email || '?').charAt(0).toUpperCase();
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('user-avatar', initial); set('pm-avatar', initial);
+  set('profile-name', name); set('pm-name', name); set('user-email', email);
+}
+
+function toggleProfileMenu(force) {
+  const menu = document.getElementById('profile-menu');
+  const btn = document.getElementById('profile-btn');
+  if (!menu || !btn) return;
+  const open = typeof force === 'boolean' ? force : menu.hidden;
+  menu.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+}
+
+function applyThemeIcon() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  btn.innerHTML = ic(dark ? 'moon' : 'sun');
+  btn.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#15161F' : '#F6F5F0');
+}
+
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme !== 'dark';
+  if (dark) document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('bk_theme', dark ? 'dark' : 'light'); } catch (e) {}
+  applyThemeIcon();
+  if (currPage === 'timetable' && scannerState.activeTab === 'studio') renderStudioCanvas();
+}
+
 function checkIn() {
   const today = new Date().toISOString().split('T')[0];
   if (lastCheck !== today) {
@@ -1240,7 +1295,7 @@ function openCooked() {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s), col = pctColor(p, tgt);
     const status = p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : `💀 -${needed(s)} needed`;
     return `<div class="cooked-row">
-      <span class="cooked-dot" style="background:${COLORS[i%COLORS.length]}"></span>
+      <span class="cooked-dot" style="background:${subjTheme(i).c}"></span>
       <span class="subj-n">${escapeHTML(s.name)}</span>
       <span class="subj-p" style="color:${pctTextColor(p, tgt)}">${p}%</span>
       <span class="subj-s">${status}</span>
@@ -1567,7 +1622,7 @@ function updateSim() {
   const projPct = projTotal > 0 ? Math.round(s.present/projTotal*100) : 0;
   const drop = _sp - projPct;
   const safe = projPct >= tgt;
-  const bk_now = Math.max(0, Math.floor(s.present/tgt*100) - s.total);
+  const bk_now = Math.max(0, Math.floor(s.present*100/tgt) - s.total);
  
   if (plan === 0) {
     const remaining = (s.semTotal && s.semTotal > s.total) ? s.semTotal - s.total : null;
@@ -1919,6 +1974,8 @@ document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
+  if (!document.getElementById('safe-pop')?.hidden) { closeSafeBunks(); return; }
+  if (!document.getElementById('profile-menu')?.hidden) { toggleProfileMenu(false); document.getElementById('profile-btn')?.focus(); return; }
   const sidebar = document.getElementById('sidebar');
   if (sidebar.classList.contains('open')) { toggleSidebar(); return; }
   if (document.getElementById('cooked-overlay').classList.contains('show')) { closeCooked(); return; }
@@ -1927,6 +1984,15 @@ document.addEventListener('keydown', e => {
   if (open && open.id === 'tt-confirm-overlay') { closeTtConfirmModal(); return; }
   if (open) open.classList.remove('show');
 });
+
+document.addEventListener('click', e => {
+  const pop = document.getElementById('safe-pop');
+  if (pop && !pop.hidden && !pop.contains(e.target) && !e.target.closest('#safe-card')) closeSafeBunks(false);
+  const menu = document.getElementById('profile-menu');
+  if (menu && !menu.hidden && !e.target.closest('#profile')) toggleProfileMenu(false);
+});
+window.addEventListener('resize', () => closeSafeBunks(false));
+applyThemeIcon();
 
 // Setup drag and drop for timetable upload
 document.addEventListener('DOMContentLoaded', () => {
@@ -3038,7 +3104,7 @@ function renderTimetable() {
               }
 
               const th = subjTheme(subjIdx);
-              const accent = matchedSubj && !slot.isUncertain ? ` style="border-left-color:${th.c};background:linear-gradient(135deg,${th.bg},#fff 85%)"` : '';
+              const accent = matchedSubj && !slot.isUncertain ? ` style="border-left-color:${th.c};background:linear-gradient(135deg,${th.bg},var(--surface) 85%)"` : '';
               return `
                 <button class="tt-slot-card ${slot.isUncertain ? 'uncertain' : ''}"${accent} onclick="openEditSlotModal('${slot.id}')" title="Edit class">
                   <span class="tt-slot-top">

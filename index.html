@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google-site-verification" content="Ylj4ZEzMzvJr5QHzrJykHBRpF_MoIkcetgFTRNO_b64" />
 <meta name="theme-color" content="#F6F5F0">
+<script>try{if(localStorage.getItem('bk_theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
 <title>BunkKro — Can I bunk today?</title>
 <link rel="icon" type="image/png" href="/favicon.jpg">
 <link rel="icon" type="image/png" href="/favicon2.jpg">
@@ -71,6 +72,9 @@
     <symbol id="i-cal-solid" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h.5A2.5 2.5 0 0 1 21 6.5v12a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.5v-12A2.5 2.5 0 0 1 5.5 4H6V3a1 1 0 0 1 1-1Z"/><path d="M6.5 10.5h3v3h-3zM10.5 10.5h3v3h-3zM14.5 10.5h3v3h-3zM6.5 15h3v3h-3zM10.5 15h3v3h-3z" fill="#fff"/></symbol>
     <symbol id="i-plus-solid" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 7.5v9M7.5 12h9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></symbol>
     <symbol id="i-fire-solid" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2c1 3.5 5.5 5.5 5.5 11a5.5 5.5 0 0 1-11 0c0-2.2 1.1-3.8 2.2-5 0 2.2 1.1 3.3 2.2 3.3 0-3.3-1.1-6 1.1-9.3Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-cat" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14 5.2 5l6.6 4.2a11 11 0 0 1 8.4 0L26.8 5 26 14" fill="#fff"/><path d="M6 14a10.4 10.4 0 0 0 10 13.5A10.4 10.4 0 0 0 26 14" fill="#fff"/><path d="M11 17.5q1.5 1.5 3 0M18 17.5q1.5 1.5 3 0"/><path d="M15 21.2h2l-1 1.1Z" fill="currentColor" stroke-width="1.2"/></symbol>
   </defs>
 </svg>
@@ -86,7 +90,7 @@
 <!-- ══════ SIDEBAR ══════ -->
 <aside class="sidebar" id="sidebar" aria-label="Sidebar">
   <div class="logo">
-    <h1>bunkkro<svg class="logo-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3c.7 5 3 7.3 8 8-5 .7-7.3 3-8 8-.7-5-3-7.3-8-8 5-.7 7.3-3 8-8Z" fill="#F2B84B"/><path d="M19 1.5c.3 2 1.2 2.9 3 3.2-1.8.3-2.7 1.2-3 3.2-.3-2-1.2-2.9-3-3.2 1.8-.3 2.7-1.2 3-3.2Z" fill="#5FB07A"/></svg></h1>
+    <h1>bunk<span>kro</span><svg class="logo-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3c.7 5 3 7.3 8 8-5 .7-7.3 3-8 8-.7-5-3-7.3-8-8 5-.7 7.3-3 8-8Z" fill="#F2B84B"/><path d="M19 1.5c.3 2 1.2 2.9 3 3.2-1.8.3-2.7 1.2-3 3.2-.3-2-1.2-2.9-3-3.2 1.8-.3 2.7-1.2 3-3.2Z" fill="#5FB07A"/></svg></h1>
     <div class="logo-sub">can i bunk today?</div>
   </div>
   <nav aria-label="Main">
@@ -102,20 +106,6 @@
     <div class="nav-label">Subjects</div>
     <div id="nav-subjects"></div>
     <button class="nav-add" onclick="openAddModal()"><svg class="ic"><use href="#i-plus"/></svg> Add Subject</button>
-    <div class="nav-divider"></div>
-    <div class="target-row">
-      <label for="global-target"><svg class="ic"><use href="#i-target"/></svg> Global target</label>
-      <div class="target-wrap">
-        <input type="number" id="global-target" min="1" max="100" value="75" onchange="updateGlobalTarget(this.value)">
-        <span class="sym">%</span>
-      </div>
-    </div>
-    <div class="target-hint">default for all subjects</div>
-    <div class="user-row" id="user-row" style="display:none">
-      <span class="user-avatar" id="user-avatar" aria-hidden="true"></span>
-      <span class="user-email" id="user-email"></span>
-    </div>
-    <button class="logout-btn" id="logout-btn" onclick="handleLogout()" style="display:none"><svg class="ic"><use href="#i-logout"/></svg> Logout</button>
   </nav>
   <div class="wisdom-card">
     <div class="wisdom-title">Bunk Wisdom <svg class="wisdom-spark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c.8 5.6 3.4 8.2 9 9-5.6.8-8.2 3.4-9 9-.8-5.6-3.4-8.2-9-9 5.6-.8 8.2-3.4 9-9Z" fill="#F2C977"/></svg></div>
@@ -128,58 +118,74 @@
 <!-- ══════ MAIN ══════ -->
 <main class="main" id="main">
 
+  <!-- Top-right account controls -->
+  <header class="topbar">
+    <div class="top-controls">
+      <button class="icon-btn" id="theme-toggle" onclick="toggleTheme()" aria-label="Switch to dark theme" title="Switch theme"><svg class="ic"><use href="#i-sun"/></svg></button>
+      <div class="profile" id="profile">
+        <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()" aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu">
+          <span class="user-avatar" id="user-avatar" aria-hidden="true">?</span>
+          <span class="profile-name" id="profile-name">Account</span>
+          <svg class="ic ic-sm"><use href="#i-chevron-down"/></svg>
+        </button>
+        <div class="profile-menu" id="profile-menu" hidden>
+          <div class="pm-head">
+            <span class="user-avatar lg" id="pm-avatar" aria-hidden="true">?</span>
+            <div style="min-width:0"><div class="pm-name" id="pm-name">Account</div><div class="user-email" id="user-email"></div></div>
+          </div>
+          <div class="pm-row">
+            <label for="global-target"><svg class="ic ic-sm"><use href="#i-target"/></svg> Attendance target</label>
+            <div class="target-wrap">
+              <input type="number" id="global-target" min="1" max="100" value="75" onchange="updateGlobalTarget(this.value)">
+              <span class="sym">%</span>
+            </div>
+          </div>
+          <div class="pm-hint">Default for subjects without their own target.</div>
+          <button class="logout-btn" id="logout-btn" onclick="handleLogout()" style="display:none"><svg class="ic ic-sm"><use href="#i-logout"/></svg> Logout</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
   <!-- ░░ HOME ░░ -->
   <div class="page active" id="page-home">
-    <img class="page-leaf leaf-a" src="assets/leaf-sprig.svg" alt="">
-    <img class="page-leaf leaf-b" src="assets/leaf-sprig.svg" alt="">
     <div class="home-top">
       <div class="greet">
         <h2 id="home-head">Overview</h2>
         <p id="home-sub"></p>
       </div>
-      <div class="meadow-banner">
-        <img src="assets/banner-meadow.svg" alt="">
-        <p class="meadow-quote" id="home-quote"></p>
-      </div>
     </div>
 
-    <div class="stats-grid" id="stats-grid"></div>
+    <div class="stats-wrap">
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="popover" id="safe-pop" role="dialog" aria-labelledby="safe-pop-title" hidden></div>
+    </div>
     <div id="verdict-wrap"></div>
 
     <div class="dash-grid">
-      <section class="card">
-        <div class="card-title">Your Subjects <button class="link-btn" onclick="openAddModal()">Add subject <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></button></div>
-        <div class="subject-cards" id="subject-cards"></div>
-      </section>
-      <div class="dash-side">
-        <section class="card today-card">
-          <div class="card-title">Today's Classes <button class="link-btn" onclick="openTodayTracker()">Mark attendance <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></button></div>
-          <div id="home-today"></div>
-          <img class="today-deco" src="assets/books-plant.svg" alt="">
+      <div class="dash-col">
+        <section class="card">
+          <div class="card-title">Your subjects <span>tap one for details</span></div>
+          <div class="subject-cards" id="subject-cards"></div>
         </section>
         <section class="card">
-          <div class="card-title">Quick Actions</div>
-          <div class="quick-actions">
-            <button class="qa-tile green" onclick="openTodayTracker()"><span class="qa-icon"><svg class="ic"><use href="#i-cal-solid"/></svg></span><span class="qa-label">Mark Attendance</span><span class="qa-sub">Record today's classes.</span></button>
-            <button class="qa-tile lavender" onclick="openCooked()"><span class="qa-icon"><svg class="ic"><use href="#i-shield"/></svg></span><span class="qa-label">Am I Cooked?</span><span class="qa-sub">Check your bunk safety.</span></button>
-            <button class="qa-tile blue" onclick="openAddModal()"><span class="qa-icon"><svg class="ic"><use href="#i-plus-solid"/></svg></span><span class="qa-label">Add Subject</span><span class="qa-sub">Add a new subject.</span></button>
-            <div class="qa-slot" id="streak-row"></div>
+          <div class="card-title">Class history
+            <span class="chart-legend"><span><i style="background:var(--primary-soft)"></i>Present</span><span><i style="background:var(--absent-bar)"></i>Absent</span></span>
           </div>
+          <div class="bar-chart" id="bar-chart"></div>
         </section>
       </div>
-    </div>
-
-    <div class="two-col">
-      <section class="card">
-        <div class="card-title">Class history
-          <span class="chart-legend"><span><i style="background:var(--primary-soft)"></i>Present</span><span><i style="background:#F2B7B8"></i>Absent</span></span>
-        </div>
-        <div class="bar-chart" id="bar-chart"></div>
-      </section>
-      <section class="card">
-        <div class="card-title">Quick view <span>Attendance at a glance</span></div>
-        <div id="quick-view"></div>
-      </section>
+      <div class="dash-col">
+        <section class="card">
+          <div class="card-title">Today's classes <button class="link-btn" onclick="openTodayTracker()">Mark attendance <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></button></div>
+          <div id="home-today"></div>
+        </section>
+        <div class="streak-row" id="streak-row"></div>
+        <section class="card">
+          <div class="card-title">Quick view <span>attendance at a glance</span></div>
+          <div id="quick-view"></div>
+        </section>
+      </div>
     </div>
   </div>
 
@@ -623,7 +629,7 @@
 <div class="auth-overlay" id="auth-overlay">
   <div class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <div class="auth-art">
-      <div class="auth-art-logo">bunkkro<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3c.7 5 3 7.3 8 8-5 .7-7.3 3-8 8-.7-5-3-7.3-8-8 5-.7 7.3-3 8-8Z" fill="#F2B84B"/></svg></div>
+      <div class="auth-art-logo">bunk<span>kro</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3c.7 5 3 7.3 8 8-5 .7-7.3 3-8 8-.7-5-3-7.3-8-8 5-.7 7.3-3 8-8Z" fill="#F2B84B"/></svg></div>
       <p class="auth-art-quote">“Attend strategically,<br>not religiously.”</p>
       <img class="auth-art-cat" src="assets/cat-books.svg" alt="">
     </div>
