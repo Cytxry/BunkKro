@@ -156,11 +156,11 @@
         <h2 id="home-head">Overview</h2>
         <p id="home-sub"></p>
       </div>
+      <img class="greet-cat" src="assets/cat-laptop.svg" alt="">
     </div>
 
     <div class="stats-wrap">
       <div class="stats-grid" id="stats-grid"></div>
-      <div class="popover" id="safe-pop" role="dialog" aria-labelledby="safe-pop-title" data-width="340" hidden></div>
     </div>
     <div id="verdict-wrap"></div>
 
@@ -220,7 +220,7 @@
         <p class="circ-roast" id="sp-roast"></p>
         <div class="chips" id="sp-chips"></div>
       </div>
-      <img class="circ-illus" src="assets/cat-books.svg" alt="">
+      <img class="circ-illus" id="sp-cat" src="assets/cat-books.svg" alt="">
     </div>
 
     <div class="subj-grid">
@@ -620,7 +620,7 @@
 <!-- ══════ TIMETABLE OVERWRITE CONFIRMATION ══════ -->
 <div class="overlay" id="tt-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="tt-confirm-title">
   <div class="modal modal-center" style="max-width:420px">
-    <div class="modal-badge warn">⚠️</div>
+    <img class="modal-cat" src="assets/cat-worried.svg" alt="">
     <h2 id="tt-confirm-title">Replace existing timetable?</h2>
     <p class="sub">You already have a saved timetable. Scanning this image will replace your current weekly schedule.</p>
     <div class="modal-btns center">
@@ -675,10 +675,20 @@
     <div class="cooked-big" id="ck-emoji"></div>
     <div class="cooked-verdict" id="ck-verdict"></div>
     <div class="cooked-msg" id="ck-msg"></div>
-    <img class="cooked-cat" src="assets/cat-books.svg" alt="">
+    <img class="cooked-cat" id="ck-cat" src="assets/cat-books.svg" alt="">
     <div class="cooked-breakdown" id="ck-breakdown"></div>
-    <button class="cooked-share" onclick="shareVerdict()">📤 Share my verdict</button>
     <button class="cooked-close" onclick="closeCooked()">Close</button>
+  </div>
+</div>
+
+<!-- ══════ SAFE BUNKS DIALOG ══════ -->
+<div class="cooked-overlay" id="safe-overlay">
+  <div class="cooked-modal safe-modal" role="dialog" aria-modal="true" aria-labelledby="sb-title">
+    <img class="cooked-cat top" id="sb-cat" src="assets/cat-happy.svg" alt="">
+    <div class="cooked-verdict" id="sb-title"></div>
+    <div class="cooked-msg" id="sb-msg"></div>
+    <div class="cooked-breakdown" id="sb-breakdown"></div>
+    <button class="cooked-close" onclick="closeSafeBunks()">Close</button>
   </div>
 </div>
 
@@ -728,8 +738,11 @@
 <!-- ══════ ADD SUBJECT MODAL ══════ -->
 <div class="overlay" id="add-overlay" role="dialog" aria-modal="true" aria-labelledby="add-title">
   <div class="modal" style="max-width:460px">
-    <h2 id="add-title">Add subject ➕</h2>
-    <p class="sub">Fill what you know — you can edit anytime.</p>
+    <div class="modal-hero">
+      <div><h2 id="add-title">Add subject ➕</h2>
+      <p class="sub">Fill what you know — you can edit anytime.</p></div>
+      <img src="assets/cat-laptop.svg" alt="">
+    </div>
 
     <div class="modal-opts row">
       <button type="button" class="modal-opt" onclick="selAddMode('exact')" id="add-opt-exact">
@@ -781,7 +794,7 @@
 <!-- ══════ DELETE CONFIRMATION MODAL ══════ -->
 <div class="overlay" id="delete-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title">
   <div class="modal modal-center" style="max-width:400px">
-    <div class="modal-badge danger">🗑️</div>
+    <img class="modal-cat" src="assets/cat-worried.svg" alt="">
     <h2 id="delete-title">Delete subject?</h2>
     <p class="sub" id="delete-msg"></p>
     <div class="modal-btns center">

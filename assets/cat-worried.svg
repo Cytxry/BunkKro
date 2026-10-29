@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 140" role="img" aria-label="A worried cat hugging a book">
+  <g stroke="#343F83" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M106 124C130 126 134 104 120 98" fill="none" stroke-width="11"/>
+    <path d="M106 124C130 126 134 104 120 98" fill="none" stroke="#F6C99B" stroke-width="6"/>
+    <ellipse cx="80" cy="108" rx="32" ry="26" fill="#F6C99B"/>
+    <ellipse cx="66" cy="132" rx="11" ry="6" fill="#F6C99B"/>
+    <ellipse cx="94" cy="132" rx="11" ry="6" fill="#F6C99B"/>
+    <path d="M62 50L57 25L76 40Z" fill="#F6C99B"/>
+    <path d="M84 40L103 25L98 50Z" fill="#F6C99B"/>
+    <path d="M64 45L60 31L71 40Z" fill="#F4A6A6" stroke="none"/>
+    <path d="M89 40L100 31L96 45Z" fill="#F4A6A6" stroke="none"/>
+    <circle cx="80" cy="64" r="25" fill="#F6C99B"/>
+    <ellipse cx="80" cy="74" rx="13" ry="9" fill="#FFF6EC" stroke="none"/>
+    <path d="M63 53l8 3M97 53l-8 3" fill="none" stroke-width="2.2"/>
+    <circle cx="70" cy="63" r="4.5" fill="#343F83" stroke="none"/>
+    <circle cx="90" cy="63" r="4.5" fill="#343F83" stroke="none"/>
+    <path d="M78 70l2 2 2-2z" fill="#E58A8A" stroke-width="1.5"/>
+    <path d="M73 77q2-2 3.5 0t3.5 0 3.5 0 3.5 0" fill="none" stroke-width="2"/>
+    <rect x="56" y="92" width="48" height="34" rx="4" fill="#E59A8C" transform="rotate(-6 80 109)"/>
+    <path d="M62 101l34-3.5M63 108l20-2" stroke="#FFF8EC" stroke-width="2.5" fill="none" transform="rotate(-6 80 109)"/>
+    <ellipse cx="60" cy="96" rx="8" ry="6" fill="#F6C99B"/>
+    <ellipse cx="100" cy="92" rx="8" ry="6" fill="#F6C99B"/>
+    <path d="M112 40c4 6 6 10 6 13a6 6 0 0 1-12 0c0-3 2-7 6-13z" fill="#9FD0F2" stroke-width="2"/>
+  </g>
+  <circle cx="71.5" cy="61.5" r="1.5" fill="#fff"/>
+  <circle cx="91.5" cy="61.5" r="1.5" fill="#fff"/>
+  <ellipse cx="63" cy="72" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/>
+  <ellipse cx="97" cy="72" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/>
+  <g fill="#6574BE" font-family="DM Sans, Arial, sans-serif" font-weight="800">
+    <text x="28" y="44" font-size="16">!</text>
+    <text x="36" y="34" font-size="12">?</text>
+  </g>
+</svg>

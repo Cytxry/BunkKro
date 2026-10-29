@@ -120,7 +120,7 @@ strong{font-weight:700}
 /* ══════════════════════════════════════════
    BUTTONS
 ══════════════════════════════════════════ */
-.btn-pri,.save-btn,.auth-btn,.cooked-share{
+.btn-pri,.save-btn,.auth-btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
   background:var(--primary);color:#fff;border:1px solid var(--primary);
   font-weight:600;font-size:.875rem;line-height:1.2;
@@ -128,7 +128,7 @@ strong{font-weight:700}
   box-shadow:0 1px 0 rgba(255,255,255,.15) inset, 0 2px 6px rgba(69,85,165,.22);
   transition:background .15s,transform .1s,box-shadow .15s;
 }
-.btn-pri:hover,.save-btn:hover,.auth-btn:hover,.cooked-share:hover{background:var(--primary-deep);border-color:var(--primary-deep)}
+.btn-pri:hover,.save-btn:hover,.auth-btn:hover{background:var(--primary-deep);border-color:var(--primary-deep)}
 .btn-pri:active,.save-btn:active,.auth-btn:active{transform:translateY(1px)}
 .btn-pri:disabled,.save-btn:disabled,.auth-btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
 
@@ -343,6 +343,7 @@ nav{padding:4px 0 10px;flex:1 0 auto}
 .greet .wave{display:inline-block;transform-origin:70% 75%;animation:wave 1.8s ease-in-out .3s 1}
 @keyframes wave{0%,100%{transform:rotate(0)}20%{transform:rotate(16deg)}40%{transform:rotate(-8deg)}60%{transform:rotate(14deg)}80%{transform:rotate(-4deg)}}
 .greet p{font-size:1rem;color:var(--text2);margin-top:4px}
+.greet-cat{height:74px;width:auto;margin:-6px 0 -10px 14px;flex-shrink:0}
 
 .stats-wrap{position:relative}
 .stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:18px}
@@ -887,6 +888,13 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 /* Am I Cooked */
 .cooked-modal{max-width:480px;text-align:center;padding:30px;background:linear-gradient(180deg,var(--p-pink) 0,var(--surface) 190px)}
 .cooked-cat{width:120px;margin:-8px auto 4px}
+.cooked-cat.top{width:150px;margin:-6px auto 6px}
+.safe-modal{background:linear-gradient(180deg,var(--p-green) 0,var(--surface) 190px)}
+.safe-row{width:100%;border:none;font:inherit;color:inherit;text-align:left;cursor:pointer;transition:background .15s}
+.safe-row:hover{background:var(--selected)}
+.modal-cat{width:120px;margin:-6px auto 6px}
+.modal-hero{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.modal-hero img{width:96px;flex-shrink:0;margin:-8px -6px 0 0}
 .cooked-big{width:84px;height:84px;margin:0 auto 12px;border-radius:50%;background:var(--surface);border:3px solid var(--surface);box-shadow:0 6px 18px rgba(198,94,97,.18);display:flex;align-items:center;justify-content:center;font-size:2.8rem;line-height:1}
 .cooked-verdict{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
 .cooked-msg{font-size:.9375rem;color:var(--text2);line-height:1.6;margin-bottom:20px}
@@ -896,7 +904,6 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .cooked-row .subj-p{font-weight:800;font-size:.9375rem;font-variant-numeric:tabular-nums}
 .cooked-row .subj-s{font-size:.78rem;color:var(--text2);white-space:nowrap}
 .cooked-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.cooked-share{width:100%;padding:12px;font-size:.9375rem;margin-bottom:10px}
 .cooked-close{padding:9px 22px}
 
 /* ══════════════════════════════════════════
@@ -979,6 +986,7 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
   .icon-btn{width:42px;height:42px;box-shadow:none}
   .profile-btn{width:42px;height:42px;box-shadow:none}
   .home-top{margin:0 0 18px;padding-right:0;min-height:0}
+  .greet-cat{height:60px;margin-left:auto}
   .two-col{grid-template-columns:minmax(0,1fr)}
   .circ-section{flex-direction:column;text-align:center;gap:18px;padding:22px}
   .circ-info{width:100%}
@@ -1027,6 +1035,7 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
   .edit-grid .field[style*="span 2"]{grid-column:auto!important}
   .modal,.cooked-modal{padding:22px 18px;border-radius:20px}
   .modal-opts.row{flex-direction:column}
+  .modal-hero img{width:72px}
   .insp-evidence-grid{grid-template-columns:1fr}
   .ocr-phases-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tt-view-tabs{overflow-x:auto}

@@ -1003,7 +1003,7 @@ function renderHome() {
       <div class="sc-val" style="color:${pctTextColor(ov)}">${ov}<span class="unit">%</span></div>
       <div class="sc-sub">target: ${globalTarget}% · ${present}/${total} classes</div>
     </div>
-    <button class="sc tone-green" id="safe-card" onclick="openSafeBunks()" aria-haspopup="dialog" aria-expanded="false" aria-controls="safe-pop">
+    <button class="sc tone-green" id="safe-card" onclick="openSafeBunks()" aria-haspopup="dialog">
       <span class="sc-top"><span class="sc-chip green">${ic('coffee','ic-sm')}</span><span class="sc-lbl">Safe bunks</span><span class="sc-go">${ic('chevron-right','ic-sm')}</span></span>
       <span class="sc-val" style="color:${safeBunks>0?'var(--good)':'var(--danger)'}">${safeBunks}</span>
       <span class="sc-sub">${safeBunks>0?'go ahead, skip something':'you are cooked. attend.'}</span>
@@ -1066,7 +1066,7 @@ function renderHome() {
 // ══════════════════════════════════════════════════════
 //  ANCHORED POPOVERS (Safe Bunks, Streak calendar)
 // ══════════════════════════════════════════════════════
-const POPOVERS = { 'safe-pop': 'safe-card', 'streak-pop': 'streak-card' };
+const POPOVERS = { 'streak-pop': 'streak-card' };
 let popTrigger = null;
 
 function openPopover(popId, html) {
@@ -1113,42 +1113,44 @@ function closePopover(popId, restoreFocus = true) {
 function closeAllPopovers(restoreFocus = false) { Object.keys(POPOVERS).forEach(id => closePopover(id, restoreFocus)); }
 function anyPopoverOpen() { return Object.keys(POPOVERS).some(id => !document.getElementById(id)?.hidden); }
 
-// ── Safe Bunks: same source of truth as the card (bunkable()/getTarget()) ──
+// ── Safe Bunks dialog: same source of truth as the card (bunkable()/getTarget()) ──
 function openSafeBunks() {
-  if (!document.getElementById('safe-pop')?.hidden) { closePopover('safe-pop'); return; }
   const rows = subjects.map((s, i) => ({ s, i, p: pct(s), tgt: getTarget(s), bk: bunkable(s) }));
-  const noData = rows.filter(r => !(r.s.total > 0));
   const eligible = rows.filter(r => r.s.total > 0 && r.p >= r.tgt).sort((a, b) => b.bk - a.bk || b.p - a.p);
-  const below = rows.filter(r => r.s.total > 0 && r.p < r.tgt);
+  const below = rows.filter(r => r.s.total > 0 && r.p < r.tgt).length;
+  const noData = rows.filter(r => !(r.s.total > 0)).length;
   const total = rows.reduce((a, r) => a + r.bk, 0);
 
-  const list = eligible.map(r => `
-    <button class="pop-row" onclick="closePopover('safe-pop', false); goPage('subject','${r.s.id}')">
-      <span class="subj-avatar xs" style="background:${subjTheme(r.i).c}" aria-hidden="true">${escapeHTML(r.s.name.trim().charAt(0))}</span>
-      <span class="pop-row-main">
-        <span class="pop-row-name">${escapeHTML(r.s.name)}</span>
-        <span class="pop-row-note">${r.bk > 0
-          ? `<strong class="ok">${r.bk} bunk${r.bk !== 1 ? 's' : ''} left</strong> · target ${r.tgt}%`
-          : `<strong class="edge">At target</strong> · can't miss another`}</span>
-      </span>
-      <span class="status-pill ${r.bk > 0 ? 'good' : 'warn'}">${r.p}%</span>
+  let title, cls, cat;
+  if (total > 5) { title = `${total} safe bunks. Go touch grass.`; cls = 'var(--good)'; cat = 'cat-happy'; }
+  else if (total > 0) { title = `${total} safe bunk${total !== 1 ? 's' : ''}. Spend wisely.`; cls = 'var(--warn)'; cat = 'cat-laptop'; }
+  else { title = 'Zero safe bunks. Attend.'; cls = 'var(--danger)'; cat = 'cat-worried'; }
+
+  document.getElementById('sb-cat').src = `assets/${cat}.svg`;
+  document.getElementById('sb-title').innerHTML = `<span style="color:${cls}">${escapeHTML(title)}</span>`;
+  const extra = [below ? `${below} below target` : '', noData ? `${noData} with no classes yet` : ''].filter(Boolean).join(' · ');
+  document.getElementById('sb-msg').textContent = eligible.length
+    ? `Skip these and you still stay at or above each subject's target.${extra ? ` (${extra} — not listed.)` : ''}`
+    : `No subject has room to skip right now.${extra ? ` (${extra}.)` : ''} Attend a few to build a buffer.`;
+  document.getElementById('sb-breakdown').innerHTML = eligible.map(r => `
+    <button class="cooked-row safe-row" onclick="closeSafeBunks(); goPage('subject','${r.s.id}')">
+      <span class="cooked-dot" style="background:${subjTheme(r.i).c}"></span>
+      <span class="subj-n">${escapeHTML(r.s.name)}</span>
+      <span class="subj-p" style="color:${pctTextColor(r.p, r.tgt)}">${r.p}%</span>
+      <span class="subj-s">${r.bk > 0 ? `😎 ${r.bk} bunk${r.bk !== 1 ? 's' : ''} left` : `🤏 at ${r.tgt}% — none left`}</span>
     </button>`).join('');
 
-  const extra = [below.length ? `${below.length} below target` : '', noData.length ? `${noData.length} with no classes yet` : ''].filter(Boolean).join(' · ');
-
-  openPopover('safe-pop', `
-    <div class="pop-head">
-      <span class="pop-icon green">${ic('coffee','ic-sm')}</span>
-      <h3 id="safe-pop-title">Subjects you can bunk</h3>
-      <button class="pop-close" onclick="closePopover('safe-pop')" aria-label="Close">${ic('x','ic-sm')}</button>
-    </div>
-    <p class="pop-sub">${eligible.length ? 'Skip these and you still stay at or above each subject’s target.' : 'No subject has room to skip right now — attend to build a buffer.'}</p>
-    ${eligible.length ? `<div class="pop-list">${list}</div>` : `<div class="pop-empty"><img src="assets/cat-peek.svg" alt=""><span>No safe bunks yet.</span></div>`}
-    <div class="pop-foot">${total > 0 ? `<span>Total safe bunks</span><strong>${total}</strong>` : '<span>Total safe bunks</span><strong>0</strong>'}</div>
-    ${extra ? `<div class="pop-meta">${extra} — not listed</div>` : ''}
-  `);
+  safePopTrigger = document.activeElement;
+  document.getElementById('safe-overlay').classList.add('show');
+  document.querySelector('#safe-overlay .cooked-close')?.focus({ preventScroll: true });
 }
-function closeSafeBunks(restoreFocus = true) { closePopover('safe-pop', restoreFocus); }
+let safePopTrigger = null;
+function closeSafeBunks() {
+  const ov = document.getElementById('safe-overlay');
+  if (!ov || !ov.classList.contains('show')) return;
+  ov.classList.remove('show');
+  if (safePopTrigger && document.body.contains(safePopTrigger)) safePopTrigger.focus({ preventScroll: true });
+}
 
 // ── Check-in history ──
 // Existing storage only keeps `streak` + `lastCheck`. By construction of checkIn(),
@@ -1301,7 +1303,7 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
         <span class="verdict-title">${escapeHTML(title)}</span>
         <span class="verdict-sub">${escapeHTML(sub)}</span>
       </span>
-      <img class="verdict-illus" src="assets/cat-books.svg" alt="">
+      <img class="verdict-illus" src="assets/${cls === 'cooked' ? 'cat-worried' : cls === 'safe' ? 'cat-happy' : 'cat-books'}.svg" alt="">
       <span class="verdict-tap">Am I Cooked? ${ic('arrow-right','ic-sm')}</span>
     </button>`;
 }
@@ -1422,6 +1424,8 @@ function openCooked() {
   }
  
   document.getElementById('ck-emoji').textContent = emoji;
+  const ckCat = document.getElementById('ck-cat');
+  if (ckCat) ckCat.src = `assets/${atRisk.length > 0 ? 'cat-worried' : (safeBunks > 5 ? 'cat-happy' : 'cat-books')}.svg`;
   document.getElementById('ck-verdict').innerHTML = `<span style="${cls}">${verdict}</span>`;
   document.getElementById('ck-msg').textContent = msg;
   document.getElementById('ck-breakdown').innerHTML = subjects.map((s,i) => {
@@ -1438,17 +1442,6 @@ function openCooked() {
   document.getElementById('cooked-overlay').classList.add('show');
 }
 function closeCooked() { document.getElementById('cooked-overlay').classList.remove('show'); }
-function shareVerdict() {
-  const total = subjects.reduce((a,s)=>a+s.total,0);
-  const present = subjects.reduce((a,s)=>a+s.present,0);
-  const ov = total > 0 ? Math.round(present/total*100) : 0;
-  const safeBunks = subjects.reduce((a,s)=>a+bunkable(s),0);
-  const atRisk = subjects.filter(s=>pct(s)<getTarget(s)).length;
-  const text = `📊 BunkKro Report\nOverall: ${ov}%\nSafe Bunks: ${safeBunks}\nAt Risk: ${atRisk} subject${atRisk!==1?'s':''}\n${ov >= globalTarget ? '😎 Not cooked. Yet.' : '💀 Send help.'}\n\nbunkkro.app`;
-  if (navigator.share) { navigator.share({ text }); }
-  else if (navigator.clipboard) { navigator.clipboard.writeText(text); toast('Copied to clipboard. Paste and flex.'); }
-  else { toast('Share manually: ' + text.slice(0,50) + '...'); }
-}
  
 // ══════════════════════════════════════════════════════
 //  SUBJECT PAGE
@@ -1479,6 +1472,8 @@ function renderSubject(id, preserveSim) {
   const th = subjTheme(subjects.indexOf(s));
   const spIcon = document.getElementById('sp-icon');
   if (spIcon) { spIcon.innerHTML = ic(subjIcon(s.name)); spIcon.style.background = th.bg; spIcon.style.color = th.c; }
+  const spCat = document.getElementById('sp-cat');
+  if (spCat) spCat.src = `assets/${p >= tgt ? (bk > 3 ? 'cat-happy' : 'cat-laptop') : 'cat-worried'}.svg`;
   const hero = document.getElementById('sp-hero');
   if (hero) hero.style.setProperty('--hero-tint', th.bg);
 
@@ -2094,6 +2089,7 @@ renderAll();
 
 // close modals on overlay click
 document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
+document.getElementById('safe-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeSafeBunks(); });
 ['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
@@ -2112,6 +2108,7 @@ document.addEventListener('keydown', e => {
   if (!document.getElementById('profile-menu')?.hidden) { toggleProfileMenu(false); document.getElementById('profile-btn')?.focus(); return; }
   const sidebar = document.getElementById('sidebar');
   if (sidebar.classList.contains('open')) { toggleSidebar(); return; }
+  if (document.getElementById('safe-overlay').classList.contains('show')) { closeSafeBunks(); return; }
   if (document.getElementById('cooked-overlay').classList.contains('show')) { closeCooked(); return; }
   if (document.getElementById('cell-inspector-overlay').classList.contains('show')) { closeCellInspector(); return; }
   const open = [...document.querySelectorAll('.overlay.show')].pop();
@@ -3087,7 +3084,7 @@ function renderValidationReport() {
   if (allIssues.length === 0) {
     container.innerHTML = `
       <div class="empty">
-        <img class="empty-illus" src="assets/cat-books.svg" alt="">
+        <img class="empty-illus" src="assets/cat-happy.svg" alt="">
         <h3>All clear ✓</h3>
         <p>No layout conflicts, boundary disagreements or low-confidence text found in this scan.</p>
       </div>
@@ -3703,7 +3700,7 @@ function renderTracker() {
             <div class="daily-stat-box ${pendingCount === 0 ? 'green' : 'amber'}"><span class="ds-icon">${ic(pendingCount === 0 ? 'check' : 'clock','ic-sm')}</span><div><div class="daily-stat-val">${pendingCount}</div><div class="daily-stat-lbl">${pendingCount === 0 ? 'All done ✓' : 'Pending'}</div></div></div>
           </div>
         </div>
-        <img class="daily-summary-illus" src="assets/${allDone || isHoliday ? 'cat-books' : 'cat-peek'}.svg" alt="">
+        <img class="daily-summary-illus" src="assets/${isHoliday ? 'cat-books' : allDone ? 'cat-happy' : totalCount === 0 ? 'cat-books' : markedCount === 0 ? 'cat-peek' : 'cat-laptop'}.svg" alt="">
       </div>
     `;
   }
