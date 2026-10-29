@@ -941,7 +941,7 @@ function goPage(page, id) {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('mob-menu')?.setAttribute('aria-expanded', 'false');
   toggleProfileMenu(false);
-  closeSafeBunks(false);
+  closeAllPopovers();
   window.scrollTo(0, 0);
 }
 
@@ -969,7 +969,7 @@ function renderHome() {
   document.getElementById('home-head').innerHTML = `${greetings[gi]}${name ? ', ' + escapeHTML(name) : ''}! <span class="wave" aria-hidden="true">${waves[gi]}</span>`;
   document.getElementById('home-sub').textContent = now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
-  closeSafeBunks(false);
+  closeAllPopovers();
   renderHomeToday();
   renderStreak();
 
@@ -1063,67 +1063,186 @@ function renderHome() {
   }).join('');
 }
 
-// ── Safe Bunks popover (uses bunkable()/getTarget() so it always matches the card) ──
-let safePopTrigger = null;
-function openSafeBunks() {
-  const pop = document.getElementById('safe-pop');
-  const card = document.getElementById('safe-card');
-  if (!pop || !card) return;
-  if (!pop.hidden) { closeSafeBunks(); return; }
+// ══════════════════════════════════════════════════════
+//  ANCHORED POPOVERS (Safe Bunks, Streak calendar)
+// ══════════════════════════════════════════════════════
+const POPOVERS = { 'safe-pop': 'safe-card', 'streak-pop': 'streak-card' };
+let popTrigger = null;
 
-  const rows = subjects
-    .map((s, i) => ({ s, i, p: pct(s), tgt: getTarget(s), bk: bunkable(s) }))
-    .filter(r => r.s.total > 0 && r.p >= r.tgt)
-    .sort((a, b) => b.bk - a.bk || b.p - a.p);
-  const total = rows.reduce((a, r) => a + r.bk, 0);
-
-  pop.innerHTML = `
-    <div class="pop-head">
-      <span class="sc-chip green">${ic('coffee','ic-sm')}</span>
-      <h3 id="safe-pop-title">Subjects you can bunk</h3>
-      <button class="pop-close" onclick="closeSafeBunks()" aria-label="Close">${ic('x','ic-sm')}</button>
-    </div>
-    <p class="pop-sub">${rows.length
-      ? `You can safely skip <strong>${total}</strong> class${total !== 1 ? 'es' : ''} in total and still stay at or above each subject's target.`
-      : 'No subject is at or above its target right now, so there is nothing safe to skip.'}</p>
-    ${rows.length ? `<div class="pop-list">${rows.map(r => `
-      <button class="pop-item" onclick="closeSafeBunks(false); goPage('subject','${r.s.id}')">
-        <span class="subj-avatar sm" style="background:${subjTheme(r.i).c}" aria-hidden="true">${escapeHTML(r.s.name.trim().charAt(0))}</span>
-        <span class="pop-item-main">
-          <span class="pop-item-name">${escapeHTML(r.s.name)}</span>
-          <span class="pop-item-meta">${r.bk} bunk${r.bk !== 1 ? 's' : ''} left · target ${r.tgt}%</span>
-          <span class="pop-item-note">${r.bk > 0
-            ? `You can miss ${r.bk} more class${r.bk !== 1 ? 'es' : ''} and stay at ${r.tgt}% or above.`
-            : `You're right at target — missing one more drops you below ${r.tgt}%.`}</span>
-        </span>
-        <span class="status-pill ${r.bk > 0 ? 'good' : 'warn'}">${r.p}%</span>
-      </button>`).join('')}</div>`
-    : `<div class="pop-empty"><img src="assets/cat-peek.svg" alt=""><span>Attend a few more classes and this list will fill up.</span></div>`}
-  `;
-
+function openPopover(popId, html) {
+  Object.keys(POPOVERS).forEach(id => { if (id !== popId) closePopover(id, false); });
+  const pop = document.getElementById(popId);
+  const anchor = document.getElementById(POPOVERS[popId]);
+  if (!pop || !anchor) return;
+  pop.innerHTML = html;
   pop.hidden = false;
-  const wrap = pop.parentElement.getBoundingClientRect();
-  const c = card.getBoundingClientRect();
-  const w = Math.min(380, wrap.width);
-  let left = c.left - wrap.left + c.width / 2 - w / 2;
-  left = Math.max(0, Math.min(left, wrap.width - w));
-  pop.style.width = w + 'px';
-  pop.style.left = left + 'px';
-  pop.style.top = (c.bottom - wrap.top + 12) + 'px';
-  pop.style.setProperty('--caret-x', (c.left - wrap.left + c.width / 2 - left) + 'px');
-
-  safePopTrigger = card;
-  card.setAttribute('aria-expanded', 'true');
-  pop.querySelector('.pop-close')?.focus();
+  positionPopover(pop, anchor);
+  anchor.setAttribute('aria-expanded', 'true');
+  popTrigger = anchor;
+  pop.querySelector('.pop-close')?.focus({ preventScroll: true });
 }
 
-function closeSafeBunks(restoreFocus = true) {
-  const pop = document.getElementById('safe-pop');
+// Absolutely positioned inside its relative wrapper; flips above / clamps to stay on screen.
+function positionPopover(pop, anchor) {
+  const host = pop.offsetParent || pop.parentElement;
+  const h = host.getBoundingClientRect();
+  const a = anchor.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const margin = 12;
+  const w = Math.min(pop.dataset.width ? +pop.dataset.width : 340, vw - margin * 2);
+  pop.style.width = w + 'px';
+  let leftVp = a.left + a.width / 2 - w / 2;
+  leftVp = Math.max(margin, Math.min(leftVp, vw - margin - w));
+  const ph = pop.offsetHeight;
+  const below = window.innerHeight - a.bottom, above = a.top;
+  const flip = below < ph + 20 && above > below;
+  pop.classList.toggle('above', flip);
+  pop.style.left = (leftVp - h.left) + 'px';
+  pop.style.top = (flip ? a.top - h.top - ph - 10 : a.bottom - h.top + 10) + 'px';
+  pop.style.setProperty('--caret-x', Math.max(18, Math.min(w - 18, a.left + a.width / 2 - leftVp)) + 'px');
+}
+
+function closePopover(popId, restoreFocus = true) {
+  const pop = document.getElementById(popId);
   if (!pop || pop.hidden) return;
   pop.hidden = true;
-  const card = document.getElementById('safe-card');
-  card?.setAttribute('aria-expanded', 'false');
-  if (restoreFocus && safePopTrigger && document.body.contains(safePopTrigger)) safePopTrigger.focus();
+  const anchor = document.getElementById(POPOVERS[popId]);
+  anchor?.setAttribute('aria-expanded', 'false');
+  if (restoreFocus && anchor && document.body.contains(anchor)) anchor.focus({ preventScroll: true });
+}
+function closeAllPopovers(restoreFocus = false) { Object.keys(POPOVERS).forEach(id => closePopover(id, restoreFocus)); }
+function anyPopoverOpen() { return Object.keys(POPOVERS).some(id => !document.getElementById(id)?.hidden); }
+
+// ── Safe Bunks: same source of truth as the card (bunkable()/getTarget()) ──
+function openSafeBunks() {
+  if (!document.getElementById('safe-pop')?.hidden) { closePopover('safe-pop'); return; }
+  const rows = subjects.map((s, i) => ({ s, i, p: pct(s), tgt: getTarget(s), bk: bunkable(s) }));
+  const noData = rows.filter(r => !(r.s.total > 0));
+  const eligible = rows.filter(r => r.s.total > 0 && r.p >= r.tgt).sort((a, b) => b.bk - a.bk || b.p - a.p);
+  const below = rows.filter(r => r.s.total > 0 && r.p < r.tgt);
+  const total = rows.reduce((a, r) => a + r.bk, 0);
+
+  const list = eligible.map(r => `
+    <button class="pop-row" onclick="closePopover('safe-pop', false); goPage('subject','${r.s.id}')">
+      <span class="subj-avatar xs" style="background:${subjTheme(r.i).c}" aria-hidden="true">${escapeHTML(r.s.name.trim().charAt(0))}</span>
+      <span class="pop-row-main">
+        <span class="pop-row-name">${escapeHTML(r.s.name)}</span>
+        <span class="pop-row-note">${r.bk > 0
+          ? `<strong class="ok">${r.bk} bunk${r.bk !== 1 ? 's' : ''} left</strong> · target ${r.tgt}%`
+          : `<strong class="edge">At target</strong> · can't miss another`}</span>
+      </span>
+      <span class="status-pill ${r.bk > 0 ? 'good' : 'warn'}">${r.p}%</span>
+    </button>`).join('');
+
+  const extra = [below.length ? `${below.length} below target` : '', noData.length ? `${noData.length} with no classes yet` : ''].filter(Boolean).join(' · ');
+
+  openPopover('safe-pop', `
+    <div class="pop-head">
+      <span class="pop-icon green">${ic('coffee','ic-sm')}</span>
+      <h3 id="safe-pop-title">Subjects you can bunk</h3>
+      <button class="pop-close" onclick="closePopover('safe-pop')" aria-label="Close">${ic('x','ic-sm')}</button>
+    </div>
+    <p class="pop-sub">${eligible.length ? 'Skip these and you still stay at or above each subject’s target.' : 'No subject has room to skip right now — attend to build a buffer.'}</p>
+    ${eligible.length ? `<div class="pop-list">${list}</div>` : `<div class="pop-empty"><img src="assets/cat-peek.svg" alt=""><span>No safe bunks yet.</span></div>`}
+    <div class="pop-foot">${total > 0 ? `<span>Total safe bunks</span><strong>${total}</strong>` : '<span>Total safe bunks</span><strong>0</strong>'}</div>
+    ${extra ? `<div class="pop-meta">${extra} — not listed</div>` : ''}
+  `);
+}
+function closeSafeBunks(restoreFocus = true) { closePopover('safe-pop', restoreFocus); }
+
+// ── Check-in history ──
+// Existing storage only keeps `streak` + `lastCheck`. By construction of checkIn(),
+// a streak of N means N consecutive check-ins ending on lastCheck, so that range is
+// exact history. New check-ins are appended from here on (dates are UTC keys, as in checkIn).
+function utcDayKey(d) { return d.toISOString().split('T')[0]; }
+function shiftDayKey(key, n) { const d = new Date(key + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return utcDayKey(d); }
+function getCheckinHistory() {
+  let hist = null;
+  try { hist = JSON.parse(localStorage.getItem('bk_checkins') || 'null'); } catch (e) { hist = null; }
+  if (!Array.isArray(hist)) {
+    hist = [];
+    if (lastCheck && streak > 0) for (let i = 0; i < streak; i++) hist.push(shiftDayKey(lastCheck, -i));
+    try { localStorage.setItem('bk_checkins', JSON.stringify(hist)); } catch (e) {}
+  }
+  return [...new Set(hist.filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)))].sort();
+}
+function recordCheckin(key) {
+  const hist = getCheckinHistory();
+  if (!hist.includes(key)) hist.push(key);
+  try { localStorage.setItem('bk_checkins', JSON.stringify(hist.sort())); } catch (e) {}
+}
+function activeStreak() {
+  const today = utcDayKey(new Date());
+  return (lastCheck === today || lastCheck === shiftDayKey(today, -1)) ? streak : 0;
+}
+function bestStreak(hist) {
+  let best = 0, run = 0, prev = null;
+  hist.forEach(k => { run = prev && shiftDayKey(prev, 1) === k ? run + 1 : 1; best = Math.max(best, run); prev = k; });
+  return Math.max(best, activeStreak());
+}
+
+let calMonth = null; // { y, m }
+function openStreakCalendar(e) {
+  if (e && e.target.closest('.checkin-btn')) return;
+  if (!document.getElementById('streak-pop')?.hidden) { closePopover('streak-pop'); return; }
+  const now = new Date();
+  calMonth = { y: now.getFullYear(), m: now.getMonth() };
+  openPopover('streak-pop', streakCalendarHTML());
+}
+function shiftCalMonth(delta) {
+  const hist = getCheckinHistory();
+  const now = new Date();
+  const first = hist.length ? hist[0].split('-').map(Number) : [now.getFullYear(), now.getMonth() + 1];
+  const min = first[0] * 12 + (first[1] - 1), max = now.getFullYear() * 12 + now.getMonth();
+  const next = Math.max(min, Math.min(max, calMonth.y * 12 + calMonth.m + delta));
+  calMonth = { y: Math.floor(next / 12), m: next % 12 };
+  const pop = document.getElementById('streak-pop');
+  pop.innerHTML = streakCalendarHTML();
+  positionPopover(pop, document.getElementById('streak-card'));
+  pop.querySelector(delta < 0 ? '.cal-prev' : '.cal-next')?.focus({ preventScroll: true });
+}
+function streakCalendarHTML() {
+  const hist = getCheckinHistory();
+  const set = new Set(hist);
+  const cur = activeStreak(), best = bestStreak(hist);
+  const now = new Date();
+  const todayKey = utcDayKey(now);
+  const { y, m } = calMonth;
+  const first = hist.length ? hist[0].split('-').map(Number) : [now.getFullYear(), now.getMonth() + 1];
+  const atMin = y * 12 + m <= first[0] * 12 + (first[1] - 1);
+  const atMax = y * 12 + m >= now.getFullYear() * 12 + now.getMonth();
+  const daysIn = new Date(y, m + 1, 0).getDate();
+  const lead = (new Date(y, m, 1).getDay() + 6) % 7; // Monday-first
+  const pad = n => String(n).padStart(2, '0');
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<span class="cal-cell blank"></span>';
+  let monthCount = 0;
+  for (let d = 1; d <= daysIn; d++) {
+    const key = `${y}-${pad(m + 1)}-${pad(d)}`;
+    const hit = set.has(key);
+    if (hit) monthCount++;
+    const isToday = key === todayKey;
+    cells += `<span class="cal-cell${hit ? ' hit' : ''}${isToday ? ' today' : ''}" ${hit ? `title="Checked in"` : ''}>${hit ? `<span class="cal-flame" aria-hidden="true">${ic('fire-solid')}</span>` : ''}<span class="cal-d">${d}</span>${hit ? '<span class="sr-only">checked in</span>' : ''}</span>`;
+  }
+  const monthName = new Date(y, m, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  return `
+    <div class="pop-head">
+      <span class="pop-icon amber">${ic('fire-solid','ic-sm')}</span>
+      <h3 id="streak-pop-title">Your streak <span class="pop-count">${cur} day${cur !== 1 ? 's' : ''}</span></h3>
+      <button class="pop-close" onclick="closePopover('streak-pop')" aria-label="Close">${ic('x','ic-sm')}</button>
+    </div>
+    <div class="cal-head">
+      <button class="cal-nav cal-prev" onclick="shiftCalMonth(-1)" ${atMin ? 'disabled' : ''} aria-label="Previous month">${ic('chevron-left','ic-sm')}</button>
+      <span class="cal-month">${monthName}</span>
+      <button class="cal-nav cal-next" onclick="shiftCalMonth(1)" ${atMax ? 'disabled' : ''} aria-label="Next month">${ic('chevron-right','ic-sm')}</button>
+    </div>
+    <div class="cal-grid" role="grid" aria-label="${monthName} check-ins">
+      ${['M','T','W','T','F','S','S'].map(w => `<span class="cal-wd">${w}</span>`).join('')}
+      ${cells}
+    </div>
+    ${hist.length ? '' : '<p class="pop-meta">No check-ins recorded yet — tap “Check in” to start your streak.</p>'}
+    <div class="pop-foot"><span>Current <strong>${cur}</strong></span><span>Best <strong>${best}</strong></span><span>This month <strong>${monthCount}</strong></span></div>
+  `;
 }
 
 // Read-only list of today's schedule; marking happens on Daily Classes.
@@ -1194,15 +1313,18 @@ function renderStreak() {
   const today = new Date().toISOString().split('T')[0];
   const checked = lastCheck === today;
   const examDays = daysUntil(examDate);
- 
+  const cur = activeStreak();
+  closePopover('streak-pop', false);
+
   document.getElementById('streak-row').innerHTML = `
-    <div class="streak-card">
+    <div class="streak-card" id="streak-card" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-controls="streak-pop"
+         aria-label="View your check-in calendar" onclick="openStreakCalendar(event)" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();openStreakCalendar(event)}">
       <div class="streak-icon" aria-hidden="true">🔥</div>
       <div class="streak-info">
-        <div class="streak-num">${streak}<small>day streak</small></div>
-        <div class="streak-lbl">${examDate ? `🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'inherit'}">${examDays}</strong> days` : (streak>0 ? 'checked in ' + streak + ' day' + (streak!==1?'s':'') + ' straight' : 'start your streak today')}</div>
+        <div class="streak-num">${cur}<small>day streak</small></div>
+        <div class="streak-lbl">${examDate ? `🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'inherit'}">${examDays}</strong> days · ` : ''}<span class="streak-link">View calendar</span></div>
       </div>
-      <button class="checkin-btn ${checked?'checked':''}" ${checked ? 'disabled' : 'onclick="checkIn()"'}>
+      <button class="checkin-btn ${checked?'checked':''}" ${checked ? 'disabled' : 'onclick="event.stopPropagation(); checkIn()"'}>
         ${checked ? '✓ Checked in' : 'Check in 👀'}
       </button>
     </div>
@@ -1218,7 +1340,15 @@ function renderProfile() {
   const initial = (name || email || '?').charAt(0).toUpperCase();
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('user-avatar', initial); set('pm-avatar', initial);
-  set('profile-name', name); set('pm-name', name); set('user-email', email);
+  set('pm-name', name); set('user-email', email);
+  const pic = currentUser?.user_metadata?.avatar_url || currentUser?.user_metadata?.picture || '';
+  ['user-avatar', 'pm-avatar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.backgroundImage = pic ? `url("${encodeURI(pic)}")` : '';
+    el.classList.toggle('has-pic', !!pic);
+  });
+  document.getElementById('profile-btn')?.setAttribute('aria-label', `Account menu for ${name}`);
 }
 
 function toggleProfileMenu(force) {
@@ -1252,9 +1382,12 @@ function checkIn() {
   const today = new Date().toISOString().split('T')[0];
   if (lastCheck !== today) {
     const yesterday = new Date(Date.now()-864e5).toISOString().split('T')[0];
+    getCheckinHistory(); // seed from the pre-existing streak before it changes
     streak = lastCheck === yesterday ? streak + 1 : 1;
     lastCheck = today;
     savePrefs();
+    recordCheckin(today);
+    renderStreak();
   }
   openCooked();
 }
@@ -1974,7 +2107,8 @@ document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
-  if (!document.getElementById('safe-pop')?.hidden) { closeSafeBunks(); return; }
+  const openPop = Object.keys(POPOVERS).find(id => !document.getElementById(id)?.hidden);
+  if (openPop) { closePopover(openPop); return; }
   if (!document.getElementById('profile-menu')?.hidden) { toggleProfileMenu(false); document.getElementById('profile-btn')?.focus(); return; }
   const sidebar = document.getElementById('sidebar');
   if (sidebar.classList.contains('open')) { toggleSidebar(); return; }
@@ -1986,12 +2120,15 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('click', e => {
-  const pop = document.getElementById('safe-pop');
-  if (pop && !pop.hidden && !pop.contains(e.target) && !e.target.closest('#safe-card')) closeSafeBunks(false);
+  const path = e.composedPath();
+  Object.entries(POPOVERS).forEach(([popId, anchorId]) => {
+    const pop = document.getElementById(popId);
+    if (pop && !pop.hidden && !path.includes(pop) && !path.includes(document.getElementById(anchorId))) closePopover(popId, false);
+  });
   const menu = document.getElementById('profile-menu');
   if (menu && !menu.hidden && !e.target.closest('#profile')) toggleProfileMenu(false);
 });
-window.addEventListener('resize', () => closeSafeBunks(false));
+window.addEventListener('resize', () => closeAllPopovers());
 applyThemeIcon();
 
 // Setup drag and drop for timetable upload
