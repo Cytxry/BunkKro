@@ -691,7 +691,29 @@ function hideAuthMessages() {
 
 // NOT RELATED TO SUPABASE DOWN BELOW
 
-const COLORS = ['#4555A5','#C1643A','#3C8577','#A8508A','#43709C','#A97A1C','#6F5FB8','#5A8A44'];
+const COLORS = ['#4555A5','#3F7A4A','#C4652A','#2F6FB0','#B5475A','#7353B5','#2C7F7B','#A87414'];
+
+const SUBJ_THEMES = [
+  { c: '#4555A5', bg: '#E8EAF8' }, { c: '#3F7A4A', bg: '#E4F2E1' }, { c: '#C4652A', bg: '#FCEBDD' },
+  { c: '#2F6FB0', bg: '#E3EEF9' }, { c: '#B5475A', bg: '#F9E3E7' }, { c: '#7353B5', bg: '#EEE7F8' },
+  { c: '#2C7F7B', bg: '#DFF1EF' }, { c: '#A87414', bg: '#FBF0D6' },
+];
+function subjTheme(i) { return SUBJ_THEMES[((i % SUBJ_THEMES.length) + SUBJ_THEMES.length) % SUBJ_THEMES.length]; }
+
+// Decorative icon chosen from the subject name only.
+function subjIcon(name) {
+  const n = (name || '').toLowerCase();
+  if (/math|calc|algebra|statist|discrete|probab|numer/.test(n)) return 'calc';
+  if (/python|program|code|coding|java|c\+\+|software|web|algorithm|compiler|data struct|\bdsa\b|\boop/.test(n)) return 'code';
+  if (/science|physic|chem|bio|lab/.test(n)) return 'flask';
+  if (/network|internet|\bcn\b|cloud|web/.test(n)) return 'globe';
+  if (/database|dbms|sql|data base/.test(n)) return 'database';
+  if (/operating|\bos\b|system|architect|electronic|circuit|digital|micro/.test(n)) return 'cpu';
+  if (/english|language|literat|hindi|communic|writ|essay/.test(n)) return 'book';
+  if (/design|draw|art|graphic/.test(n)) return 'pen';
+  if (/econ|account|financ|business|manag|market/.test(n)) return 'chart';
+  return 'cap';
+}
 
 function ic(name, cls = '') {
   return `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
@@ -720,7 +742,7 @@ function dailyPick(list, offset = 0) {
 
 function renderWisdom() {
   const el = document.getElementById('wisdom-text');
-  if (el) el.textContent = dailyPick(WISDOM);
+  if (el) el.textContent = `"${dailyPick(WISDOM)}"`;
 }
  
 const ROASTS = {
@@ -888,10 +910,11 @@ function renderNav() {
   document.getElementById('nav-subjects').innerHTML = subjects.map((s, i) => {
     const p = pct(s), tgt = getTarget(s), risk = p < tgt;
     const active = currPage === 'subject' && currSubjId === s.id ? ' active' : '';
+    const st = pctStatus(p, tgt).cls;
     return `<button class="nav-item${active}" id="nav-s-${s.id}" onclick="goPage('subject','${s.id}')">
-      <span class="nav-dot" style="background:${COLORS[i%COLORS.length]}"></span>
+      <span class="nav-dot" style="background:${subjTheme(i).c}"></span>
       <span class="nav-text">${escapeHTML(s.name)}</span>
-      <span class="${risk ? 'nav-risk' : 'nav-safe'}">${p}%</span>
+      <span class="${risk ? 'nav-risk' : 'nav-safe'} nav-pct ${st}">${p}%</span>
     </button>`;
   }).join('');
   renderWisdom();
@@ -940,22 +963,30 @@ function openTodayTracker() {
 // ══════════════════════════════════════════════════════
 //  HOME
 // ══════════════════════════════════════════════════════
+function userFirstName() {
+  const m = currentUser?.user_metadata || {};
+  const full = (m.full_name || m.name || m.first_name || '').trim();
+  return full ? full.split(/\s+/)[0] : '';
+}
+
 function renderHome() {
   const now = new Date();
   const hr = now.getHours();
-  const greetings = ['Rise and Shine 🌅','Morning 🌤️','Afternoon 🌞','Evening ✨'];
-  const gi = hr < 6 ? 0 : hr < 12 ? 1 : hr < 18 ? 2 : 3;
-  document.getElementById('home-head').textContent = greetings[gi];
+  const greetings = ['Up late', 'Good morning', 'Good afternoon', 'Good evening'];
+  const waves = ['🌙', '🌤️', '👋', '👋'];
+  const gi = hr < 5 ? 0 : hr < 12 ? 1 : hr < 17 ? 2 : 3;
+  const name = userFirstName();
+  document.getElementById('home-head').innerHTML = `${greetings[gi]}${name ? ', ' + escapeHTML(name) : ''}! <span class="wave" aria-hidden="true">${waves[gi]}</span>`;
   document.getElementById('home-sub').textContent = now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const quoteEl = document.getElementById('home-quote');
-  if (quoteEl) quoteEl.textContent = dailyPick(WISDOM, 3);
+  if (quoteEl) quoteEl.textContent = `“${dailyPick(WISDOM, 3)}”`;
 
   renderHomeToday();
+  renderStreak();
 
   if (!subjects.length) {
     document.getElementById('stats-grid').innerHTML = '';
     document.getElementById('verdict-wrap').innerHTML = '';
-    document.getElementById('streak-row').innerHTML = '';
     document.getElementById('subject-cards').innerHTML = `
       <div class="empty">
         <img class="empty-illus" src="assets/cat-peek.svg" alt="">
@@ -967,7 +998,7 @@ function renderHome() {
     document.getElementById('quick-view').innerHTML = '<div class="empty" style="padding:20px"><p style="margin:0">Nothing to glance at yet.</p></div>';
     return;
   }
-
+ 
   const total = subjects.reduce((a,s)=>a+s.total,0);
   const present = subjects.reduce((a,s)=>a+s.present,0);
   const ov = total > 0 ? Math.round(present/total*100) : 0;
@@ -977,86 +1008,83 @@ function renderHome() {
   const hasBest = bestBunk && bunkable(bestBunk) > 0;
 
   const gap = ov - globalTarget;
-  const gapText = gap > 0 ? `${gap} point${gap!==1?'s':''} above your ${globalTarget}% target`
-    : gap === 0 ? `Exactly at your ${globalTarget}% target`
-    : `${-gap} point${gap!==-1?'s':''} below your ${globalTarget}% target`;
-  const ovStatus = pctStatus(ov, globalTarget);
+  const gapText = gap > 0 ? `${gap} percentage point${gap!==1?'s':''} above your target.`
+    : gap === 0 ? `Exactly at your target. Careful!`
+    : `${-gap} percentage point${gap!==-1?'s':''} below your target.`;
+  const ovPill = gap > 0 ? `<span class="trend-pill good">${ic('arrow-up','ic-sm')} Above target</span>`
+    : gap === 0 ? `<span class="trend-pill warn">On the line</span>`
+    : `<span class="trend-pill danger">${ic('arrow-down','ic-sm')} Below target</span>`;
+  const bestIdx = hasBest ? subjects.indexOf(bestBunk) : -1;
 
-  // Stats
   document.getElementById('stats-grid').innerHTML = `
     <div class="sc sc-overall">
-      <div class="sc-head"><span class="sc-icon indigo">${ic('trend')}</span><span class="sc-lbl">Overall attendance</span>
-        <span class="status-pill ${ovStatus.cls}" style="margin-left:auto">${ovStatus.label}</span></div>
+      <div class="sc-top">
+        <span class="sc-title">Overall Attendance <span class="sc-info" title="Present ÷ total classes across all subjects">${ic('info','ic-sm')}</span></span>
+        <span class="sc-chip blue">${ic('bars','ic-sm')}</span>
+      </div>
       <div class="sc-overall-row">
-        <div class="sc-val" style="color:${pctTextColor(ov)}">${ov}<span class="unit">%</span></div>
-        <div class="sc-sub" style="margin:0;text-align:right">${present} of ${total} classes</div>
+        <div class="sc-big">${ov}<span class="unit">%</span></div>
+        ${ovPill}
       </div>
-      <div class="progress" role="img" aria-label="Overall ${ov}% versus target ${globalTarget}%">
+      <div class="progress thick" role="img" aria-label="Overall ${ov}% versus target ${globalTarget}%">
         <div class="progress-fill" style="width:${Math.min(100,ov)}%;background:${pctColor(ov)}"></div>
-        <div class="progress-target" style="left:${Math.min(100,globalTarget)}%" data-label="${globalTarget}%"></div>
+        <div class="progress-target" style="left:${Math.min(100,globalTarget)}%"></div>
       </div>
-      <div class="sc-gap">${gapText}</div>
+      <div class="sc-foot"><span>${gapText}</span><span>Target: ${globalTarget}%</span></div>
     </div>
-    <div class="sc">
-      <div class="sc-head"><span class="sc-icon green">${ic('coffee')}</span><span class="sc-lbl">Safe bunks</span></div>
-      <div class="sc-val" style="color:${safeBunks>0?'var(--good)':'var(--danger)'}">${safeBunks}</div>
-      <div class="sc-sub">${safeBunks>0?'go ahead, skip something':'you are cooked. attend.'}</div>
+    <div class="sc sc-mini">
+      <div class="sc-top"><span class="sc-chip indigo">${ic('trend','ic-sm')}</span><span class="sc-title">Safe Bunks</span><span class="sc-orb green">${ic('coffee')}</span></div>
+      <div class="sc-big" style="color:${safeBunks>0?'var(--primary-deep)':'var(--danger)'}">${safeBunks}</div>
+      <div class="sc-sub">${safeBunks>0?'You can skip, responsibly.':'You are cooked. Attend.'}</div>
     </div>
-    <div class="sc">
-      <div class="sc-head"><span class="sc-icon pink">${ic('alert')}</span><span class="sc-lbl">At risk</span></div>
-      <div class="sc-val" style="color:${atRisk.length>0?'var(--danger)':'var(--good)'}">${atRisk.length}</div>
-      <div class="sc-sub">${atRisk.length>0?escapeHTML(atRisk.map(s=>s.name).join(', ')):'all subjects safe ✓'}</div>
+    <div class="sc sc-mini">
+      <div class="sc-top"><span class="sc-chip pink">${ic('alert','ic-sm')}</span><span class="sc-title">At Risk</span><span class="sc-orb amber">${ic('alert')}</span></div>
+      <div class="sc-big" style="color:${atRisk.length>0?'var(--danger)':'var(--good)'}">${atRisk.length}</div>
+      <div class="sc-sub">${atRisk.length>0?escapeHTML(atRisk.map(s=>s.name).join(', ')):'All subjects safe ✓'}</div>
     </div>
-    <div class="sc">
-      <div class="sc-head"><span class="sc-icon blue">${ic('star')}</span><span class="sc-lbl">Best to bunk</span></div>
-      <div class="sc-val sc-val-text" style="color:var(--info)" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</div>
-      <div class="sc-sub">${hasBest ? bunkable(bestBunk)+' bunks left' : 'nowhere is safe rn'}</div>
-    </div>
+    <${hasBest ? `button onclick="goPage('subject','${bestBunk.id}')"` : 'div'} class="sc sc-mini sc-best">
+      <div class="sc-top"><span class="sc-title">Best to Bunk</span><span class="sc-orb blue">${ic('layers')}</span></div>
+      <div class="sc-big sc-big-text" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</div>
+      <div class="sc-sub sc-sub-row"><span>${hasBest ? bunkable(bestBunk)+' bunk'+(bunkable(bestBunk)!==1?'s':'')+' left' : 'Nowhere is safe rn'}</span>${hasBest ? ic('chevron-right') : ''}</div>
+    </${hasBest ? 'button' : 'div'}>
   `;
-
-  // Verdict card
+ 
   renderVerdictCard(ov, atRisk, safeBunks);
-
-  // Streak
-  renderStreak();
-
-  // Subject cards
+ 
   document.getElementById('subject-cards').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s);
     const risk = p < tgt;
     const roast = getRoast(p, tgt);
-    const st = pctStatus(p, tgt);
+    const th = subjTheme(i);
     return `<button class="subj-card ${risk?'at-risk':'safe-zone'}" onclick="goPage('subject','${s.id}')">
-      <span class="subj-card-accent" style="background:${COLORS[i%COLORS.length]}" aria-hidden="true">${escapeHTML((s.name || '?').trim().charAt(0))}</span>
+      <span class="subj-icon" style="background:${th.bg};color:${th.c}" aria-hidden="true">${ic(subjIcon(s.name))}</span>
       <span class="subj-card-main">
-        <span class="subj-card-name" style="display:block">${escapeHTML(s.name)}</span>
-        <span class="subj-card-roast" style="display:block">${roast}</span>
-        <span class="subj-bar" style="display:block"><span class="subj-bar-fill" style="display:block;width:${Math.min(100,p)}%;background:${pctColor(p, tgt)}"></span><span class="subj-bar-target" style="left:${Math.min(100,tgt)}%" title="Target ${tgt}%"></span></span>
+        <span class="subj-card-name">${escapeHTML(s.name)}</span>
+        <span class="subj-card-roast">${roast}</span>
+        <span class="subj-bar"><span class="subj-bar-fill" style="width:${Math.min(100,p)}%;background:${pctColor(p, tgt)}"></span><span class="subj-bar-target" style="left:${Math.min(100,tgt)}%" title="Target ${tgt}%"></span></span>
       </span>
       <span class="subj-card-right">
         <span class="subj-card-pct" style="color:${pctTextColor(p, tgt)}">${p}%</span>
-        <span class="status-pill ${st.cls}">${st.label}</span>
-        <span class="subj-card-bunk">${bk>0?`${bk} bunks left`:`need ${needed(s)} more`}</span>
+        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:`need ${needed(s)} more`}</span>
       </span>
+      <span class="subj-chev">${ic('chevron-right')}</span>
     </button>`;
   }).join('');
-
-  // Bar chart
+ 
   const maxV = Math.max(...subjects.map(s=>s.total), 1);
   document.getElementById('bar-chart').innerHTML = subjects.map((s,i) => {
-    const ph = Math.round(s.present/maxV*120);
-    const ah = Math.round((s.total-s.present)/maxV*120);
+    const ph = Math.round(s.present/maxV*165);
+    const ah = Math.round((s.total-s.present)/maxV*165);
     return `<button class="bg" onclick="goPage('subject','${s.id}')" title="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent" aria-label="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent">
       <span class="bw"><span class="b p" style="height:${ph}px"></span><span class="b a" style="height:${ah}px"></span></span>
       <span class="bl">${escapeHTML(s.name)}</span>
     </button>`;
   }).join('');
-
-  // Quick view
+ 
   document.getElementById('quick-view').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s);
     return `<button class="qv-row" onclick="goPage('subject','${s.id}')">
-      <span class="qv-dot" style="background:${COLORS[i%COLORS.length]}"></span>
+      <span class="qv-dot" style="background:${subjTheme(i).c}"></span>
       <span class="qv-name">${escapeHTML(s.name)}</span>
       <span class="qv-bar"><span style="width:${Math.min(100,p)}%;background:${pctColor(p, tgt)}"></span></span>
       <span class="qv-pct" style="color:${pctTextColor(p, tgt)}">${p}%</span>
@@ -1064,14 +1092,14 @@ function renderHome() {
   }).join('');
 }
 
-// Read-only summary of today's schedule; marking happens on Daily Classes.
+// Read-only timeline of today's schedule; marking happens on Daily Classes.
 function renderHomeToday() {
   const box = document.getElementById('home-today');
   if (!box) return;
   const todayStr = getLocalDateString();
 
   if (dateExceptions[todayStr]?.type === 'holiday') {
-    box.innerHTML = `<div class="today-note"><img src="assets/cat-books.svg" alt=""><div><strong style="color:var(--text)">Holiday today 🏖️</strong><br>No classes count today. Enjoy!</div></div>`;
+    box.innerHTML = `<div class="today-note"><img src="assets/cat-books.svg" alt=""><div><strong>Holiday today 🏖️</strong><br>No classes count today. Enjoy!</div></div>`;
     return;
   }
 
@@ -1079,23 +1107,43 @@ function renderHomeToday() {
 
   if (!classes.length) {
     box.innerHTML = timetable.length
-      ? `<div class="today-note"><img src="assets/cat-books.svg" alt=""><div><strong style="color:var(--text)">No classes today</strong><br>Nap responsibly.</div></div>`
-      : `<div class="today-note"><img src="assets/cat-peek.svg" alt=""><div><strong style="color:var(--text)">No timetable yet</strong><br><button class="link-btn" style="padding:0" onclick="goPage('timetable')">Set up your weekly schedule</button></div></div>`;
+      ? `<div class="today-note"><img src="assets/cat-books.svg" alt=""><div><strong>No classes today</strong><br>Nap responsibly.</div></div>`
+      : `<div class="today-note"><img src="assets/cat-peek.svg" alt=""><div><strong>No timetable yet</strong><br><button class="link-btn" style="padding:0" onclick="goPage('timetable')">Set up your weekly schedule</button></div></div>`;
     return;
   }
 
-  const statusPill = st => st === 'p' ? '<span class="status-pill good">✓ Present</span>'
-    : st === 'a' ? '<span class="status-pill danger">✗ Absent</span>'
-    : st === 'cancelled' ? '<span class="status-pill warn">Cancelled</span>'
-    : '<span class="status-pill neutral">Not marked</span>';
+  const dow = (() => { const d = new Date().getDay(); return d === 0 ? 7 : d; })();
+  const breaks = timetable.filter(t => t.day === dow && t.isBreak).map(t => ({ period: t.period, startTime: t.startTime, endTime: t.endTime, subjectName: t.subjectName || 'Break', isBreak: true }));
+  const rows = [...classes, ...breaks].sort((a, b) => (a.period || 99) - (b.period || 99));
 
-  const shown = classes.slice(0, 6);
-  box.innerHTML = `<div class="today-list">${shown.map(c => {
-    const s = subjects.find(x => x.id === c.subjectId);
+  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+  const toMin = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+  let nextFound = false;
+  const shown = rows.slice(0, 7);
+
+  box.innerHTML = `<div class="timeline">${shown.map(c => {
+    const s = c.isBreak ? null : subjects.find(x => x.id === c.subjectId);
     const name = s ? s.name : c.subjectName;
     const time = c.startTime || (c.isExtra ? 'Extra' : `P${c.period}`);
-    return `<div class="today-row"><span class="today-time">${escapeHTML(time)}</span><span class="today-name">${escapeHTML(name)}</span>${statusPill(c.status)}</div>`;
-  }).join('')}</div>${classes.length > shown.length ? `<div class="today-more">+${classes.length - shown.length} more</div>` : ''}`;
+    const range = c.startTime && c.endTime ? `${c.startTime}–${c.endTime}` : (c.isExtra ? 'Extra class' : `Period ${c.period}`);
+    let dot = 'idle', pill;
+    if (c.isBreak) { pill = '<span class="status-pill neutral">Break</span>'; dot = 'break'; }
+    else if (c.status === 'p') { pill = '<span class="status-pill good">✓ Present</span>'; dot = 'done'; }
+    else if (c.status === 'a') { pill = '<span class="status-pill danger">✗ Absent</span>'; dot = 'miss'; }
+    else if (c.status === 'cancelled') { pill = '<span class="status-pill warn">Cancelled</span>'; dot = 'idle'; }
+    else {
+      const st = toMin(c.startTime);
+      if (st !== null && st > nowMin) {
+        if (!nextFound) { nextFound = true; pill = '<span class="status-pill info">Next</span>'; dot = 'next'; }
+        else pill = '<span class="status-pill amber">Upcoming</span>';
+      } else pill = '<span class="status-pill neutral">Not marked</span>';
+    }
+    return `<div class="tl-row ${dot === 'next' ? 'is-next' : ''}">
+      <span class="tl-time">${escapeHTML(time)}</span>
+      <span class="tl-dot ${dot}">${dot === 'done' ? ic('check','ic-sm') : dot === 'miss' ? ic('x','ic-sm') : ''}</span>
+      <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span>${pill}<span class="tl-meta">${escapeHTML(range)}</span></span>
+    </div>`;
+  }).join('')}</div>${rows.length > shown.length ? `<div class="today-more">+${rows.length - shown.length} more</div>` : ''}`;
 }
  
 function renderVerdictCard(ov, atRisk, safeBunks) {
@@ -1117,33 +1165,31 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
     <button class="verdict-card ${cls}" onclick="openCooked()">
       <span class="verdict-emoji" aria-hidden="true">${emoji}</span>
       <span class="verdict-body">
-        <span class="verdict-title" style="display:block">${escapeHTML(title)}</span>
-        <span class="verdict-sub" style="display:block">${escapeHTML(sub)}</span>
+        <span class="verdict-title">${escapeHTML(title)}</span>
+        <span class="verdict-sub">${escapeHTML(sub)}</span>
       </span>
-      <span class="verdict-tap">Am I Cooked? ${ic('chevron-right','ic-sm')}</span>
+      <img class="verdict-illus" src="assets/cat-books.svg" alt="">
+      <span class="verdict-tap">Am I Cooked? ${ic('arrow-right','ic-sm')}</span>
     </button>`;
 }
  
 // ══════════════════════════════════════════════════════
-//  STREAK
+//  STREAK (rendered as the daily check-in quick action)
 // ══════════════════════════════════════════════════════
 function renderStreak() {
   const today = new Date().toISOString().split('T')[0];
   const checked = lastCheck === today;
   const examDays = daysUntil(examDate);
- 
+  const sub = examDate
+    ? `🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'inherit'}">${examDays}</strong> days`
+    : (streak > 0 ? `${streak} day${streak!==1?'s':''} straight` : 'Start your streak today.');
+
   document.getElementById('streak-row').innerHTML = `
-    <div class="streak-card">
-      <div class="streak-icon" aria-hidden="true">🔥</div>
-      <div class="streak-info">
-        <div class="streak-num">${streak}<small>day streak</small></div>
-        <div class="streak-lbl">${streak>0 ? 'checked in ' + streak + ' day' + (streak!==1?'s':'') + ' straight' : 'start your streak today'}</div>
-        ${examDate ? `<div class="streak-sub">🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'var(--text)'}">${examDays}</strong> days</div>` : `<div class="streak-sub">${checked?'✓ Checked in today':'Check in before you bunk'}</div>`}
-      </div>
-      <button class="checkin-btn ${checked?'checked':''}" ${checked ? 'disabled' : 'onclick="checkIn()"'}>
-        ${checked ? '✓ Checked in' : 'Check in 👀'}
-      </button>
-    </div>
+    <button class="qa-tile peach streak-card ${checked?'checked':''}" ${checked ? 'aria-disabled="true"' : 'onclick="checkIn()"'}>
+      <span class="qa-icon">${ic('fire-solid')}</span>
+      <span class="qa-label">${checked ? '✓ Checked in' : 'Daily Check-in'}</span>
+      <span class="qa-sub"><strong class="streak-num">🔥 ${streak}</strong>-day streak${examDate ? `<br>${sub}` : ''}</span>
+    </button>
   `;
 }
  
@@ -1241,12 +1287,19 @@ function renderSubject(id, preserveSim) {
   document.getElementById('circ-pct').textContent = p + '%';
   document.getElementById('circ-pct').style.color = pctTextColor(p, tgt);
 
+  // Subject theme (decorative)
+  const th = subjTheme(subjects.indexOf(s));
+  const spIcon = document.getElementById('sp-icon');
+  if (spIcon) { spIcon.innerHTML = ic(subjIcon(s.name)); spIcon.style.background = th.bg; spIcon.style.color = th.c; }
+  const hero = document.getElementById('sp-hero');
+  if (hero) hero.style.setProperty('--hero-tint', th.bg);
+
   // Chips
   document.getElementById('sp-chips').innerHTML = `
-    <div class="chip"><label>Total</label><div class="cv">${s.total}</div></div>
-    <div class="chip"><label>Present</label><div class="cv" style="color:var(--good)">${s.present}</div></div>
-    <div class="chip"><label>Absent</label><div class="cv" style="color:var(--danger)">${s.total-s.present}</div></div>
-    <div class="chip"><label>Target</label><div class="cv" style="color:var(--primary-deep)">${tgt}%</div></div>
+    <div class="chip indigo"><label>${ic('calendar','ic-sm')} Total</label><div class="cv">${s.total}</div></div>
+    <div class="chip green"><label>${ic('check','ic-sm')} Present</label><div class="cv">${s.present}</div></div>
+    <div class="chip pink"><label>${ic('x','ic-sm')} Absent</label><div class="cv">${s.total-s.present}</div></div>
+    <div class="chip amber"><label>${ic('target','ic-sm')} Target</label><div class="cv">${tgt}%</div></div>
   `;
  
   // Advice
@@ -2960,6 +3013,7 @@ function renderTimetable() {
     html += `
       <tr>
         <td class="tt-day-cell">
+          <div class="tt-day-chip d${dayInfo.num}">${dayInfo.short}</div>
           <div class="tt-day-name">${dayInfo.name}</div>
           <div class="tt-day-count">${daySlots.filter(s=>!s.isBreak).length} classes</div>
         </td>
@@ -2983,14 +3037,15 @@ function renderTimetable() {
                 `;
               }
 
-              const accent = matchedSubj && !slot.isUncertain ? ` style="border-left-color:${COLORS[subjIdx % COLORS.length]}"` : '';
+              const th = subjTheme(subjIdx);
+              const accent = matchedSubj && !slot.isUncertain ? ` style="border-left-color:${th.c};background:linear-gradient(135deg,${th.bg},#fff 85%)"` : '';
               return `
                 <button class="tt-slot-card ${slot.isUncertain ? 'uncertain' : ''}"${accent} onclick="openEditSlotModal('${slot.id}')" title="Edit class">
                   <span class="tt-slot-top">
                     <span class="tt-slot-pnum">Period ${slot.period}</span>
                     <span class="tt-slot-time">${escapeHTML(timeDisplay)}</span>
                   </span>
-                  <span class="tt-slot-name" style="display:block">${escapeHTML(displayName)}</span>
+                  <span class="tt-slot-name"><span class="tt-slot-ic" style="color:${matchedSubj && !slot.isUncertain ? th.c : 'var(--muted)'}">${ic(subjIcon(displayName),'ic-sm')}</span>${escapeHTML(displayName)}</span>
                   ${slot.isUncertain ? '<span class="tt-slot-warn" style="display:block">⚠️ Review subject</span>' : ''}
                   ${matchedSubj ? `<span class="tt-slot-subjtag" style="display:block">✓ Linked to ${escapeHTML(matchedSubj.name)}</span>` : ''}
                 </button>
@@ -3422,31 +3477,30 @@ function renderTracker() {
   const progressPct = totalCount > 0 ? Math.round((markedCount / totalCount) * 100) : 0;
 
   if (summaryBox) {
+    const allDone = pendingCount === 0 && totalCount > 0;
+    const R = 46, C = 2 * Math.PI * R;
+    const headline = isHoliday ? 'Holiday mode 🏖️'
+      : totalCount === 0 ? 'Free day'
+      : allDone ? 'All done for the day! 🎉'
+      : markedCount === 0 ? 'Fresh day, fresh choices'
+      : 'Keep going, almost there';
     summaryBox.innerHTML = `
-      <div class="daily-summary-stats">
-        <div class="daily-stat-box">
-          <div class="daily-stat-val" style="color:var(--text)">${totalCount}</div>
-          <div class="daily-stat-lbl">Scheduled</div>
+      <div class="daily-summary-layout">
+        <div class="day-ring" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}" aria-label="Classes marked">
+          <svg viewBox="0 0 108 108" aria-hidden="true"><circle cx="54" cy="54" r="${R}" class="ring-bg"/><circle cx="54" cy="54" r="${R}" class="ring-fill" style="stroke:${allDone ? 'var(--good)' : 'var(--primary)'};stroke-dasharray:${C};stroke-dashoffset:${C - progressPct / 100 * C}"/></svg>
+          <div class="day-ring-label"><strong>${progressPct}%</strong><span>marked</span></div>
         </div>
-        <div class="daily-stat-box">
-          <div class="daily-stat-val" style="color:var(--good)">${presentCount}</div>
-          <div class="daily-stat-lbl">Present</div>
+        <div class="daily-summary-main">
+          <div class="daily-summary-head">${headline}</div>
+          <div class="daily-completion-text"><span>${markedCount} of ${totalCount} classes marked</span></div>
+          <div class="daily-summary-stats">
+            <div class="daily-stat-box indigo"><span class="ds-icon">${ic('calendar','ic-sm')}</span><div><div class="daily-stat-val">${totalCount}</div><div class="daily-stat-lbl">Scheduled</div></div></div>
+            <div class="daily-stat-box green"><span class="ds-icon">${ic('check','ic-sm')}</span><div><div class="daily-stat-val">${presentCount}</div><div class="daily-stat-lbl">Present</div></div></div>
+            <div class="daily-stat-box pink"><span class="ds-icon">${ic('x','ic-sm')}</span><div><div class="daily-stat-val">${absentCount}</div><div class="daily-stat-lbl">Absent</div></div></div>
+            <div class="daily-stat-box ${pendingCount === 0 ? 'green' : 'amber'}"><span class="ds-icon">${ic(pendingCount === 0 ? 'check' : 'clock','ic-sm')}</span><div><div class="daily-stat-val">${pendingCount}</div><div class="daily-stat-lbl">${pendingCount === 0 ? 'All done ✓' : 'Pending'}</div></div></div>
+          </div>
         </div>
-        <div class="daily-stat-box">
-          <div class="daily-stat-val" style="color:var(--danger)">${absentCount}</div>
-          <div class="daily-stat-lbl">Absent</div>
-        </div>
-        <div class="daily-stat-box">
-          <div class="daily-stat-val" style="color:${pendingCount === 0 ? 'var(--good)' : 'var(--warn)'}">${pendingCount}</div>
-          <div class="daily-stat-lbl">${pendingCount === 0 ? 'All done ✓' : 'Pending'}</div>
-        </div>
-      </div>
-      <div class="daily-prog-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progressPct}" aria-label="Classes marked">
-        <div class="daily-prog-fill" style="width:${progressPct}%${pendingCount === 0 && totalCount > 0 ? ';background:var(--good)' : ''}"></div>
-      </div>
-      <div class="daily-completion-text">
-        <span>${markedCount} of ${totalCount} classes marked</span>
-        <span>${progressPct}% complete</span>
+        <img class="daily-summary-illus" src="assets/${allDone || isHoliday ? 'cat-books' : 'cat-peek'}.svg" alt="">
       </div>
     `;
   }
@@ -3483,7 +3537,9 @@ function renderTracker() {
 
   // Render Daily Scheduled Class Cards
   content.innerHTML = allClasses.map((item, idx) => {
-    const s = subjects.find(x => x.id === item.subjectId);
+    const sIdx = subjects.findIndex(x => x.id === item.subjectId);
+    const s = sIdx >= 0 ? subjects[sIdx] : null;
+    const th = subjTheme(sIdx >= 0 ? sIdx : 0);
     const displayName = s ? s.name : item.subjectName;
     const timeDisplay = item.startTime ? (item.endTime ? `${item.startTime} - ${item.endTime}` : item.startTime) : '';
 
@@ -3494,6 +3550,7 @@ function renderTracker() {
 
     return `
       <div class="${cardClass}">
+        <span class="subj-icon dc-icon" style="background:${s ? th.bg : 'var(--surface2)'};color:${s ? th.c : 'var(--muted)'}" aria-hidden="true">${ic(subjIcon(displayName))}</span>
         <div class="daily-class-main">
           <div class="daily-class-meta">
             <span class="period-badge">${item.isExtra ? 'Extra' : `Period ${item.period}`}</span>
@@ -3501,7 +3558,7 @@ function renderTracker() {
             ${item.status === 'cancelled' ? '<span class="status-pill warn">Cancelled · no penalty</span>' : ''}
           </div>
           <div class="daily-class-name">${escapeHTML(displayName)}</div>
-          ${s ? `<div class="daily-class-stats">Attendance <strong style="color:${pctTextColor(pct(s))}">${pct(s)}%</strong> (${s.present}/${s.total}) · ${bunkable(s)} safe bunks</div>` : '<div class="daily-class-stats" style="color:var(--muted)">Unmapped subject</div>'}
+          ${s ? `<div class="daily-class-stats"><span class="dc-bar"><span style="width:${Math.min(100, pct(s))}%;background:${pctColor(pct(s))}"></span></span><strong style="color:${pctTextColor(pct(s))}">${pct(s)}%</strong> <span>(${s.present}/${s.total}) · ${bunkable(s)} safe bunks</span></div>` : '<div class="daily-class-stats" style="color:var(--muted)">Unmapped subject</div>'}
         </div>
         <div class="tracker-btns" role="group" aria-label="Attendance for ${escapeHTML(displayName)}">
           <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
@@ -3710,10 +3767,12 @@ function renderRecentHistory() {
 
     return `
       <button class="hist-row" onclick="onDateSelected('${d}')" title="View this day">
-        <span class="hist-date">${lbl} ${dateExceptions[d]?.type === 'holiday' ? '🏖️' : ''}</span>
-        <span class="hist-p">✓ ${p}</span>
-        <span class="hist-a">✗ ${a}</span>
-        ${c > 0 ? `<span class="hist-c">⊘ ${c}</span>` : ''}
+        <span class="hist-cal" aria-hidden="true"><b>${dateObj.getDate()}</b><i>${dateObj.toLocaleDateString('en-IN', { month: 'short' })}</i></span>
+        <span class="hist-date">${dateObj.toLocaleDateString('en-IN', { weekday: 'long' })} ${dateExceptions[d]?.type === 'holiday' ? '🏖️' : ''}</span>
+        <span class="hist-chip p">✓ ${p}</span>
+        <span class="hist-chip a">✗ ${a}</span>
+        ${c > 0 ? `<span class="hist-chip c">⊘ ${c}</span>` : ''}
+        ${ic('chevron-right','ic-sm')}
       </button>
     `;
   }).join('');
