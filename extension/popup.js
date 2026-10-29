@@ -155,7 +155,7 @@ function renderTodayClasses() {
       <div class="empty-state">
         <p style="font-size:32px;margin-bottom:8px">😴</p>
         <h3>No classes scheduled today</h3>
-        <p style="font-size:11px;color:#777">Open the full app to upload your timetable or view upcoming days.</p>
+        <p style="font-size:12px;color:#5E6375">Open the full app to upload your timetable or view upcoming days.</p>
       </div>
     `;
     summaryStats.textContent = '0 scheduled';
