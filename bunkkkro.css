@@ -564,6 +564,8 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .unmarked-nudge{display:flex;align-items:center;gap:10px;width:100%;margin-top:14px;padding:10px 12px;border-radius:12px;border:1px dashed var(--warn-line);background:var(--warn-bg);color:var(--warn);font:inherit;font-size:.84rem;text-align:left;cursor:pointer;transition:filter .15s}
 .unmarked-nudge:hover{filter:brightness(.97)}
 .unmarked-nudge strong{color:inherit}
+.tl-unlinked{display:flex;align-items:center;gap:10px;width:100%;margin-top:10px;padding:9px 12px;border-radius:12px;border:1px dashed var(--border2);background:var(--surface2);color:var(--text2);font:inherit;font-size:.84rem;text-align:left;cursor:pointer}
+.tl-unlinked:hover{border-color:var(--primary-soft);color:var(--primary-deep)}
 .unmarked-go{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-weight:700;white-space:nowrap}
 .tl-row.is-cancelled .tl-name{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--text2)}
 .today-more{font-size:.8125rem;color:var(--muted);padding-top:8px}

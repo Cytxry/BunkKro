@@ -1281,6 +1281,7 @@ function renderHome() {
   closeAllPopovers();
   renderHomeToday();
   renderStreak();
+  requestAnimationFrame(balanceHomeColumns);
 
   if (!subjects.length) {
     document.getElementById('stats-grid').innerHTML = '';
@@ -1583,6 +1584,25 @@ function renderUnmarkedNudge() {
     : '';
 }
 
+// Class history goes under whichever home column is shorter, so the two
+// columns end close together whether you have 3 subjects or 12.
+function balanceHomeColumns() {
+  const card = document.getElementById('history-card');
+  const cols = document.querySelectorAll('#page-home .dash-grid > .dash-col');
+  if (!card || cols.length < 2 || !document.getElementById('page-home').classList.contains('active')) return;
+  const [left, right] = cols;
+  if (getComputedStyle(left.parentElement).gridTemplateColumns.split(' ').length < 2) {
+    if (card.parentElement !== right) right.appendChild(card); // one column: history last
+    return;
+  }
+  const gap = 18;
+  const h = el => [...el.children].filter(c => c !== card).reduce((a, c) => a + c.offsetHeight + gap, 0);
+  const target = h(left) <= h(right) ? left : right;
+  if (card.parentElement !== target) target.appendChild(card);
+}
+let balanceTimer = null;
+window.addEventListener('resize', () => { clearTimeout(balanceTimer); balanceTimer = setTimeout(balanceHomeColumns, 120); });
+
 // Read-only list of today's schedule; marking happens on Daily Classes.
 function renderHomeToday() {
   renderUnmarkedNudge();
@@ -1611,7 +1631,14 @@ function renderHomeToday() {
   };
   const countable = classes.filter(isCountable);
   const marked = countable.filter(c => STATES[c.status]).length;
-  const shown = classes.slice(0, 6);
+  // Periods not linked to a subject can't be tracked: one line instead of a row each
+  const unlinked = classes.length - countable.length;
+  const linkLine = unlinked ? `<button class="tl-unlinked" onclick="openTodayTracker()">${ic('pen','ic-sm')}<span>${unlinked} class${unlinked !== 1 ? 'es' : ''} today ${unlinked !== 1 ? "aren't" : "isn't"} linked to a subject</span><span class="unmarked-go">Link ${ic('arrow-right','ic-xs')}</span></button>` : '';
+  if (!countable.length) {
+    box.innerHTML = `<div class="today-note"><img src="assets/cat-peek.svg" alt=""><div><strong>Nothing to mark yet</strong><br>Link today's periods to your subjects to track them.</div></div>${linkLine}`;
+    return;
+  }
+  const shown = countable.slice(0, 6);
   box.innerHTML = `${countable.length ? `<div class="tl-progress"><span class="tl-progress-bar"><span style="width:${Math.round(marked / countable.length * 100)}%"></span></span><span>${marked}/${countable.length} marked</span></div>` : ''}
   <ol class="timeline">${shown.map(c => {
     const s = subjects.find(x => x.id === c.subjectId);
@@ -1628,7 +1655,7 @@ function renderHomeToday() {
       <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span><span class="tl-time">${escapeHTML(time)}${c.isExtra && c.startTime ? ' · Extra' : ''}${c.isMakeup && c.startTime ? ' · Makeup' : ''}</span></span>
       <span class="tl-state">${st ? st.label : 'Not marked'}</span>
     </li>`;
-  }).join('')}</ol>${classes.length > shown.length ? `<div class="today-more">+${classes.length - shown.length} more</div>` : ''}`;
+  }).join('')}</ol>${countable.length > shown.length ? `<button class="today-more link-btn" onclick="openTodayTracker()">+${countable.length - shown.length} more today</button>` : ''}${linkLine}`;
 }
  
 function renderVerdictCard(ov, atRisk, safeBunks) {
