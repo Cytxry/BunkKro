@@ -176,6 +176,27 @@ strong{font-weight:700}
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235E6375' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 12px center;padding-right:38px
 }
+.field select,.mf select{cursor:pointer;font-weight:500}
+.field select:hover,.mf select:hover{border-color:var(--primary-soft)}
+/* The open list: browsers that support customizable selects (Chrome/Edge/Brave
+   135+) get the site's rounded, soft list; others keep their native one. */
+@supports (appearance: base-select) {
+  .field select,.mf select{appearance:base-select}
+  .field select::picker-icon,.mf select::picker-icon{display:none}
+  .field select::picker(select),.mf select::picker(select){
+    appearance:base-select;margin-top:6px;padding:6px;border:1px solid var(--border);border-radius:16px;
+    background:var(--surface);color:var(--text);box-shadow:0 14px 34px rgba(37,42,61,.16),0 2px 6px rgba(37,42,61,.06);
+    max-height:min(320px,60vh);scrollbar-width:thin;
+    transition:opacity .14s,translate .14s,display .14s allow-discrete,overlay .14s allow-discrete;opacity:0;translate:0 -4px
+  }
+  .field select:open::picker(select),.mf select:open::picker(select){opacity:1;translate:0 0}
+  @starting-style{ .field select:open::picker(select),.mf select:open::picker(select){opacity:0;translate:0 -4px} }
+  .field select option,.mf select option{padding:9px 12px;border-radius:10px;font-size:.92rem;font-weight:500;color:var(--text);cursor:pointer;gap:8px}
+  .field select option:hover,.mf select option:hover,.field select option:focus-visible,.mf select option:focus-visible{background:var(--surface2);outline:none}
+  .field select option:checked,.mf select option:checked{background:var(--selected);color:var(--primary-deep);font-weight:700}
+  .field select option::checkmark,.mf select option::checkmark{content:'✓';color:var(--primary);order:1;margin-left:auto}
+  .field select option:disabled,.mf select option:disabled{color:var(--muted)}
+}
 .field input:focus,.field select:focus,.mf input:focus,.mf select:focus,.auth-field input:focus{
   border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint)
 }
@@ -274,6 +295,15 @@ nav{padding:4px 0 10px;flex:1 0 auto}
 .wisdom-title{display:flex;align-items:center;gap:5px;font-size:.85rem;font-weight:800;color:var(--primary-deep)}
 .wisdom-spark{width:13px;height:13px}
 .wisdom-text{font-size:.78rem;color:var(--text-soft);line-height:1.35;margin-top:2px}
+/* short laptop screens: smaller cat, tighter text so the target stays in view */
+@media (max-height:780px) and (min-width:861px){
+  .logo{padding:18px 24px 8px}
+  .nav-label{padding-top:10px}
+  .sidebar-footer{padding:8px 14px 12px;gap:6px}
+  .wisdom-card{padding:7px 10px 7px 6px}
+  .wisdom-card img{width:46px}
+  .wisdom-text{font-size:.75rem;line-height:1.3}
+}
 .target-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 4px 0}
 .target-row label{display:inline-flex;align-items:center;gap:8px;font-size:.9rem;font-weight:600;color:var(--text-soft)}
 .target-row label .ic{color:var(--primary-soft)}
@@ -369,7 +399,9 @@ button.sc{cursor:pointer}
 button.sc:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
 button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shadow)}
 .sc-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.sc-lbl{font-size:.9rem;font-weight:700;color:var(--primary-deep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* labels may take two short lines next to the icon rather than be cut off */
+.sc-lbl{font-size:.9rem;font-weight:700;color:var(--primary-deep);line-height:1.15;min-width:0;overflow-wrap:break-word}
+.sc-top{min-height:34px}
 .sc-chip{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sc-chip.green{background:var(--p-green);color:var(--good)}
 .sc-chip.pink{background:var(--p-pink);color:var(--danger)}
@@ -549,13 +581,6 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .bl{font-size:.75rem;font-weight:500;color:var(--text2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* quick view */
-.qv-row{display:flex;align-items:center;gap:12px;padding:7px 8px;border-radius:10px;cursor:pointer;transition:background .15s;width:100%;background:none;border:none;font:inherit;text-align:left}
-.qv-row:hover{background:var(--surface2)}
-.qv-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.qv-name{flex:1;min-width:0;font-size:.9rem;font-weight:500;color:var(--text-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.qv-bar{width:40%;max-width:190px;height:7px;background:var(--track);border-radius:999px;overflow:hidden;flex-shrink:0}
-.qv-bar > span{display:block;height:100%;border-radius:999px}
-.qv-pct{font-size:.9rem;font-weight:700;min-width:42px;text-align:right;font-variant-numeric:tabular-nums}
 
 /* ══════════════════════════════════════════
    SUBJECT DETAIL
@@ -941,6 +966,8 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 }
 .cooked-overlay{z-index:500}
 .overlay.show,.cooked-overlay.show{display:flex}
+/* questions asked from inside another dialog sit on top of it */
+#ask-overlay{z-index:1060}
 .modal,.cooked-modal{
   background:linear-gradient(180deg,var(--modal-wash) 0,var(--surface) 130px);border:1px solid var(--border);border-radius:26px;box-shadow:var(--shadow-lg);
   padding:28px;max-width:500px;width:100%;max-height:92vh;overflow-y:auto;
@@ -1115,7 +1142,7 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
   .sc-top{gap:8px}
   .sc-chip{width:30px;height:30px;border-radius:9px}
   .sc-chip.soft{display:none}
-  .sc-lbl{font-size:.85rem;white-space:normal;line-height:1.15;overflow:visible}
+  .sc-lbl{font-size:.85rem}
   .sc-top{min-height:30px}
   .sc-val{font-size:1.8rem}
   .sc-val-text{font-size:1.3rem}
@@ -1152,6 +1179,12 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
   .b{width:11px}
 }
 
+@media (max-width:340px){
+  /* tiny phones: the decorative icons give their room to the labels;
+     every card keeps room for two lines so the numbers line up */
+  #stats-grid .sc-chip{display:none}
+  .sc-top{min-height:2.35em;align-items:flex-start}
+}
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }

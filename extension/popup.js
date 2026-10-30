@@ -266,7 +266,7 @@ function renderTodayClasses() {
 let marking = false; // ignore clicks while a mark is being saved (no double counting)
 async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
   if (!currentUser || !globalSession) {
-    alert('Session expired. Please open the app and login again.');
+    showExtMsg('Your session ended. Open BunkKro and log in again.');
     return;
   }
   if (marking) return;
@@ -337,10 +337,21 @@ async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
 
   } catch (err) {
     console.error('Mark attendance error:', err);
-    alert('Failed to update attendance: ' + err.message);
+    showExtMsg("Couldn't save that — check your connection and try again.");
   } finally {
     marking = false;
   }
+}
+
+// Inline message instead of a browser alert()
+let extMsgTimer = null;
+function showExtMsg(text) {
+  const el = document.getElementById('ext-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(extMsgTimer);
+  extMsgTimer = setTimeout(() => { el.hidden = true; }, 5000);
 }
 
 function show(section) {

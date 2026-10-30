@@ -172,12 +172,6 @@
           <div class="card-title">Your subjects <span>tap one for details</span></div>
           <div class="subject-cards" id="subject-cards"></div>
         </section>
-        <section class="card">
-          <div class="card-title">Class history
-            <span class="chart-legend"><span><i style="background:var(--primary-soft)"></i>Present</span><span><i style="background:var(--absent-bar)"></i>Absent</span></span>
-          </div>
-          <div class="bar-chart" id="bar-chart"></div>
-        </section>
       </div>
       <div class="dash-col">
         <section class="card">
@@ -189,8 +183,10 @@
           <div class="popover" id="streak-pop" role="dialog" aria-labelledby="streak-pop-title" data-width="300" hidden></div>
         </div>
         <section class="card">
-          <div class="card-title">Quick view <span>attendance at a glance</span></div>
-          <div id="quick-view"></div>
+          <div class="card-title">Class history
+            <span class="chart-legend"><span><i style="background:var(--primary-soft)"></i>Present</span><span><i style="background:var(--absent-bar)"></i>Absent</span></span>
+          </div>
+          <div class="bar-chart" id="bar-chart"></div>
         </section>
       </div>
     </div>
@@ -590,6 +586,23 @@
       <button class="btn-sec" onclick="closeSlotEditModal()">Cancel</button>
       <button class="btn-sec btn-danger" id="btn-delete-slot" onclick="deleteCurrentSlot()">Delete</button>
       <button class="btn-pri" onclick="saveSlotModal()">Save slot</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ IN-APP CONFIRM / QUESTION (replaces browser confirm/prompt) ══════ -->
+<div class="overlay" id="ask-overlay" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-msg">
+  <div class="modal modal-center" style="max-width:410px">
+    <img class="modal-cat" id="ask-cat" src="assets/cat-worried.svg" alt="">
+    <h2 id="ask-title"></h2>
+    <p class="sub" id="ask-msg"></p>
+    <div class="mf" id="ask-input-wrap" style="text-align:left" hidden>
+      <label for="ask-input" id="ask-input-label"></label>
+      <input type="text" id="ask-input" maxlength="80">
+    </div>
+    <div class="modal-btns">
+      <button class="btn-sec" id="ask-cancel" onclick="closeAsk(false)">Cancel</button>
+      <button class="btn-pri" id="ask-ok" onclick="closeAsk(true)">OK</button>
     </div>
   </div>
 </div>

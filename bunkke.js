@@ -599,7 +599,7 @@ window.location.reload();
 
 // Logout
 async function handleLogout() {
-  if (!confirm('Are you sure you want to logout?')) return;
+  if (!(await askDialog({ title: 'Log out?', message: "You'll need your email and password to log back in.", ok: 'Log out', cat: 'cat-books' }))) return;
   
   try {
     const { error } = await supabaseClient.auth.signOut();
@@ -726,20 +726,134 @@ function escapeHTML(str) {
 }
 
 const WISDOM = [
-  'Attend today so future you can nap guilt-free.',
-  'A bunk saved is a bunk earned.',
-  'The front row has the best Wi-Fi. Allegedly.',
-  'Proxy is temporary. Attendance records are forever.',
-  'Spend bunks like snacks: slowly, and only on the good days.',
-  'Monday you shows up so Friday you can vanish.',
-  'Never bunk the class right before the exam. Trust.',
-  'Two quiet weeks of attending = one peaceful bunk.',
+  "Attend today so future you can nap guilt-free.",
+  "A bunk saved is a bunk earned.",
+  "The front row has the best Wi-Fi. Allegedly.",
+  "Spend bunks like snacks: slowly, and only on the good days.",
+  "Monday you shows up so Friday you can vanish.",
+  "Never bunk the class right before the exam. Trust.",
+  "Two quiet weeks of attending = one peaceful bunk.",
+  "Bunk on a full tank, not on an empty one.",
+  "The best bunk is the one you planned, not the one you panicked into.",
+  "Check your numbers before you check out.",
+  "Bunks are a budget. Don't spend next month's today.",
+  "75% is the floor, not the goal.",
+  "Early on, every class is cheap. Later, every class is gold.",
+  "One bunk is a choice. Three in a row is a lifestyle.",
+  "Attend the boring lecture; that's where the exam questions hide.",
+  "Show up in week one and you'll have room to breathe in week ten.",
+  "Your future self is watching your attendance. Be nice to them.",
+  "The class you skip is always the one with the surprise quiz.",
+  "Save your bunks for fests, fevers and finals prep.",
+  "A good attendance streak is cheaper than a condonation form.",
+  "Being present is half the marks. Paying attention is the other half.",
+  "Skip a class, not a habit.",
+  "Weekends exist so weekdays don't have to be bunked.",
+  "The safest bunk is in a subject with room to spare.",
+  "Balance your bunks across subjects; don't drain one.",
+  "If you're at the limit, today is not the day.",
+  "A lab missed is a lab you'll have to beg for later.",
+  "Attendance is compound interest: small deposits, big peace.",
+  "Bunking the first class of the day is the easiest way to bunk them all.",
+  "Plan bunks around deadlines, not around moods.",
+  "Mark your attendance daily. Memory is a terrible accountant.",
+  "Track it today, thank yourself on results day.",
+  "Never trust 'sir won't take attendance today'.",
+  "Proxy is temporary. Attendance records are forever.",
+  "The register doesn't accept excuses, only signatures.",
+  "When in doubt, show up and sit at the back.",
+  "Half asleep in class still counts as present.",
+  "A surprise holiday is a free bunk. Don't waste one the day before.",
+  "Two hours of lab often counts twice. Bunk wisely.",
+  "Cancelled class? Free time. Rescheduled class? Not free time.",
+  "Ten focused minutes beat an hour of 'studying' with your phone.",
+  "Notes from class are worth twice the ones you borrow.",
+  "Ask the doubt now; the exam won't wait for you to ask later.",
+  "Revise on the same day and you'll learn it once, not thrice.",
+  "Sit near people who take notes. It's contagious.",
+  "Start the assignment the day it's given. Even one line counts.",
+  "Small daily wins beat heroic all-nighters.",
+  "Sleep is a study tool. Use it.",
+  "Past papers are the cheat code the syllabus forgot to hide.",
+  "Teach it to a friend and you'll never forget it.",
+  "A clean desk makes a calm mind. A messy one makes memes.",
+  "Write it down. Your brain is for thinking, not storing.",
+  "The syllabus is a map. Don't wander without it.",
+  "Pomodoro: 25 minutes of work, 5 of guilt-free scrolling.",
+  "Read the question twice, answer it once.",
+  "The night before the exam is for revision, not for learning.",
+  "Highlight less, understand more.",
+  "Hard topics get easier after the second try. Always.",
+  "Your best study spot is the one without your bed in it.",
+  "Group study works when there's a group and some study.",
+  "Exam week calm is built in week three.",
+  "Finish one chapter fully rather than five halfway.",
+  "Check the marking scheme. Effort goes where marks are.",
+  "Breaks are part of the plan, not a break from it.",
+  "Coffee helps. Planning helps more.",
+  "Progress, not perfection. Also, attendance.",
+  "Be the student your teachers remember for the right reasons.",
+  "You don't need motivation, you need a timetable.",
+  "Bad day? Show up anyway. Tomorrow you will be proud.",
+  "Discipline is choosing between what you want now and what you want most.",
+  "Your GPA doesn't define you, but it does open doors.",
+  "Every expert was once a confused first-year.",
+  "Drink water. Seriously. Brains are mostly water.",
+  "Stretch between lectures. Your back is also enrolled here.",
+  "Eat breakfast before the 9 AM. Hungry brains bunk.",
+  "Walk to class a little early. Late entries are louder than you think.",
+  "Compare yourself with last week's you, not the class topper.",
+  "It's okay to rest. It's not okay to vanish for a month.",
+  "Make a friend in every class. Notes are a love language.",
+  "Reply to the class group, but don't live in it.",
+  "Keep one small goal for today. Just one.",
+  "Consistency is boring, and boring works.",
+  "Nobody remembers the classes you attended. Only the exam you failed.",
+  "The semester is a marathon with surprise sprints.",
+  "Plan the week on Sunday, survive it on Monday.",
+  "Cats nap 16 hours a day and still never miss dinner. Prioritise.",
+  "Even cats show up for the important stuff (food).",
+  "Be like a cat: rest a lot, but land on your feet.",
+  "Curiosity didn't fail the cat. It topped the class.",
+  "A sleepy cat in class is still a cat in class.",
+  "Keep a buffer of 3–4 classes above target. Life happens.",
+  "Medical leave needs paperwork. Keep your prescriptions.",
+  "Find out if your college counts OD (on duty) as present.",
+  "Know your college's attendance rule: per subject or overall?",
+  "Labs, tutorials and theory may have separate attendance. Track each.",
+  "Screenshot your portal attendance every few weeks. Just in case.",
+  "If your portal and this app disagree, trust the portal and update here.",
+  "Holidays declared? Mark them so your numbers stay honest.",
+  "Extra class announced? Add it — it counts in your favour.",
+  "Your timetable changed? Fix it here before you forget.",
+  "Swap days happen. 'Saturday follows Monday' is a thing — mark it.",
+  "Exams coming up? Attendance shortfall is cheaper to fix now.",
+  "Best time to fix low attendance: last month. Next best: today.",
+  "Need 75%? Aim for 80% and sleep easier.",
+  "A sick day is not a bunk. Rest properly and come back stronger.",
+  "Leave a little room in every subject for emergencies.",
+  "Check in daily — your streak is a tiny reward for a big habit.",
+  "Share your timetable with classmates. Teamwork makes it work.",
+  "Missed a class? Get the notes the same day.",
+  "Being on time is attending twice: once in body, once in mind.",
+  "Some teachers mark attendance at the end. Stay till the end.",
+  "The last week can't fix your percentage. Too few classes left.",
+  "Your attendance today is a gift to your hall ticket.",
+  "Attendance can't buy marks, but low attendance can cost them.",
+  "Show up. Sit down. Take notes. Repeat. That's the whole secret.",
 ];
 
+// One line per day, walking through the whole list before any line repeats
+// (counted from a fixed date, so it doesn't jump back at New Year).
 function dailyPick(list, offset = 0) {
   const d = new Date();
-  const dayIndex = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
-  return list[(dayIndex + offset) % list.length];
+  const day = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(2024, 0, 1)) / 864e5);
+  // Step through with a stride coprime to the length so neighbouring days feel varied
+  const n = list.length;
+  let stride = 7;
+  const gcd = (a, b) => b ? gcd(b, a % b) : a;
+  while (gcd(stride, n) !== 1) stride++;
+  return list[(((day + offset) * stride) % n + n) % n];
 }
 
 function renderWisdom() {
@@ -1019,6 +1133,52 @@ function toast(msg, type = 'ok') {
 }
  
 // ══════════════════════════════════════════════════════
+//  IN-APP DIALOG — styled like the rest of the site, used instead of the
+//  browser's confirm()/prompt(). Resolves to true/false, or the typed text
+//  (null when cancelled) if `input` is given.
+// ══════════════════════════════════════════════════════
+let askResolve = null, askInput = false, askReturnFocus = null;
+function askDialog({ title, message = '', ok = 'OK', cancel = 'Cancel', danger = false, cat = 'cat-worried', input = null }) {
+  if (askResolve) closeAsk(false);
+  askInput = !!input;
+  askReturnFocus = document.activeElement;
+  document.getElementById('ask-title').textContent = title;
+  document.getElementById('ask-msg').textContent = message;
+  document.getElementById('ask-msg').hidden = !message;
+  document.getElementById('ask-cat').src = `assets/${cat}.svg`;
+  const okBtn = document.getElementById('ask-ok');
+  okBtn.textContent = ok;
+  okBtn.classList.toggle('danger', danger);
+  document.getElementById('ask-cancel').textContent = cancel;
+  const wrap = document.getElementById('ask-input-wrap');
+  const field = document.getElementById('ask-input');
+  wrap.hidden = !input;
+  if (input) {
+    document.getElementById('ask-input-label').textContent = input.label || '';
+    field.value = input.value || '';
+    field.placeholder = input.placeholder || '';
+  }
+  document.getElementById('ask-overlay').classList.add('show');
+  setTimeout(() => { if (input) { field.focus(); field.select(); } else okBtn.focus(); }, 30);
+  return new Promise(res => { askResolve = res; });
+}
+function closeAsk(confirmed) {
+  const ov = document.getElementById('ask-overlay');
+  if (!ov.classList.contains('show') && !askResolve) return;
+  let result = !!confirmed;
+  if (askInput) {
+    const v = document.getElementById('ask-input').value.trim();
+    if (confirmed && !v) { document.getElementById('ask-input').focus(); return; }
+    result = confirmed ? v : null;
+  }
+  ov.classList.remove('show');
+  const res = askResolve;
+  askResolve = null;
+  askReturnFocus?.focus?.();
+  res?.(result);
+}
+
+// ══════════════════════════════════════════════════════
 //  SIDEBAR
 // ══════════════════════════════════════════════════════
 function toggleSidebar() {
@@ -1119,7 +1279,6 @@ function renderHome() {
         </div>
       </div>`;
     document.getElementById('bar-chart').innerHTML = '<div class="empty" style="padding:20px;width:100%"><p style="margin:0">Your class history will show up here.</p></div>';
-    document.getElementById('quick-view').innerHTML = '<div class="empty" style="padding:20px"><p style="margin:0">Nothing to glance at yet.</p></div>';
     return;
   }
  
@@ -1134,7 +1293,7 @@ function renderHome() {
 
   document.getElementById('stats-grid').innerHTML = `
     <div class="sc tone-${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">
-      <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl" title="Overall attendance">Attendance</span></div>
+      <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl">Overall attendance</span></div>
       <div class="sc-val" style="color:${pctTextColor(ov)}">${ov}<span class="unit">%</span></div>
       <div class="sc-sub">target: ${globalTarget}% · ${present}/${total} classes</div>
     </div>
@@ -1184,16 +1343,6 @@ function renderHome() {
     return `<button class="bg" onclick="goPage('subject','${s.id}')" title="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent" aria-label="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent">
       <span class="bw"><span class="b p" style="height:${ph}px"></span><span class="b a" style="height:${ah}px"></span></span>
       <span class="bl">${escapeHTML(s.name)}</span>
-    </button>`;
-  }).join('');
- 
-  document.getElementById('quick-view').innerHTML = subjects.map((s,i) => {
-    const p = pct(s), tgt = getTarget(s);
-    return `<button class="qv-row" onclick="goPage('subject','${s.id}')">
-      <span class="qv-dot" style="background:${subjTheme(i).c}"></span>
-      <span class="qv-name">${escapeHTML(s.name)}</span>
-      <span class="qv-bar"><span style="width:${Math.min(100,p)}%;background:${subjFill(s)}"></span></span>
-      <span class="qv-pct" style="color:${subjTextColor(s)}">${subjPctText(s)}</span>
     </button>`;
   }).join('');
 }
@@ -2301,6 +2450,7 @@ renderAll();
 // close modals on overlay click
 document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
 document.getElementById('safe-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeSafeBunks(); });
+document.getElementById('ask-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeAsk(false); });
 ['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay','resched-overlay','dayswap-overlay','share-overlay'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
@@ -2313,7 +2463,9 @@ document.getElementById('safe-overlay').addEventListener('click', e => { if(e.ta
 });
 
 document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && askInput && e.target?.id === 'ask-input') { e.preventDefault(); closeAsk(true); return; }
   if (e.key !== 'Escape') return;
+  if (document.getElementById('ask-overlay').classList.contains('show')) { closeAsk(false); return; }
   const openPop = Object.keys(POPOVERS).find(id => !document.getElementById(id)?.hidden);
   if (openPop) { closePopover(openPop); return; }
   if (!document.getElementById('profile-menu')?.hidden) { toggleProfileMenu(false); document.getElementById('profile-btn')?.focus(); return; }
@@ -3144,7 +3296,7 @@ async function createSubjectFromInspector() {
   const nameInput = document.getElementById('insp-subject-name-input');
   const rawName = nameInput ? nameInput.value.trim() : '';
 
-  const subjName = prompt('Create new subject in BunkKro:', rawName || 'New Subject');
+  const subjName = await askDialog({ title: 'New subject', ok: 'Create subject', cat: 'cat-laptop', input: { label: 'Subject name', value: rawName || '', placeholder: 'e.g. Mathematics' } });
   if (!subjName) return;
 
   const ok = await addSubject({
@@ -4015,7 +4167,7 @@ function showPackResult(r) {
 async function confirmImportPack() {
   const p = importedPack;
   if (!p || !currentUser) return;
-  if (p.slots.length && timetable.length && !confirm('Replace your current weekly timetable with the imported one?')) return;
+  if (p.slots.length && timetable.length && !(await askDialog({ title: 'Replace your timetable?', message: 'Your current weekly timetable will be swapped for the imported one. Your attendance numbers stay as they are.', ok: 'Replace it', cat: 'cat-laptop' }))) return;
   const btn = document.getElementById('pack-import-btn');
   btn.disabled = true; btn.textContent = 'Importing…';
   try {
@@ -4169,7 +4321,7 @@ async function saveSlotModal() {
   if (startTime && endTime && endTime <= startTime) return slotError('The class has to end after it starts.', 'slot-end-time');
   if (!isBreak && !subjSelect && !subjNameInput) return slotError('Pick one of your subjects, or type the subject name.', 'slot-subject-select');
   const clash = timetable.find(x => x.id !== editingId && x.day === day && x.period === period);
-  if (clash && !confirm(`${DAYS_MAP.find(d => d.num === day).name} period ${period} already has ${ttSlotLabel(clash)}. Keep both?`)) return;
+  if (clash && !(await askDialog({ title: 'That period is taken', message: `${DAYS_MAP.find(d => d.num === day).name} period ${period} already has ${ttSlotLabel(clash)}. Keep both classes in that period?`, ok: 'Keep both', cancel: 'Go back', cat: 'cat-peek' }))) return;
   slotError('');
 
   let subjectName = isBreak ? 'Break' : (subjNameInput || 'Unassigned');
@@ -4236,8 +4388,8 @@ async function deleteCurrentSlot() {
   if (synced !== false) toast('Slot removed');
 }
 
-function confirmClearTimetable() {
-  if (!confirm('Are you sure you want to clear your entire weekly schedule?')) return;
+async function confirmClearTimetable() {
+  if (!(await askDialog({ title: 'Clear the whole timetable?', message: 'Every class in your weekly schedule will be removed. Your attendance numbers stay as they are.', ok: 'Clear timetable', danger: true }))) return;
   timetable = [];
   saveTimetableToStorageAndDB();
   renderTimetable();
@@ -4380,7 +4532,7 @@ async function toggleDateHoliday() {
     if (plan.makeups.length) parts.push(`${plan.makeups.length} makeup/planned class${plan.makeups.length !== 1 ? 'es' : ''}`);
     if (plan.follows) parts.push('the timetable swap');
     if (parts.length) {
-      if (!confirm(`This day has ${parts.join(' and ')}. Marking it a holiday will clear ${parts.length > 1 || marked.length + plan.makeups.length > 1 ? 'them' : 'it'}. Continue?`)) return;
+      if (!(await askDialog({ title: 'Make it a holiday?', message: `This day has ${parts.join(' and ')}. A holiday doesn't count, so ${parts.length > 1 || marked.length + plan.makeups.length > 1 ? 'they' : 'it'} will be cleared and your totals adjusted.`, ok: 'Mark as holiday', cat: 'cat-books' }))) return;
       if (!(await clearMarksForDate(date))) { toast('Could not clear marks for this day', 'err'); renderTracker(); return; }
     }
     dateExceptions[date] = { type: 'holiday', note: 'College Holiday' };
@@ -4495,7 +4647,7 @@ async function removeMakeup(date, id) {
   if (!m) return;
   const key = 'makeup_' + id;
   if (dailyPeriodLogs[date]?.[key]) {
-    if (!confirm('This class is already marked. Remove it and its mark?')) return;
+    if (!(await askDialog({ title: 'Remove this class?', message: "It's already marked, so the mark will be taken out of your totals too.", ok: 'Remove', danger: true }))) return;
     if (!(await removeMarks(date, [key]))) { toast('Could not remove the mark', 'err'); return; }
   }
   plan.makeups = plan.makeups.filter(x => x.id !== id);
@@ -4572,7 +4724,7 @@ function openDaySwap() {
   const dow = new Date(y, m - 1, d).getDay() || 7;
   const plan = getDayPlan(date);
   const sel = document.getElementById('dayswap-select');
-  sel.innerHTML = DAYS_MAP.map(x => `<option value="${x.num}">${x.num === dow ? `Its usual ${x.name} timetable` : `${x.name}'s timetable`}</option>`).join('');
+  sel.innerHTML = DAYS_MAP.map(x => `<option value="${x.num}">${x.num === dow ? `${x.name} (usual)` : `${x.name}'s timetable`}</option>`).join('');
   sel.value = String(plan.follows || dow);
   document.getElementById('dayswap-date').textContent = fmtDate(date);
   document.getElementById('dayswap-overlay').classList.add('show');
@@ -4589,7 +4741,7 @@ async function confirmDaySwap() {
   // Marks on the old schedule's classes would no longer show, so clear them first
   const markedScheduled = getScheduledClassesForDate(date).filter(c => c.status).map(c => c.slotId);
   if (markedScheduled.length) {
-    if (!confirm(`${markedScheduled.length} class${markedScheduled.length !== 1 ? 'es are' : ' is'} already marked on this day. Switching the timetable clears ${markedScheduled.length !== 1 ? 'those marks' : 'that mark'}. Continue?`)) return;
+    if (!(await askDialog({ title: 'Switch the timetable?', message: `${markedScheduled.length} class${markedScheduled.length !== 1 ? 'es are' : ' is'} already marked on this day. Switching clears ${markedScheduled.length !== 1 ? 'those marks' : 'that mark'} and adjusts your totals.`, ok: 'Switch', cat: 'cat-peek' }))) return;
     if (!(await removeMarks(date, markedScheduled))) { toast('Could not clear marks for this day', 'err'); return; }
   }
   plan.follows = follows;
