@@ -1,6 +1,6 @@
 console.log('[Content] Loaded');
 
-let lastSessionSent = null;
+let lastSessionSent; // undefined until the first check, null once cleared
 
 setInterval(checkSession, 2000);
 setTimeout(checkSession, 1000);
@@ -10,7 +10,15 @@ function checkSession() {
     const key = 'sb-mvlyeygitnnuksuxmcsy-auth-token';
     const raw = localStorage.getItem(key);
 
-    if (!raw) return;
+    // Logged out on the site: drop the extension's copy too
+    if (!raw) {
+      if (lastSessionSent !== null) {
+        chrome.runtime.sendMessage({ type: 'CLEAR_SESSION' }, () => {
+          if (!chrome.runtime.lastError) lastSessionSent = null;
+        });
+      }
+      return;
+    }
 
     const parsed = JSON.parse(raw);
 

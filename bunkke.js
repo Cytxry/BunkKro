@@ -96,19 +96,15 @@ let isAuthMode = 'login'; // 'login' or 'signup'
 async function initAuth() {
   try {
     // 🔥 listen for auth changes (this is the real source of truth)
+    // Supabase also fires this on token refresh and when the tab regains
+    // focus; showApp() only reloads data when the signed-in user changes.
     supabaseClient.auth.onAuthStateChange((event, session) => {
-      console.log('Auth change:', event, session);
-
       if (session) {
         currentUser = session.user;
-
-        // ✅ SAVE SESSION
         localStorage.setItem('sb-session', JSON.stringify(session));
-
-        console.log("✅ Stored session from listener");
-
-        showApp();
+        setTimeout(() => showApp(), 0);
       } else {
+        appLoadedFor = null;
         showAuthModal();
       }
     });
@@ -262,11 +258,13 @@ async function loadDailyPeriodLogs() {
       data.forEach(row => {
         if (!dailyPeriodLogs[row.date]) dailyPeriodLogs[row.date] = {};
         const key = row.entry_id || row.subject_id;
+        const isExtra = String(row.entry_id || '').startsWith('extra_');
         dailyPeriodLogs[row.date][key] = {
           status: row.status,
           subjectId: row.subject_id,
           periodIndex: row.period_index || 1,
-          entryId: row.entry_id
+          entryId: row.entry_id,
+          ...(isExtra ? { isExtra: true, extraName: subjects.find(x => x.id === row.subject_id)?.name || 'Extra Class' } : {})
         };
       });
       localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
@@ -442,6 +440,11 @@ async function deleteSubjectFromDB(subjectId) {
     if (error) throw error;
     
     subjects = subjects.filter(s => s.id !== subjectId);
+    // The DB unlinks its timetable rows itself (ON DELETE SET NULL); mirror that
+    // locally so the slots keep their name but stop pointing at a deleted subject.
+    let unlinked = false;
+    timetable.forEach(slot => { if (slot.subjectId === subjectId) { slot.subjectId = null; unlinked = true; } });
+    if (unlinked) localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
     
     renderAll();
     return true;
@@ -603,6 +606,7 @@ async function handleLogout() {
     
     console.log('✅ Logged out successfully');
     currentUser = null;
+    appLoadedFor = null;
     trackerLog = {};
     localStorage.removeItem('sb-session');
     
@@ -635,17 +639,26 @@ function showAuthModal() {
   toggleProfileMenu(false);
 }
 
-async function showApp() {
+let appLoadedFor = null;   // user id whose data is loaded
+let appLoading = null;     // in-flight load, shared by concurrent callers
+function showApp() {
   document.getElementById('auth-overlay').classList.remove('show');
   document.getElementById('logout-btn').style.display = 'flex';
   renderProfile();
+  const uid = currentUser?.id;
+  if (!uid) return Promise.resolve();
+  if (appLoadedFor === uid) return appLoading || Promise.resolve();
+  appLoadedFor = uid;
   selectedTrackerDate = getLocalDateString();
-  await loadSubjects();
-  await loadTimetable();
-  await loadDailyPeriodLogs();
-  await loadDateExceptions();
-  await loadTracker();
-  renderAll();
+  appLoading = (async () => {
+    await loadSubjects();
+    await loadTimetable();
+    await loadDailyPeriodLogs();
+    await loadDateExceptions();
+    await loadTracker();
+    renderAll();
+  })().finally(() => { appLoading = null; });
+  return appLoading;
 }
 
 
@@ -866,13 +879,17 @@ function savePrefs() {
 // ══════════════════════════════════════════════════════
 //  MATH UTILS
 // ══════════════════════════════════════════════════════
-function pct(s) { return s.total > 0 ? Math.round(s.present / s.total * 100) : 0; }
+// Rounded DOWN: 74.6% must read 74%, never 75%, or a 75% target would look
+// met when it isn't. Every "am I above target" check relies on this.
+function attPct(present, total) { return total > 0 ? Math.floor(present * 100 / total) : 0; }
+function pct(s) { return attPct(s.present, s.total); }
 function getTarget(s) { return s?.target || globalTarget; }
 // Integer-first ordering avoids float error (e.g. 29/50*100 = 57.999…).
 function bunkable(s) { return Math.max(0, Math.floor(s.present * 100 / getTarget(s)) - s.total); }
 function needed(s, tgt) {
   const t = tgt ?? getTarget(s);
   if (pct(s) >= t) return 0;
+  if (t >= 100) return Infinity; // one absence means 100% is out of reach
   return Math.max(0, Math.ceil((t * s.total - 100 * s.present) / (100 - t)));
 }
 function pctColor(p, tgt) {
@@ -937,7 +954,8 @@ function overallSeed() { return subjects.map(s => `${s.present}/${s.total}/${get
 // ══════════════════════════════════════════════════════
 function toast(msg, type = 'ok') {
   const t = document.getElementById('toast');
-  t.innerHTML = `<span>${type === 'ok' ? '✓' : '✕'}</span> ${msg}`;
+  t.innerHTML = `<span>${type === 'ok' ? '✓' : '✕'}</span> `;
+  t.append(String(msg)); // plain text: messages often contain subject names
   t.className = `toast show ${type}`;
   clearTimeout(t._t);
   t._t = setTimeout(() => t.classList.remove('show'), 2600);
@@ -1047,7 +1065,7 @@ function renderHome() {
  
   const total = subjects.reduce((a,s)=>a+s.total,0);
   const present = subjects.reduce((a,s)=>a+s.present,0);
-  const ov = total > 0 ? Math.round(present/total*100) : 0;
+  const ov = attPct(present, total);
   const safeBunks = subjects.reduce((a,s)=>a+bunkable(s),0);
   const atRisk = subjects.filter(s=>pct(s)<getTarget(s));
   const bestBunk = [...subjects].sort((a,b)=>bunkable(b)-bunkable(a))[0];
@@ -1093,7 +1111,7 @@ function renderHome() {
       <span class="subj-card-right">
         <span class="subj-card-pct" style="color:${pctTextColor(p, tgt)}">${p}%</span>
         <span class="status-pill ${st.cls}">${st.label}</span>
-        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:(risk?`need ${needed(s)} more`:'0 bunks left')}</span>
+        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:(risk?(isFinite(needed(s))?`need ${needed(s)} more`:'can\'t reach target'):'0 bunks left')}</span>
       </span>
       <span class="subj-chev">${ic('chevron-right','ic-sm')}</span>
     </button>`;
@@ -1466,7 +1484,7 @@ function openCooked() {
   if (!subjects.length) { toast('Add subjects first', 'err'); return; }
   const total = subjects.reduce((a,s)=>a+s.total,0);
   const present = subjects.reduce((a,s)=>a+s.present,0);
-  const ov = total > 0 ? Math.round(present/total*100) : 0;
+  const ov = attPct(present, total);
   const atRisk = subjects.filter(s=>pct(s)<getTarget(s));
   const safeBunks = subjects.reduce((a,s)=>a+bunkable(s),0);
  
@@ -1496,7 +1514,7 @@ function openCooked() {
   document.getElementById('ck-msg').textContent = msg;
   document.getElementById('ck-breakdown').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s), col = pctColor(p, tgt);
-    const status = p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : `💀 -${needed(s)} needed`;
+    const status = p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : (isFinite(needed(s)) ? `💀 -${needed(s)} needed` : '💀 out of reach');
     return `<div class="cooked-row">
       <span class="cooked-dot" style="background:${subjTheme(i).c}"></span>
       <span class="subj-n">${escapeHTML(s.name)}</span>
@@ -1557,11 +1575,13 @@ function renderSubject(id, preserveSim) {
     pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
     if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
     const wk = s.perWeek > 0 ? ` (~${(bk/s.perWeek).toFixed(1)} weeks worth)` : '';
-    advText = `You can skip <strong>${bk} more class${bk!==1?'es':''}</strong> in ${s.name} before hitting ${tgt}%${wk}. Space them out — don\'t bunk 2 in a row.`;
+    advText = `You can skip <strong>${bk} more class${bk!==1?'es':''}</strong> in ${escapeHTML(s.name)} before hitting ${tgt}%${wk}. Space them out — don\'t bunk 2 in a row.`;
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
     const wk = s.perWeek > 0 ? ` That's about ${Math.ceil(nd/s.perWeek)} weeks of showing up.` : '';
-    advText = `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk} No bunks. None. Zero. Go.`;
+    advText = isFinite(nd)
+      ? `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk} No bunks. None. Zero. Go.`
+      : `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`;
   } else {
     pills = `<span class="pill w">⚠️ Exactly at ${tgt}%</span>`;
     advText = `Literally one absence away from danger. Attend <strong>3–4 more</strong> to build buffer before even thinking about bunking.`;
@@ -1589,7 +1609,7 @@ function fillEditForm(s) {
   const nameFieldHTML = `
     <div class="field" id="edit-name-field" style="margin-bottom:14px;margin-top:14px">
       <label>Subject Name</label>
-      <input type="text" id="inp-subject-name" placeholder="e.g. Mathematics" value="${s.name}">
+      <input type="text" id="inp-subject-name" placeholder="e.g. Mathematics" value="${escapeHTML(s.name)}">
     </div>
   `;
   if (editCardTitle) {
@@ -1681,27 +1701,27 @@ async function saveSubject() {
   
   if (editMode === 'estimate') {
     const pw = Math.max(1, parseInt(document.getElementById('inp-est-pw').value)||s.perWeek||3);
-    const absent = parseInt(document.getElementById('inp-est-absent').value)||0;
+    const absent = Math.max(0, parseInt(document.getElementById('inp-est-absent').value)||0);
     const tRaw = document.getElementById('inp-est-target').value;
     const newSem = document.getElementById('inp-semstart').value;
     if (newSem) { semStart = newSem; savePrefs(); }
 
     const semTotalRaw = document.getElementById('inp-est-semtotal').value;
-    const semTotalVal = semTotalRaw ? parseInt(semTotalRaw) : null;
+    const semTotalVal = semTotalRaw ? (Math.max(0, parseInt(semTotalRaw)) || null) : null;
 
     const total = estimateTotal(pw);
 
     s.total = total; 
     s.present = Math.max(0, total-absent);
     s.perWeek = pw; 
-    s.target = tRaw ? Math.max(1,Math.min(100,parseInt(tRaw))) : null;
+    s.target = tRaw ? Math.max(1,Math.min(100,parseInt(tRaw)||globalTarget)) : null;
     s.semTotal = semTotalVal;
     s.mode = 'estimate';
 
   } else {
-    const t = parseInt(document.getElementById('inp-total').value)||0;
-    const pr = parseInt(document.getElementById('inp-present').value)||0;
-    const pw = parseInt(document.getElementById('inp-perweek').value)||0;
+    const t = Math.max(0, parseInt(document.getElementById('inp-total').value)||0);
+    const pr = Math.max(0, parseInt(document.getElementById('inp-present').value)||0);
+    const pw = Math.max(0, parseInt(document.getElementById('inp-perweek').value)||0);
     const tRaw = document.getElementById('inp-target').value;
 
     s.total = t; 
@@ -1813,7 +1833,7 @@ function updateSim() {
   const tgt = _st, pw = s.perWeek||0;
   const plan = Math.max(0, parseInt(document.getElementById('sim-input').value)||0);
   const projTotal = s.total + plan;
-  const projPct = projTotal > 0 ? Math.round(s.present/projTotal*100) : 0;
+  const projPct = attPct(s.present, projTotal);
   const drop = _sp - projPct;
   const safe = projPct >= tgt;
   const bk_now = Math.max(0, Math.floor(s.present*100/tgt) - s.total);
@@ -1825,7 +1845,7 @@ function updateSim() {
       : 'Zero safe bunks. Right at the limit.';
     if (remaining !== null) {
       const projEndTotal = s.total + remaining;
-      const projEndPct = projEndTotal > 0 ? Math.round(s.present / projEndTotal * 100) : 0;
+      const projEndPct = attPct(s.present, projEndTotal);
       h += ' If you attend all <strong>' + remaining + '</strong> remaining classes, you end the semester at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
     }
     document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + h + '</div>';
@@ -1834,7 +1854,8 @@ function updateSim() {
  
   const wkCtx = pw > 0 ? ` (${(plan/pw).toFixed(1)}w)` : '';
   const extraNd = safe ? 0 : needed({total:projTotal,present:s.present}, tgt);
-  const recovCtx = !safe && extraNd > 0
+  const recovCtx = !safe && !isFinite(extraNd) ? ` A ${tgt}% target can't be recovered after a bunk.`
+    : !safe && extraNd > 0
     ? pw > 0 ? ` Need <strong>${extraNd} straight classes</strong> to recover — ~${Math.ceil(extraNd/pw)} weeks.`
              : ` Need <strong>${extraNd} consecutive</strong> to recover.`
     : '';
@@ -1846,7 +1867,7 @@ function updateSim() {
   if (s.semTotal && s.semTotal > s.total) {
     const remainAfterBunks = Math.max(0, s.semTotal - s.total - plan);
     const eosTotal = s.total + plan + remainAfterBunks;
-    const eosPct = eosTotal > 0 ? Math.round(s.present / eosTotal * 100) : 0;
+    const eosPct = attPct(s.present, eosTotal);
     eosCtx = ' End of sem: <strong style="color:' + pctTextColor(eosPct, tgt) + '">' + eosPct + '%</strong>.';
   }
  
@@ -1917,7 +1938,7 @@ function obAddRow(name='') {
   div.className = 'subj-setup-row';
   div.innerHTML = `
     <div class="rt">
-      <input type="text" placeholder="Subject name" value="${name}">
+      <input type="text" placeholder="Subject name" value="${escapeHTML(name)}">
       <button class="rm-btn" onclick="this.closest('.subj-setup-row').remove()">✕</button>
     </div>
     <div class="rf">
@@ -1948,19 +1969,19 @@ async function obFinish() {
     const f = {};
     row.querySelectorAll('[data-f]').forEach(inp => f[inp.dataset.f] = inp.value);
 
-    const pw = parseInt(f.pw)||3;
-    const target = f.target ? Math.max(1,Math.min(100,parseInt(f.target))) : null;
-    const semTotalOb = f.semtotal ? parseInt(f.semtotal) : null;
+    const pw = Math.max(1, parseInt(f.pw)||3);
+    const target = f.target ? Math.max(1,Math.min(100,parseInt(f.target)||globalTarget)) : null;
+    const semTotalOb = f.semtotal ? (Math.max(0, parseInt(f.semtotal)) || null) : null;
 
     let total, present;
     
     if (obMode === 'estimate') {
-      const absent = parseInt(f.absent)||0;
+      const absent = Math.max(0, parseInt(f.absent)||0);
       total = estimateTotal(pw);
       present = Math.max(0, total-absent);
     } else {
-      total = parseInt(f.total)||0;
-      present = parseInt(f.present)||0;
+      total = Math.max(0, parseInt(f.total)||0);
+      present = Math.max(0, parseInt(f.present)||0);
     }
     
     newSubjects.push({
@@ -2049,14 +2070,14 @@ async function confirmAdd() {
     }
 
     const tRaw = document.getElementById('as-target').value;
-    const target = tRaw ? Math.max(1, Math.min(100, parseInt(tRaw))) : null;
+    const target = tRaw ? Math.max(1, Math.min(100, parseInt(tRaw) || globalTarget)) : null;
 
     let total, present, perWeek, mode;
     let semTotalAdd = null;
 
     if (addMode === 'estimate') {
-      perWeek = parseInt(document.getElementById('as-pw').value) || 3;
-      const missed = parseInt(document.getElementById('as-missed').value) || 0;
+      perWeek = Math.max(1, parseInt(document.getElementById('as-pw').value) || 3);
+      const missed = Math.max(0, parseInt(document.getElementById('as-missed').value) || 0);
       
       // ✅ ADDED: Get semester start date from modal
       const modalSemStart = document.getElementById('as-semstart').value;
@@ -2068,7 +2089,7 @@ async function confirmAdd() {
       }
       
       const stRaw = document.getElementById('as-semtotal').value;
-      semTotalAdd = stRaw ? parseInt(stRaw) : null;
+      semTotalAdd = stRaw ? (Math.max(0, parseInt(stRaw)) || null) : null;
       
       // ✅ FIXED: Calculate total AFTER setting semStart
       total = estimateTotal(perWeek);
@@ -2079,9 +2100,9 @@ async function confirmAdd() {
       console.log('Estimate Mode - Missed:', missed, 'Total:', total, 'Present:', present, 'PerWeek:', perWeek);
 
     } else {
-      total = parseInt(document.getElementById('as-total').value) || 0;
-      present = parseInt(document.getElementById('as-present').value) || 0;
-      perWeek = parseInt(document.getElementById('as-perweek').value) || 3;
+      total = Math.max(0, parseInt(document.getElementById('as-total').value) || 0);
+      present = Math.max(0, parseInt(document.getElementById('as-present').value) || 0);
+      perWeek = Math.max(0, parseInt(document.getElementById('as-perweek').value) || 3);
       mode = 'exact';
       
       console.log('Exact Mode - Total:', total, 'Present:', present);
@@ -2944,7 +2965,7 @@ function openCellInspector(cellId) {
   // Populate Subject Dropdown
   if (select) {
     select.innerHTML = '<option value="">-- Choose Existing Subject --</option>' +
-      subjects.map(s => `<option value="${s.id}" ${slot && slot.subjectId === s.id ? 'selected' : ''}>${s.name} (${pct(s)}%)</option>`).join('');
+      subjects.map(s => `<option value="${s.id}" ${slot && slot.subjectId === s.id ? 'selected' : ''}>${escapeHTML(s.name)} (${pct(s)}%)</option>`).join('');
   }
 
   if (nameInput) {
@@ -3014,7 +3035,7 @@ async function createSubjectFromInspector() {
     const created = subjects[subjects.length - 1];
     const select = document.getElementById('insp-subject-select');
     if (select && created) {
-      select.innerHTML += `<option value="${created.id}" selected>${created.name} (0%)</option>`;
+      select.innerHTML += `<option value="${created.id}" selected>${escapeHTML(created.name)} (0%)</option>`;
       select.value = created.id;
     }
     toast(`Created subject "${subjName}" ✓`);
@@ -3115,11 +3136,11 @@ async function saveCellInspectorChanges() {
 
   pushScannerHistory('Edit Cell Properties');
   timetable = scannerState.fusedSlots;
-  await saveTimetableToStorageAndDB();
+  const synced = await saveTimetableToStorageAndDB();
   renderTimetable();
   renderStudioCanvas();
   closeCellInspector();
-  toast('Changes applied ✓');
+  if (synced !== false) toast('Changes applied ✓');
 }
 
 // ══════════════════════════════════════════════════════
@@ -3427,7 +3448,7 @@ function ttApplyMove(change, describe) {
   renderTimetable();
   saveTimetableToStorageAndDB();
   if (currPage === 'tracker') renderTracker();
-  toast(escapeHTML(describe()));
+  toast(describe());
   return true;
 }
 
@@ -3700,7 +3721,7 @@ function populateSubjectDropdown(selectedId = null) {
   if (!select) return;
 
   select.innerHTML = '<option value="">-- Choose Existing Subject --</option>' + 
-    subjects.map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${s.name} (${pct(s)}%)</option>`).join('');
+    subjects.map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${escapeHTML(s.name)} (${pct(s)}%)</option>`).join('');
 }
 
 function onSlotTypeChange(type) {
@@ -3773,11 +3794,11 @@ async function saveSlotModal() {
     });
   }
 
-  await saveTimetableToStorageAndDB();
+  const synced = await saveTimetableToStorageAndDB();
   closeSlotEditModal();
   renderTimetable();
   if (currPage === 'tracker') renderTracker();
-  toast('Schedule updated ✓');
+  if (synced !== false) toast('Schedule updated ✓');
 }
 
 async function deleteCurrentSlot() {
@@ -3785,11 +3806,11 @@ async function deleteCurrentSlot() {
   if (!slotId) return;
 
   timetable = timetable.filter(s => s.id !== slotId);
-  await saveTimetableToStorageAndDB();
+  const synced = await saveTimetableToStorageAndDB();
   closeSlotEditModal();
   renderTimetable();
   if (currPage === 'tracker') renderTracker();
-  toast('Slot removed');
+  if (synced !== false) toast('Slot removed');
 }
 
 function confirmClearTimetable() {
@@ -3920,18 +3941,53 @@ function resetToToday() {
   renderTracker();
 }
 
-function toggleDateHoliday() {
+async function toggleDateHoliday() {
   const date = selectedTrackerDate;
   if (dateExceptions[date] && dateExceptions[date].type === 'holiday') {
     delete dateExceptions[date];
     saveDateExceptionToDB(date, null);
     toast('Holiday removed for ' + date);
   } else {
+    // A holiday doesn't count, so marks already made that day must be undone,
+    // otherwise they stay in the totals while being hidden.
+    const marked = Object.keys(dailyPeriodLogs[date] || {});
+    if (marked.length) {
+      if (!confirm(`${marked.length} class${marked.length !== 1 ? 'es are' : ' is'} already marked on this day. Marking it a holiday will clear ${marked.length !== 1 ? 'those marks' : 'that mark'}. Continue?`)) return;
+      if (!(await clearMarksForDate(date))) { toast('Could not clear marks for this day', 'err'); renderTracker(); return; }
+    }
     dateExceptions[date] = { type: 'holiday', note: 'College Holiday' };
     saveDateExceptionToDB(date, 'holiday');
     toast('Marked as Holiday 🏖️');
   }
   renderTracker();
+  renderNav();
+}
+
+// Remove every mark on a date and take it back out of the subject totals.
+async function clearMarksForDate(date) {
+  const logs = dailyPeriodLogs[date] || {};
+  const touched = new Set();
+  let ok = true;
+  for (const [entryId, log] of Object.entries(logs)) {
+    const { error } = await supabaseClient
+      .from('daily_period_logs')
+      .delete()
+      .eq('user_id', currentUser.id)
+      .eq('date', date)
+      .eq('entry_id', entryId);
+    if (error) { console.warn('Clear mark failed:', error); ok = false; break; }
+    const subj = subjects.find(x => x.id === log.subjectId);
+    if (subj && (log.status === 'p' || log.status === 'a')) {
+      subj.total = Math.max(0, subj.total - 1);
+      if (log.status === 'p') subj.present = Math.max(0, subj.present - 1);
+      touched.add(subj);
+    }
+    delete logs[entryId];
+    localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
+  }
+  // Save totals for every mark already removed, even if a later one failed
+  for (const subj of touched) await updateSubject(subj.id, { total: subj.total, present: subj.present });
+  return ok;
 }
 
 // Get scheduled classes for a specific date (1=Monday ... 7=Sunday)
@@ -4168,6 +4224,9 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
   const prevStatus = prevEntry ? prevEntry.status : null;
 
   const s = subjects.find(x => x.id === subjId);
+  // Undo the earlier mark on the subject it was counted for (the slot's
+  // subject may have been changed since then).
+  const prevSubj = prevEntry ? subjects.find(x => x.id === prevEntry.subjectId) : null;
 
   try {
     let finalStatus = newStatus;
@@ -4175,27 +4234,18 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
     // Toggle off if clicked the same status button
     if (prevStatus === newStatus) {
       finalStatus = null;
-      delete dailyPeriodLogs[date][slotId];
 
-      // Delete from DB
-      await supabaseClient
+      const { error } = await supabaseClient
         .from('daily_period_logs')
         .delete()
         .eq('user_id', currentUser.id)
         .eq('date', date)
         .eq('entry_id', slotId);
+      if (error) throw error;
+      delete dailyPeriodLogs[date][slotId];
 
     } else {
-      // Set new status
-      dailyPeriodLogs[date][slotId] = {
-        status: newStatus,
-        subjectId: subjId,
-        periodIndex: periodIndex,
-        isExtra: isExtra
-      };
-
-      // Upsert to daily_period_logs
-      await supabaseClient
+      const { error } = await supabaseClient
         .from('daily_period_logs')
         .upsert({
           user_id: currentUser.id,
@@ -4207,26 +4257,30 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
         }, {
           onConflict: 'user_id,date,entry_id'
         });
+      if (error) throw error;
+      // Keep extra-class details (name, time) when its status changes
+      dailyPeriodLogs[date][slotId] = {
+        ...(prevEntry || {}),
+        status: newStatus,
+        subjectId: subjId,
+        periodIndex: periodIndex,
+        isExtra: isExtra
+      };
     }
 
-    // Accurately recalculate subject's total and present counts without double counting
-    if (s) {
-      if (prevStatus === 'p') {
-        s.present = Math.max(0, s.present - 1);
-        s.total = Math.max(0, s.total - 1);
-      } else if (prevStatus === 'a') {
-        s.total = Math.max(0, s.total - 1);
-      } // 'cancelled' or null did not increment totals
-
-      if (finalStatus === 'p') {
-        s.present += 1;
-        s.total += 1;
-      } else if (finalStatus === 'a') {
-        s.total += 1;
-      } // 'cancelled' does not increment total or count as absence
-
-      await updateSubject(s.id, { total: s.total, present: s.present });
+    // Recalculate totals without double counting: remove the old mark, add the new one
+    const touched = new Set();
+    if (prevSubj && (prevStatus === 'p' || prevStatus === 'a')) {
+      prevSubj.total = Math.max(0, prevSubj.total - 1);
+      if (prevStatus === 'p') prevSubj.present = Math.max(0, prevSubj.present - 1);
+      touched.add(prevSubj);
     }
+    if (s && (finalStatus === 'p' || finalStatus === 'a')) {
+      s.total += 1;
+      if (finalStatus === 'p') s.present += 1;
+      touched.add(s);
+    }
+    for (const subj of touched) await updateSubject(subj.id, { total: subj.total, present: subj.present });
 
     // Save to local cache
     localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
@@ -4261,7 +4315,7 @@ function openExtraClassModal() {
     dateLbl.textContent = `Schedule an extra class for ${selectedTrackerDate}`;
   }
 
-  select.innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  select.innerHTML = subjects.map(s => `<option value="${s.id}">${escapeHTML(s.name)}</option>`).join('');
   document.getElementById('extra-class-time').value = '';
   document.getElementById('extra-class-overlay').classList.add('show');
 }
@@ -4283,8 +4337,24 @@ async function confirmAddExtraClass() {
   const extraId = 'extra_' + Date.now();
   const date = selectedTrackerDate;
 
-  if (!dailyPeriodLogs[date]) dailyPeriodLogs[date] = {};
+  // Record the class first; only count it once it's saved.
+  const { error } = await supabaseClient
+    .from('daily_period_logs')
+    .upsert({
+      user_id: currentUser.id,
+      date: date,
+      entry_id: extraId,
+      subject_id: subjId,
+      period_index: 99,
+      status: 'p'
+    }, { onConflict: 'user_id,date,entry_id' });
+  if (error) {
+    console.warn('DB upsert error for extra class:', error);
+    toast('Could not add the extra class', 'err');
+    return;
+  }
 
+  if (!dailyPeriodLogs[date]) dailyPeriodLogs[date] = {};
   dailyPeriodLogs[date][extraId] = {
     status: 'p', // default to present when adding extra class
     subjectId: subjId,
@@ -4293,26 +4363,12 @@ async function confirmAddExtraClass() {
     extraName: s.name,
     extraTime: timeNote
   };
+  localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
 
   // Increment subject total & present
   s.total += 1;
   s.present += 1;
   await updateSubject(s.id, { total: s.total, present: s.present });
-
-  try {
-    await supabaseClient
-      .from('daily_period_logs')
-      .upsert({
-        user_id: currentUser.id,
-        date: date,
-        entry_id: extraId,
-        subject_id: subjId,
-        period_index: 99,
-        status: 'p'
-      });
-  } catch (e) {
-    console.warn('DB upsert error for extra class:', e);
-  }
 
   closeExtraClassModal();
   renderNav();
@@ -4362,12 +4418,40 @@ function renderRecentHistory() {
 //  STORAGE & DB PERSISTENCE HELPERS
 // ══════════════════════════════════════════════════════
 
-// DB syncs run one at a time (each one deletes and re-inserts every entry, so
-// overlapping syncs could duplicate rows). Calls made while a sync is still
-// waiting to start share it; it reads the latest timetable when it runs.
+// Every slot gets a permanent UUID before it is saved, and the database row
+// keeps that id. Attendance marks are stored against the slot id, so marks
+// stay attached to their class across saves and reloads.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function newUuid() {
+  if (window.crypto?.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+let pendingEntryRenames = []; // [oldId, newId] pairs whose marks still need moving in the DB
+function ensureTimetableIds() {
+  timetable.forEach(slot => {
+    if (UUID_RE.test(String(slot.id))) return;
+    const oldId = String(slot.id), newId = newUuid();
+    slot.id = newId;
+    let moved = false;
+    Object.values(dailyPeriodLogs).forEach(day => {
+      if (day[oldId]) { day[newId] = { ...day[oldId], entryId: newId }; delete day[oldId]; moved = true; }
+    });
+    if (moved) pendingEntryRenames.push([oldId, newId]);
+  });
+  if (pendingEntryRenames.length && currentUser) {
+    localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
+  }
+}
+
+// DB syncs run one at a time so they can't interleave. Calls made while a sync
+// is still waiting to start share it; it reads the latest timetable when it runs.
 let ttSyncChain = Promise.resolve();
 let ttSyncWaiting = null;
 function saveTimetableToStorageAndDB() {
+  ensureTimetableIds();
   if (currentUser) {
     localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
   }
@@ -4395,32 +4479,61 @@ async function syncTimetableToDB() {
       }
     }
 
-    if (ttId) {
-      // 2. Clear old entries
-      await supabaseClient
+    if (!ttId) throw new Error('No timetable record');
+
+    // 2. Move marks made against temporary slot ids over to their new ids
+    while (pendingEntryRenames.length) {
+      const [oldId, newId] = pendingEntryRenames[0];
+      const { error } = await supabaseClient
+        .from('daily_period_logs')
+        .update({ entry_id: newId })
+        .eq('user_id', currentUser.id)
+        .eq('entry_id', oldId);
+      if (error) throw error;
+      pendingEntryRenames.shift();
+    }
+
+    // 3. Write the current slots (insert new, update existing). A subject that
+    //    was deleted can't be referenced, so such slots keep only their name.
+    const known = new Set(subjects.map(x => x.id));
+    const payload = timetable.map(s => ({
+      id: s.id,
+      timetable_id: ttId,
+      user_id: currentUser.id,
+      day_of_week: s.day,
+      period_index: s.period,
+      start_time: s.startTime || '',
+      end_time: s.endTime || '',
+      subject_id: known.has(s.subjectId) ? s.subjectId : null,
+      subject_name: s.subjectName || 'Unassigned',
+      is_break: s.isBreak || false
+    }));
+    if (payload.length) {
+      const { error } = await supabaseClient.from('timetable_entries').upsert(payload, { onConflict: 'id' });
+      if (error) throw error;
+    }
+
+    // 4. Only after that succeeds, remove rows for slots that no longer exist
+    const { data: rows, error: selError } = await supabaseClient
+      .from('timetable_entries')
+      .select('id')
+      .eq('user_id', currentUser.id);
+    if (selError) throw selError;
+    const keep = new Set(payload.map(r => r.id));
+    const stale = (rows || []).map(r => r.id).filter(id => !keep.has(id));
+    if (stale.length) {
+      const { error } = await supabaseClient
         .from('timetable_entries')
         .delete()
-        .eq('user_id', currentUser.id);
-
-      // 3. Insert new entries
-      if (timetable.length > 0) {
-        const payload = timetable.map(s => ({
-          timetable_id: ttId,
-          user_id: currentUser.id,
-          day_of_week: s.day,
-          period_index: s.period,
-          start_time: s.startTime || '',
-          end_time: s.endTime || '',
-          subject_id: s.subjectId || null,
-          subject_name: s.subjectName || 'Unassigned',
-          is_break: s.isBreak || false
-        }));
-
-        await supabaseClient.from('timetable_entries').insert(payload);
-      }
+        .eq('user_id', currentUser.id)
+        .in('id', stale);
+      if (error) throw error;
     }
+    return true;
   } catch (err) {
     console.warn('Timetable database sync warning:', err.message);
+    toast('Timetable saved on this device, but cloud sync failed', 'err');
+    return false;
   }
 }
 

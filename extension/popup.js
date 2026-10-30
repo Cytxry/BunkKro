@@ -9,6 +9,13 @@ let timetableEntries = [];
 let dailyPeriodLogs = {};
 let globalSession = null;
 
+function escapeHTML(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Rounded down, like the web app: 74.6% must not read as a met 75% target.
+function attPct(present, total) { return total > 0 ? Math.floor(present * 100 / total) : 0; }
+
 function getLocalDateString(d = new Date()) {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -132,8 +139,9 @@ function renderTodayClasses() {
     .filter(s => s.day_of_week === todayDay && !s.is_break)
     .sort((a, b) => a.period_index - b.period_index);
 
-  // If no timetable entries exist for today, check if user has subjects to fallback
-  const isFallback = todayClasses.length === 0;
+  // Only users without any timetable get the "all subjects" fallback; with a
+  // timetable, an empty day really has no classes.
+  const isFallback = todayClasses.length === 0 && timetableEntries.length === 0;
   if (isFallback && subjects.length > 0) {
     todayClasses = subjects.map((s, i) => ({
       id: s.id,
@@ -179,7 +187,7 @@ function renderTodayClasses() {
   list.innerHTML = todayClasses.map(c => {
     const s = subjects.find(x => x.id === c.subject_id);
     const displayName = s ? s.name : c.subject_name;
-    const pct = s && s.total > 0 ? Math.round((s.present / s.total) * 100) : 0;
+    const pct = s ? attPct(s.present, s.total) : 0;
     const target = s ? (s.target || 75) : 75;
     const pctClass = pct >= target ? 'safe' : pct >= target - 15 ? 'warn' : 'danger';
     const status = dailyPeriodLogs[c.id] || null;
@@ -193,12 +201,12 @@ function renderTodayClasses() {
     return `
       <div class="${itemClass}">
         <div class="class-header">
-          <span class="class-name">${displayName}</span>
+          <span class="class-name">${escapeHTML(displayName)}</span>
           ${s ? `<span class="class-pct ${pctClass}">${pct}%</span>` : ''}
         </div>
         <div class="period-meta">
           <span class="badge-pnum">P${c.period_index}</span>
-          ${timeDisplay ? `<span>🕒 ${timeDisplay}</span>` : ''}
+          ${timeDisplay ? `<span>🕒 ${escapeHTML(timeDisplay)}</span>` : ''}
           ${s ? `<span>${s.present}/${s.total} attended</span>` : ''}
         </div>
         <div class="tracker-btns">
@@ -228,11 +236,14 @@ function renderTodayClasses() {
   });
 }
 
+let marking = false; // ignore clicks while a mark is being saved (no double counting)
 async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
   if (!currentUser || !globalSession) {
     alert('Session expired. Please open the app and login again.');
     return;
   }
+  if (marking) return;
+  marking = true;
 
   const today = getLocalDateString();
   const s = subjects.find(x => x.id === subjId);
@@ -244,20 +255,19 @@ async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
     if (prevStatus === newStatus) {
       // Toggle off
       finalStatus = null;
-      delete dailyPeriodLogs[entryId];
 
-      await supabaseClient
+      const { error } = await supabaseClient
         .from('daily_period_logs')
         .delete()
         .eq('user_id', currentUser.id)
         .eq('date', today)
         .eq('entry_id', entryId);
+      if (error) throw error;
+      delete dailyPeriodLogs[entryId];
 
     } else {
       // Set new
-      dailyPeriodLogs[entryId] = newStatus;
-
-      await supabaseClient
+      const { error } = await supabaseClient
         .from('daily_period_logs')
         .upsert({
           user_id: currentUser.id,
@@ -269,6 +279,8 @@ async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
         }, {
           onConflict: 'user_id,date,entry_id'
         });
+      if (error) throw error;
+      dailyPeriodLogs[entryId] = newStatus;
     }
 
     // Sync subject numbers
@@ -299,6 +311,8 @@ async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
   } catch (err) {
     console.error('Mark attendance error:', err);
     alert('Failed to update attendance: ' + err.message);
+  } finally {
+    marking = false;
   }
 }
 
