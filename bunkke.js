@@ -739,6 +739,13 @@ const ROASTS = {
     'Sir\'s favorite. Admitted.',
     'Locked in. No thoughts, all attendance.',
     'Attendance so high it\'s embarrassing.',
+    'The register knows your handwriting.',
+    'You could bunk a week and still flex.',
+    'Teacher\'s pet speedrun: complete.',
+    'Built different. Built present.',
+    'Your attendance has attendance.',
+    'Main character of the register. 👑',
+    'Bench is basically your second home.',
   ],
   safe: [
     'Solid. Bunk approved. 😎',
@@ -746,6 +753,13 @@ const ROASTS = {
     'Attendance secured. Barely.',
     'Not cooked. Yet.',
     'Massive W but don\'t get cocky.',
+    'Comfortable. Suspiciously comfortable.',
+    'Green zone. Touch grass responsibly.',
+    'A bunk or two won\'t hurt. Probably.',
+    'Healthy numbers. Keep the streak alive.',
+    'Vibing above the line. ✨',
+    'Safe, but the canteen is calling.',
+    'You\'ve earned a guilt-free nap.',
   ],
   medium: [
     'Walking on thin ice rn.',
@@ -753,6 +767,13 @@ const ROASTS = {
     'One slip and it\'s wraps.',
     'The audacity to consider bunking.',
     'Risky ahh move incoming.',
+    'Close enough to smell the danger.',
+    'Show up. Just show up. Please.',
+    'Attendance doing the bare minimum.',
+    'This is a "set two alarms" situation. ⏰',
+    'Just a few classes from safety.',
+    'The comeback starts tomorrow, 8 AM sharp.',
+    'Bunking now would be a plot twist.',
   ],
   low: [
     'Attendance on life support. 💀',
@@ -760,6 +781,13 @@ const ROASTS = {
     'Faculty knows you by your absence.',
     'Academic comeback loading... slowly.',
     'Sir definitely hates you probably.',
+    'Your seat filed a missing person report.',
+    'Roll call skips your name out of habit.',
+    'Classmates think you\'re a rumour.',
+    'The register has trust issues now.',
+    'Bunk privileges: revoked. 🚫',
+    'Time to become a morning person. Sorry.',
+    'Plot armour not found.',
   ],
   cooked: [
     'Hall ticket in danger. Not joking.',
@@ -767,14 +795,27 @@ const ROASTS = {
     'Respawn recommended.',
     'Cooked beyond recognition. 🔥',
     'Bro you are finished.',
+    'Condonation form loading...',
+    'Even the ceiling fan attends more.',
+    'This subject forgot you exist.',
+    'Medical certificate arc incoming. 🩺',
+    'Attendance? Never heard of her.',
+    'Speedrunning detention any%.',
+    'The HOD wants a word. Several.',
   ]
 };
  
 const SIM_REACTIONS = {
-  safe_in_limit: ['Still chilling 😎', 'Green light, bestie.', 'Locked in.', 'W move actually.'],
-  safe_over_limit: ['Greedy ahh', 'Playing dangerous games.', 'Bold of you.', 'You sure about this?'],
-  warn: ['Risky ahh move 💀', 'One more and you\'re cooked.', 'Sir is watching.', 'This is a warning.'],
-  cooked: ['Academic terrorism detected.', 'Bro loves consequences.', 'Hall ticket crying rn.', 'Cooked. Done. Finished. 💀']
+  safe_in_limit: ['Still chilling 😎', 'Green light, bestie.', 'Locked in.', 'W move actually.', 'Bunk responsibly.', 'Calculated. Respect.', 'Enjoy the nap, you earned it.'],
+  safe_over_limit: ['Greedy ahh', 'Playing dangerous games.', 'Bold of you.', 'You sure about this?', 'Spending bunks like pocket money.', 'Future you is side-eyeing this.'],
+  warn: ['Risky ahh move 💀', 'One more and you\'re cooked.', 'Sir is watching.', 'This is a warning.', 'Cutting it way too close.', 'Your safety net is a thread.'],
+  cooked: ['Academic terrorism detected.', 'Bro loves consequences.', 'Hall ticket crying rn.', 'Cooked. Done. Finished. 💀', 'Absolutely not. Close the tab.', 'The register will remember this.']
+};
+
+const VERDICT_SUBS = {
+  safe: ['Massive W.', 'Solid.', 'Attendance merchant vibes.', 'Go touch some grass.', 'Peak academic weapon.', 'Sleep in once, you\'ve earned it.'],
+  warn: ['Walking on thin ice.', 'Don\'t get greedy.', 'One wrong move and you\'re cooked.', 'Spend them wisely.', 'Save them for emergencies.', 'Choose your bunks carefully.'],
+  cooked: ['Respawn recommended.', 'Academic terrorism.', 'Hall ticket trembling.', 'Time for a comeback arc.', 'Alarms on. No excuses.', 'Front row, every day, starting now.']
 };
  
 const TOAST_MSGS = {
@@ -784,6 +825,14 @@ const TOAST_MSGS = {
 };
  
 function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+// Stable pick: the same seed (e.g. the same attendance numbers) always gives
+// the same line, so roasts only change when the numbers do — not on refresh.
+function stablePick(arr, seed) {
+  const str = String(seed);
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return arr[(h >>> 0) % arr.length];
+}
 function randToast(type) { return randFrom(TOAST_MSGS[type] || ['Done.']); }
  
 // ══════════════════════════════════════════════════════
@@ -860,20 +909,28 @@ function daysUntil(d) {
 // ══════════════════════════════════════════════════════
 //  ROAST ENGINE
 // ══════════════════════════════════════════════════════
-function getRoast(p, tgt) {
+function roastTier(p, tgt) {
+  if (p >= tgt + 15) return 'god';
+  if (p >= tgt) return 'safe';
+  if (p >= tgt - 10) return 'medium';
+  if (p >= tgt - 20) return 'low';
+  return 'cooked';
+}
+// seed: anything that identifies the situation (subject + its numbers).
+function getRoast(p, tgt, seed = '') {
   tgt = tgt ?? globalTarget;
-  if (p >= tgt + 15) return randFrom(ROASTS.god);
-  if (p >= tgt) return randFrom(ROASTS.safe);
-  if (p >= tgt - 10) return randFrom(ROASTS.medium);
-  if (p >= tgt - 20) return randFrom(ROASTS.low);
-  return randFrom(ROASTS.cooked);
+  return stablePick(ROASTS[roastTier(p, tgt)], `${seed}|${p}|${tgt}`);
 }
-function getSimReaction(planBunks, bunkableNow, safe, projPct, tgt) {
-  if (!safe) return randFrom(SIM_REACTIONS.cooked);
-  if (projPct - tgt <= 2) return randFrom(SIM_REACTIONS.warn);
-  if (planBunks > bunkableNow) return randFrom(SIM_REACTIONS.safe_over_limit);
-  return randFrom(SIM_REACTIONS.safe_in_limit);
+function subjRoastSeed(s) { return `${s.id}|${s.present}/${s.total}`; }
+function getSimReaction(planBunks, bunkableNow, safe, projPct, tgt, seed = '') {
+  const key = `${seed}|${planBunks}|${projPct}|${tgt}`;
+  if (!safe) return stablePick(SIM_REACTIONS.cooked, key);
+  if (projPct - tgt <= 2) return stablePick(SIM_REACTIONS.warn, key);
+  if (planBunks > bunkableNow) return stablePick(SIM_REACTIONS.safe_over_limit, key);
+  return stablePick(SIM_REACTIONS.safe_in_limit, key);
 }
+// Seed for overall verdicts: changes only when any subject's numbers change.
+function overallSeed() { return subjects.map(s => `${s.present}/${s.total}/${getTarget(s)}`).join(','); }
  
 // ══════════════════════════════════════════════════════
 //  TOAST
@@ -1030,7 +1087,7 @@ function renderHome() {
       <span class="subj-avatar" style="background:${subjTheme(i).c}" aria-hidden="true">${escapeHTML((s.name || '?').trim().charAt(0))}</span>
       <span class="subj-card-main">
         <span class="subj-card-name">${escapeHTML(s.name)}</span>
-        <span class="subj-card-roast">${getRoast(p, tgt)}</span>
+        <span class="subj-card-roast">${getRoast(p, tgt, subjRoastSeed(s))}</span>
         <span class="subj-bar"><span class="subj-bar-fill" style="width:${Math.min(100,p)}%;background:${pctColor(p, tgt)}"></span><span class="subj-bar-target" style="left:${Math.min(100,tgt)}%" title="Target ${tgt}%"></span></span>
       </span>
       <span class="subj-card-right">
@@ -1267,34 +1324,42 @@ function renderHomeToday() {
     return;
   }
 
-  const statusPill = st => st === 'p' ? `<span class="status-pill good">${ic('check','ic-xs')} Present</span>`
-    : st === 'a' ? `<span class="status-pill danger">${ic('x','ic-xs')} Absent</span>`
-    : st === 'cancelled' ? '<span class="status-pill warn">Cancelled</span>'
-    : '<span class="status-pill neutral">Not marked</span>';
-
+  const STATES = {
+    p: { cls: 'present', label: 'Present', icon: 'check' },
+    a: { cls: 'absent', label: 'Absent', icon: 'x' },
+    cancelled: { cls: 'cancelled', label: 'Cancelled', icon: '' },
+  };
+  const marked = classes.filter(c => STATES[c.status]).length;
   const shown = classes.slice(0, 6);
-  box.innerHTML = `<div class="today-list">${shown.map(c => {
+  box.innerHTML = `<div class="tl-progress"><span class="tl-progress-bar"><span style="width:${Math.round(marked / classes.length * 100)}%"></span></span><span>${marked}/${classes.length} marked</span></div>
+  <ol class="timeline">${shown.map(c => {
     const s = subjects.find(x => x.id === c.subjectId);
     const name = s ? s.name : c.subjectName;
-    const time = c.startTime || (c.isExtra ? 'Extra' : `P${c.period}`);
-    return `<div class="today-row"><span class="today-time">${escapeHTML(time)}</span><span class="today-name">${escapeHTML(name)}</span>${statusPill(c.status)}</div>`;
-  }).join('')}</div>${classes.length > shown.length ? `<div class="today-more">+${classes.length - shown.length} more</div>` : ''}`;
+    const time = c.startTime ? (c.endTime ? `${c.startTime} – ${c.endTime}` : c.startTime) : (c.isExtra ? 'Extra class' : `Period ${c.period}`);
+    const st = STATES[c.status];
+    return `<li class="tl-row ${st ? 'is-' + st.cls : 'is-pending'}">
+      <span class="tl-dot" aria-hidden="true">${st && st.icon ? ic(st.icon, 'ic-xs') : ''}</span>
+      <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span><span class="tl-time">${escapeHTML(time)}${c.isExtra && c.startTime ? ' · Extra' : ''}</span></span>
+      <span class="tl-state">${st ? st.label : 'Not marked'}</span>
+    </li>`;
+  }).join('')}</ol>${classes.length > shown.length ? `<div class="today-more">+${classes.length - shown.length} more</div>` : ''}`;
 }
  
 function renderVerdictCard(ov, atRisk, safeBunks) {
   let cls, emoji, title, sub;
+  const seed = 'verdict|' + overallSeed();
   if (atRisk.length === 0 && safeBunks > 5) {
     cls='safe'; emoji='😎'; title='Locked in. Safe to bunk.';
-    sub = `${safeBunks} total bunks available. You're chilling. ${randFrom(['Massive W.','Solid.','Attendance merchant vibes.'])}`;
+    sub = `${safeBunks} total bunks available. You're chilling. ${stablePick(VERDICT_SUBS.safe, seed)}`;
   } else if (atRisk.length === 0 && safeBunks > 0) {
     cls='warn'; emoji='🤏'; title=`${safeBunks} bunk${safeBunks!==1?'s':''} left. Play it smart.`;
-    sub = randFrom(['Walking on thin ice.','Don\'t get greedy.','One wrong move and you\'re cooked.']);
+    sub = stablePick(VERDICT_SUBS.warn, seed);
   } else if (atRisk.length === 0) {
     cls='warn'; emoji='🫠'; title='No safe bunks. Attend everything.';
     sub = 'You\'re right at the edge. Do NOT skip anything.';
   } else {
     cls='cooked'; emoji='💀'; title='Bro you are cooked.';
-    sub = `${atRisk.map(s=>s.name).join(', ')} below target. ${randFrom(['Respawn recommended.','Academic terrorism.','Hall ticket trembling.'])}`;
+    sub = `${atRisk.map(s=>s.name).join(', ')} below target. ${stablePick(VERDICT_SUBS.cooked, seed)}`;
   }
   document.getElementById('verdict-wrap').innerHTML = `
     <button class="verdict-card ${cls}" onclick="openCooked()">
@@ -1406,21 +1471,22 @@ function openCooked() {
   const safeBunks = subjects.reduce((a,s)=>a+bunkable(s),0);
  
   let emoji, verdict, msg, cls;
+  const seed = 'cooked|' + overallSeed();
   if (atRisk.length === 0 && ov >= globalTarget + 10 && safeBunks > 5) {
     emoji='😎'; verdict='Nah you\'re chilling.'; cls='color:var(--accent)';
-    msg = `${ov}% overall. ${safeBunks} bunks available. ${randFrom(ROASTS.god)} ${randFrom(ROASTS.safe)}`;
+    msg = `${ov}% overall. ${safeBunks} bunks available. ${stablePick(ROASTS.god, seed)} ${stablePick(ROASTS.safe, seed + '+')}`;
   } else if (atRisk.length === 0 && safeBunks > 0) {
     emoji='🤏'; verdict='Safe. But don\'t get greedy.'; cls='color:var(--warn)';
-    msg = `${ov}% overall. Only ${safeBunks} safe bunks left. ${randFrom(ROASTS.medium)}`;
+    msg = `${ov}% overall. Only ${safeBunks} safe bunks left. ${stablePick(ROASTS.medium, seed)}`;
   } else if (atRisk.length === 0) {
     emoji='😬'; verdict='One absence away from disaster.'; cls='color:var(--warn)';
-    msg = `${ov}% overall. Zero bunks available. ${randFrom(ROASTS.medium)}`;
+    msg = `${ov}% overall. Zero bunks available. ${stablePick(ROASTS.medium, seed)}`;
   } else if (atRisk.length <= subjects.length / 2) {
     emoji='💀'; verdict='Partially cooked.'; cls='color:var(--danger)';
-    msg = `${atRisk.length} subject${atRisk.length>1?'s':''} below target. ${randFrom(ROASTS.low)}`;
+    msg = `${atRisk.length} subject${atRisk.length>1?'s':''} below target. ${stablePick(ROASTS.low, seed)}`;
   } else {
     emoji='🔥'; verdict='Cooked beyond recognition.'; cls='color:var(--danger)';
-    msg = `${atRisk.length} subjects in the danger zone. ${randFrom(ROASTS.cooked)}`;
+    msg = `${atRisk.length} subjects in the danger zone. ${stablePick(ROASTS.cooked, seed)}`;
   }
  
   document.getElementById('ck-emoji').textContent = emoji;
@@ -1454,7 +1520,7 @@ function renderSubject(id, preserveSim) {
   document.getElementById('sp-title').textContent = s.name;
   document.getElementById('sp-meta').textContent = `${s.code||''} · Target: ${tgt}% · ${s.mode==='estimate'?'Estimated':'Exact'} Mode`;
   document.getElementById('sp-name').textContent = s.name;
-  document.getElementById('sp-roast').textContent = getRoast(p, tgt);
+  document.getElementById('sp-roast').textContent = getRoast(p, tgt, subjRoastSeed(s));
   document.getElementById('mode-label').innerHTML = s.mode==='estimate'
     ? `<span class="mode-tag est">📡 Estimated</span>`
     : `<span class="mode-tag exact">🎯 Exact</span>`;
@@ -1773,7 +1839,7 @@ function updateSim() {
              : ` Need <strong>${extraNd} consecutive</strong> to recover.`
     : '';
  
-  const reaction = getSimReaction(plan, bk_now, safe, projPct, tgt);
+  const reaction = getSimReaction(plan, bk_now, safe, projPct, tgt, subjRoastSeed(s));
  
   // End-of-semester projection if semTotal is set
   let eosCtx = '';
@@ -3194,7 +3260,9 @@ function renderTimetable() {
   }
 
   // Render weekly grid table
+  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
   let html = `
+    <p class="tt-dnd-hint">${ic('layers','ic-sm')} ${coarse ? 'Press and hold a class to drag it' : 'Drag a class to move it'} · drop it on another class to swap</p>
     <table class="tt-table">
       <thead>
         <tr>
@@ -3211,14 +3279,14 @@ function renderTimetable() {
       .sort((a, b) => a.period - b.period);
 
     html += `
-      <tr>
+      <tr data-day="${dayInfo.num}">
         <td class="tt-day-cell">
           <div class="tt-day-chip d${dayInfo.num}">${dayInfo.short}</div>
           <div class="tt-day-name">${dayInfo.name}</div>
           <div class="tt-day-count">${daySlots.filter(s=>!s.isBreak).length} classes</div>
         </td>
         <td>
-          <div class="tt-slots-col">
+          <div class="tt-slots-col" data-day="${dayInfo.num}">
             ${daySlots.map(slot => {
               const subjIdx = subjects.findIndex(s => s.id === slot.subjectId);
               const matchedSubj = subjIdx >= 0 ? subjects[subjIdx] : null;
@@ -3227,7 +3295,7 @@ function renderTimetable() {
 
               if (slot.isBreak) {
                 return `
-                  <button class="tt-slot-card break" onclick="openEditSlotModal('${slot.id}')" title="Edit break">
+                  <button class="tt-slot-card break" data-slot-id="${slot.id}" onclick="openEditSlotModal('${slot.id}')" title="Click to edit · drag to move" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown">
                     <span class="tt-slot-top">
                       <span class="tt-slot-pnum">P${slot.period}</span>
                       <span class="tt-slot-time">${escapeHTML(timeDisplay || 'Break')}</span>
@@ -3240,7 +3308,7 @@ function renderTimetable() {
               const th = subjTheme(subjIdx);
               const accent = matchedSubj && !slot.isUncertain ? ` style="border-left-color:${th.c};background:linear-gradient(135deg,${th.bg},var(--surface) 85%)"` : '';
               return `
-                <button class="tt-slot-card ${slot.isUncertain ? 'uncertain' : ''}"${accent} onclick="openEditSlotModal('${slot.id}')" title="Edit class">
+                <button class="tt-slot-card ${slot.isUncertain ? 'uncertain' : ''}" data-slot-id="${slot.id}"${accent} onclick="openEditSlotModal('${slot.id}')" title="Click to edit · drag to move" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown">
                   <span class="tt-slot-top">
                     <span class="tt-slot-pnum">Period ${slot.period}</span>
                     <span class="tt-slot-time">${escapeHTML(timeDisplay)}</span>
@@ -3260,6 +3328,318 @@ function renderTimetable() {
 
   html += `</tbody></table>`;
   container.innerHTML = html;
+  initTimetableDrag();
+}
+
+// ══════════════════════════════════════════════════════
+//  TIMETABLE DRAG & DROP
+//  Drop a class on another class to swap them, or in a gap to move it there.
+//  Period numbers and times belong to the position, so classes slide through
+//  a day's time slots. A slot keeps its id, so marks for today stay with it.
+// ══════════════════════════════════════════════════════
+
+const ttDrag = { el: null, slot: null, active: false, target: null, suppressClick: false };
+
+function ttDaySlots(day) {
+  return timetable.filter(s => s.day === day).sort((a, b) => a.period - b.period);
+}
+function ttSlotPos(s) {
+  return { day: s.day, period: s.period, startTime: s.startTime || '', endTime: s.endTime || '' };
+}
+function ttSlotLabel(s) {
+  if (s.isBreak) return s.subjectName || 'Break';
+  return subjects.find(x => x.id === s.subjectId)?.name || s.subjectName || 'Class';
+}
+
+// The usual times for a period number across the week (most common pair).
+function ttBellTimes(period) {
+  const counts = {};
+  timetable.forEach(s => {
+    if (s.period === period && s.startTime) {
+      const k = s.startTime + '|' + (s.endTime || '');
+      counts[k] = (counts[k] || 0) + 1;
+    }
+  });
+  const best = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  if (!best) return { startTime: '', endTime: '' };
+  const [startTime, endTime] = best.split('|');
+  return { startTime, endTime };
+}
+
+// Hand out positions to items in visual order. Breaks stay where they are
+// unless a break is the one being moved.
+function ttLayoutDay(items, positions, keepBreaks) {
+  const pos = positions.slice().sort((a, b) => a.period - b.period || a.startTime.localeCompare(b.startTime));
+  let movable = items;
+  if (keepBreaks) {
+    items.filter(s => s.isBreak).forEach(b => {
+      const i = pos.findIndex(p => p.period === b.period);
+      if (i >= 0) pos.splice(i, 1);
+    });
+    movable = items.filter(s => !s.isBreak);
+  }
+  movable.forEach((s, i) => { if (pos[i]) Object.assign(s, pos[i]); });
+}
+
+// Move `slot` to `day`, before the slot with id `beforeId` (null = at the end).
+function ttMoveSlot(slot, day, beforeId) {
+  if (slot.day === day) {
+    const dayItems = ttDaySlots(day);
+    const positions = dayItems.map(ttSlotPos);
+    const order = dayItems.filter(s => s !== slot);
+    const k = beforeId ? order.findIndex(s => String(s.id) === beforeId) : order.length;
+    order.splice(k < 0 ? order.length : k, 0, slot);
+    ttLayoutDay(order, positions, !slot.isBreak);
+    return;
+  }
+  const target = ttDaySlots(day);
+  let k = beforeId ? target.findIndex(s => String(s.id) === beforeId) : target.length;
+  if (k < 0) k = target.length;
+  const lo = k > 0 ? target[k - 1].period : 0;
+  const hi = k < target.length ? target[k].period : Infinity;
+  if (hi - lo > 1) {
+    // A free period sits right where it was dropped: take it.
+    const p = slot.period > lo && slot.period < hi ? slot.period : lo + 1;
+    const times = p === slot.period ? { startTime: slot.startTime || '', endTime: slot.endTime || '' } : ttBellTimes(p);
+    Object.assign(slot, { day, period: p }, times);
+    return;
+  }
+  // No free period there: the classes from the drop point slide one period
+  // down, up to the next free period (a gap in the day, or after the last one).
+  let j = k;
+  while (j + 1 < target.length && target[j + 1].period - target[j].period <= 1) j++;
+  const run = target.slice(k, j + 1);
+  const newP = target[j].period + 1;
+  const extra = { day, period: newP, ...ttBellTimes(newP) };
+  ttLayoutDay([slot, ...run], [...run.map(ttSlotPos), extra], !slot.isBreak);
+}
+
+function ttSwapSlots(a, b) {
+  const pa = ttSlotPos(a), pb = ttSlotPos(b);
+  Object.assign(a, pb);
+  Object.assign(b, pa);
+}
+
+function ttApplyMove(change, describe) {
+  const before = JSON.stringify(timetable.map(ttSlotPos));
+  change();
+  if (JSON.stringify(timetable.map(ttSlotPos)) === before) return false;
+  renderTimetable();
+  saveTimetableToStorageAndDB();
+  if (currPage === 'tracker') renderTracker();
+  toast(escapeHTML(describe()));
+  return true;
+}
+
+function ttDropDescribe(slot) {
+  const d = DAYS_MAP.find(x => x.num === slot.day);
+  return `${ttSlotLabel(slot)} → ${d ? d.name : 'Day ' + slot.day} · Period ${slot.period}`;
+}
+
+function initTimetableDrag() {
+  const wrap = document.getElementById('tt-grid-wrap');
+  if (!wrap || wrap.dataset.dnd) return;
+  wrap.dataset.dnd = '1';
+  wrap.addEventListener('pointerdown', ttPointerDown);
+  // A finished drag must not also open the edit modal.
+  wrap.addEventListener('click', e => {
+    if (ttDrag.suppressClick) { e.stopPropagation(); e.preventDefault(); ttDrag.suppressClick = false; }
+  }, true);
+  wrap.addEventListener('contextmenu', e => { if (ttDrag.el) e.preventDefault(); });
+  wrap.addEventListener('keydown', ttKeyMove);
+  document.addEventListener('touchmove', e => { if (ttDrag.active) e.preventDefault(); }, { passive: false });
+  document.addEventListener('keydown', e => {
+    if (ttDrag.active && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); ttEndDrag(false); }
+  }, true);
+  window.addEventListener('blur', () => { if (ttDrag.el) ttEndDrag(false); });
+}
+
+function ttPointerDown(e) {
+  const card = e.target.closest('.tt-slot-card[data-slot-id]');
+  if (!card || e.button !== 0 || !e.isPrimary || ttDrag.el) return;
+  const slot = timetable.find(s => String(s.id) === card.dataset.slotId);
+  if (!slot) return;
+  Object.assign(ttDrag, {
+    el: card, slot, active: false, target: null, pointerId: e.pointerId, type: e.pointerType,
+    startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY,
+  });
+  if (e.pointerType === 'touch') {
+    // Press and hold so a normal swipe still scrolls the page.
+    ttDrag.timer = setTimeout(() => { ttDrag.timer = null; ttStartDrag(); navigator.vibrate?.(12); }, 300);
+  }
+  document.addEventListener('pointermove', ttPointerMove);
+  document.addEventListener('pointerup', ttPointerUp);
+  document.addEventListener('pointercancel', ttPointerCancel);
+}
+
+function ttPointerMove(e) {
+  if (e.pointerId !== ttDrag.pointerId) return;
+  ttDrag.x = e.clientX; ttDrag.y = e.clientY;
+  if (!ttDrag.active) {
+    const dist = Math.hypot(e.clientX - ttDrag.startX, e.clientY - ttDrag.startY);
+    if (ttDrag.type === 'touch') { if (dist > 10) ttEndDrag(false); return; }
+    if (dist < 6) return;
+    ttStartDrag();
+  }
+  e.preventDefault();
+  ttUpdateDrag();
+}
+
+function ttPointerUp(e) {
+  if (e.pointerId !== ttDrag.pointerId) return;
+  ttEndDrag(ttDrag.active);
+}
+function ttPointerCancel(e) {
+  if (e.pointerId !== ttDrag.pointerId) return;
+  ttEndDrag(false);
+}
+
+function ttStartDrag() {
+  const card = ttDrag.el;
+  if (!card || !card.isConnected) { ttEndDrag(false); return; }
+  ttDrag.active = true;
+  const r = card.getBoundingClientRect();
+  ttDrag.offX = ttDrag.startX - r.left;
+  ttDrag.offY = ttDrag.startY - r.top;
+  const ghost = card.cloneNode(true);
+  ghost.removeAttribute('onclick');
+  ghost.removeAttribute('data-slot-id');
+  ghost.removeAttribute('id');
+  ghost.classList.add('tt-drag-ghost');
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.style.width = r.width + 'px';
+  ghost.style.height = r.height + 'px';
+  document.body.appendChild(ghost);
+  ttDrag.ghost = ghost;
+  const marker = document.createElement('div');
+  marker.className = 'tt-drop-marker';
+  document.body.appendChild(marker);
+  ttDrag.marker = marker;
+  card.classList.add('is-dragging');
+  document.body.classList.add('tt-dragging');
+  ttUpdateDrag();
+  ttDrag.raf = requestAnimationFrame(ttAutoScroll);
+}
+
+// Keep the page (and the sideways-scrolling grid on phones) moving near edges.
+function ttAutoScroll() {
+  if (!ttDrag.active) return;
+  const edge = 70, max = 16;
+  const { x, y } = ttDrag;
+  let moved = false;
+  if (y < edge) { window.scrollBy({ top: -Math.ceil(max * (1 - y / edge)), behavior: 'instant' }); moved = true; }
+  else if (y > innerHeight - edge) { window.scrollBy({ top: Math.ceil(max * (1 - (innerHeight - y) / edge)), behavior: 'instant' }); moved = true; }
+  const wrap = document.getElementById('tt-grid-wrap');
+  if (wrap && wrap.scrollWidth > wrap.clientWidth) {
+    const wr = wrap.getBoundingClientRect();
+    if (y > wr.top && y < wr.bottom) {
+      if (x < wr.left + 40) { wrap.scrollLeft -= 10; moved = true; }
+      else if (x > wr.right - 40) { wrap.scrollLeft += 10; moved = true; }
+    }
+  }
+  if (moved) ttUpdateDrag();
+  ttDrag.raf = requestAnimationFrame(ttAutoScroll);
+}
+
+function ttClearHighlights() {
+  document.querySelectorAll('.tt-slot-card.is-swap-target').forEach(el => el.classList.remove('is-swap-target'));
+  document.querySelectorAll('tr.is-drop-row').forEach(el => el.classList.remove('is-drop-row'));
+  if (ttDrag.marker) ttDrag.marker.style.display = 'none';
+}
+
+function ttUpdateDrag() {
+  const { x, y, ghost, el } = ttDrag;
+  if (ghost) ghost.style.transform = `translate(${x - ttDrag.offX}px, ${y - ttDrag.offY}px) rotate(-2deg)`;
+  ttClearHighlights();
+  ttDrag.target = null;
+
+  const under = document.elementFromPoint(x, y);
+  const tr = under && under.closest('#tt-grid-wrap tr[data-day]');
+  if (!tr) return;
+  const day = parseInt(tr.dataset.day);
+  const col = tr.querySelector('.tt-slots-col');
+  const cards = [...col.querySelectorAll('.tt-slot-card[data-slot-id]')].filter(c => c !== el);
+  const overCard = under.closest('.tt-slot-card[data-slot-id]');
+  if (overCard === el) return; // back over its own spot: nothing to do
+
+  tr.classList.add('is-drop-row');
+  if (overCard) {
+    const r = overCard.getBoundingClientRect();
+    const rel = (x - r.left) / r.width;
+    if (rel > 0.25 && rel < 0.75) {
+      overCard.classList.add('is-swap-target');
+      ttDrag.target = { type: 'swap', id: overCard.dataset.slotId };
+      return;
+    }
+  }
+  // Insert: before the first card that comes after the pointer in reading order.
+  let before = null;
+  for (const c of cards) {
+    const r = c.getBoundingClientRect();
+    if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) { before = c; break; }
+  }
+  ttDrag.target = { type: 'insert', day, beforeId: before ? before.dataset.slotId : null };
+
+  const m = ttDrag.marker;
+  if (!m) return;
+  let ref, left;
+  if (before) { ref = before.getBoundingClientRect(); left = ref.left - 6; }
+  else if (cards.length) { ref = cards[cards.length - 1].getBoundingClientRect(); left = ref.right + 2; }
+  else { ref = (col.querySelector('.tt-add-slot-btn') || col).getBoundingClientRect(); left = ref.left - 6; }
+  Object.assign(m.style, { display: 'block', left: left + 'px', top: ref.top + 'px', height: ref.height + 'px' });
+}
+
+function ttEndDrag(drop) {
+  clearTimeout(ttDrag.timer);
+  cancelAnimationFrame(ttDrag.raf);
+  document.removeEventListener('pointermove', ttPointerMove);
+  document.removeEventListener('pointerup', ttPointerUp);
+  document.removeEventListener('pointercancel', ttPointerCancel);
+  const { slot, target, active } = ttDrag;
+  ttClearHighlights();
+  ttDrag.ghost?.remove();
+  ttDrag.marker?.remove();
+  ttDrag.el?.classList.remove('is-dragging');
+  document.body.classList.remove('tt-dragging');
+  Object.assign(ttDrag, { el: null, slot: null, active: false, target: null, ghost: null, marker: null, timer: null });
+  if (active) {
+    ttDrag.suppressClick = true;
+    setTimeout(() => { ttDrag.suppressClick = false; }, 0);
+  }
+  if (!drop || !slot || !target) return;
+
+  if (target.type === 'swap') {
+    const other = timetable.find(s => String(s.id) === target.id);
+    if (!other || other === slot) return;
+    ttApplyMove(() => ttSwapSlots(slot, other), () => `Swapped ${ttSlotLabel(slot)} ⇄ ${ttSlotLabel(other)}`);
+  } else {
+    ttApplyMove(() => ttMoveSlot(slot, target.day, target.beforeId), () => ttDropDescribe(slot));
+  }
+}
+
+// Keyboard: Alt+←/→ moves a class earlier/later in its day, Alt+↑/↓ to the previous/next day.
+function ttKeyMove(e) {
+  if (!e.altKey || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+  const card = e.target.closest('.tt-slot-card[data-slot-id]');
+  const slot = card && timetable.find(s => String(s.id) === card.dataset.slotId);
+  if (!slot) return;
+  e.preventDefault();
+  const dayItems = ttDaySlots(slot.day);
+  const idx = dayItems.indexOf(slot);
+  let changed = false;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const others = dayItems.filter(s => s !== slot);
+    const k = e.key === 'ArrowLeft' ? idx - 1 : idx + 1;
+    if (k < 0 || k > others.length) return;
+    changed = ttApplyMove(() => ttMoveSlot(slot, slot.day, others[k] ? String(others[k].id) : null), () => ttDropDescribe(slot));
+  } else {
+    const days = DAYS_MAP.filter(d => d.num <= 6 || timetableMeta.showSunday).map(d => d.num);
+    const next = days[days.indexOf(slot.day) + (e.key === 'ArrowUp' ? -1 : 1)];
+    if (!next) return;
+    const target = ttDaySlots(next);
+    changed = ttApplyMove(() => ttMoveSlot(slot, next, target[idx] ? String(target[idx].id) : null), () => ttDropDescribe(slot));
+  }
+  if (changed) document.querySelector(`#tt-grid-wrap .tt-slot-card[data-slot-id="${CSS.escape(String(slot.id))}"]`)?.focus();
 }
 
 function toggleSundayDisplay() {
@@ -3982,11 +4362,23 @@ function renderRecentHistory() {
 //  STORAGE & DB PERSISTENCE HELPERS
 // ══════════════════════════════════════════════════════
 
-async function saveTimetableToStorageAndDB() {
+// DB syncs run one at a time (each one deletes and re-inserts every entry, so
+// overlapping syncs could duplicate rows). Calls made while a sync is still
+// waiting to start share it; it reads the latest timetable when it runs.
+let ttSyncChain = Promise.resolve();
+let ttSyncWaiting = null;
+function saveTimetableToStorageAndDB() {
   if (currentUser) {
     localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
   }
+  if (!currentUser) return Promise.resolve();
+  if (ttSyncWaiting) return ttSyncWaiting;
+  ttSyncWaiting = ttSyncChain.then(() => { ttSyncWaiting = null; return syncTimetableToDB(); });
+  ttSyncChain = ttSyncWaiting;
+  return ttSyncWaiting;
+}
 
+async function syncTimetableToDB() {
   if (!currentUser) return;
 
   try {
