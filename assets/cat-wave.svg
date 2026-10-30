@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 140" role="img" aria-label="A happy cat waving hello">
+<g stroke="#343F83" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    
+    <path d="M106 124C130 126 134 104 120 98" fill="none" stroke-width="11"/><path d="M106 124C130 126 134 104 120 98" fill="none" stroke="#F6C99B" stroke-width="6"/>
+    <ellipse cx="80" cy="108" rx="32" ry="26" fill="#F6C99B"/>
+    <ellipse cx="80" cy="113" rx="16" ry="15" fill="#FFF6EC" stroke="none"/>
+    <ellipse cx="66" cy="132" rx="11" ry="6" fill="#F6C99B"/>
+    <ellipse cx="94" cy="132" rx="11" ry="6" fill="#F6C99B"/>
+    <g transform="rotate(0 80 64)">
+      <path d="M62 50L57 25L76 40Z" fill="#F6C99B"/>
+      <path d="M84 40L103 25L98 50Z" fill="#F6C99B"/>
+      <path d="M64 45L60 31L71 40Z" fill="#F4A6A6" stroke="none"/>
+      <path d="M89 40L100 31L96 45Z" fill="#F4A6A6" stroke="none"/>
+      <circle cx="80" cy="64" r="25" fill="#F6C99B"/>
+      <ellipse cx="80" cy="73" rx="13" ry="9" fill="#FFF6EC" stroke="none"/>
+      <path d="M66 61q4-6 8 0M86 61q4-6 8 0" fill="none"/>
+      <path d="M78 69.5l2 2 2-2z" fill="#E58A8A" stroke-width="1.5"/>
+      <path d="M73 72q7 9 14 0z" fill="#E58A8A" stroke-width="2"/>
+      
+    </g>
+    
+    <ellipse cx="66" cy="100" rx="8" ry="6" fill="#F6C99B"/><path d="M104 96L118 70" fill="none" stroke-width="13"/><path d="M104 96L118 70" fill="none" stroke="#F6C99B" stroke-width="8"/><ellipse cx="119" cy="66" rx="8" ry="9" fill="#F6C99B"/>
+    
+  </g>
+  
+  <g transform="rotate(0 80 64)"><ellipse cx="63" cy="71" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/><ellipse cx="97" cy="71" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/></g>
+  <path d="M130 54q6 6 4 14M136 46q10 10 6 24" fill="none" stroke="#6574BE" stroke-width="2.4" stroke-linecap="round"/><path transform="translate(28 44) scale(0.75)" d="M0-7C1-1 1-1 7 0C1 1 1 1 0 7C-1 1-1 1-7 0C-1-1-1-1 0-7Z" fill="#F2C14E"/>
+</svg>

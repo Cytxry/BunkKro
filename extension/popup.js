@@ -195,7 +195,7 @@ function renderTodayClasses() {
   if (totalClasses === 0) {
     list.innerHTML = `
       <div class="empty-state">
-        <img src="img/cat-books.svg" alt="" style="width:140px;margin:0 auto 6px;display:block">
+        <img src="img/${isHoliday ? 'cat-beach' : 'cat-books'}.svg" alt="" style="width:140px;margin:0 auto 6px;display:block">
         <h3>${isHoliday ? 'Holiday today 🏖️' : 'No classes scheduled today'}</h3>
         <p style="font-size:12px;color:#5E6375">Open the full app to upload your timetable or view upcoming days.</p>
       </div>

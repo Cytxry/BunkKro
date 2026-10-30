@@ -614,7 +614,7 @@ window.location.reload();
 
 // Logout
 async function handleLogout() {
-  if (!(await askDialog({ title: 'Log out?', message: "You'll need your email and password to log back in.", ok: 'Log out', cat: 'cat-books' }))) return;
+  if (!(await askDialog({ title: 'Log out?', message: "You'll need your email and password to log back in.", ok: 'Log out', cat: 'cat-wave' }))) return;
   
   try {
     const { error } = await supabaseClient.auth.signOut();
@@ -1340,6 +1340,8 @@ function renderHome() {
   const gi = hr < 5 ? 0 : hr < 12 ? 1 : hr < 17 ? 2 : 3;
   const name = userFirstName();
   document.getElementById('home-head').innerHTML = `${greetings[gi]}${name ? ', ' + escapeHTML(name) : ''}! <span class="wave" aria-hidden="true">${waves[gi]}</span>`;
+  const greetCat = document.getElementById('greet-cat');
+  if (greetCat) greetCat.src = `assets/${['cat-moon', 'cat-coffee', 'cat-laptop', hr < 21 ? 'cat-yarn' : 'cat-moon'][gi]}.svg`;
   document.getElementById('home-sub').textContent = now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
   closeAllPopovers();
@@ -1352,7 +1354,7 @@ function renderHome() {
     document.getElementById('verdict-wrap').innerHTML = '';
     document.getElementById('subject-cards').innerHTML = `
       <div class="empty">
-        <img class="empty-illus" src="assets/cat-peek.svg" alt="">
+        <img class="empty-illus" src="assets/cat-box.svg" alt="">
         <h3>No subjects yet</h3>
         <p>Add your subjects to find out if you're cooked.</p>
         <div class="empty-actions">
@@ -1494,9 +1496,9 @@ function openSafeBunks() {
   const total = rows.reduce((a, r) => a + r.bk, 0);
 
   let title, cls, cat;
-  if (total > 5) { title = `${total} safe bunks. Go touch grass.`; cls = 'var(--good)'; cat = 'cat-happy'; }
+  if (total > 5) { title = `${total} safe bunks. Go touch grass.`; cls = 'var(--good)'; cat = 'cat-chill'; }
   else if (total > 0) { title = `${total} safe bunk${total !== 1 ? 's' : ''}. Spend wisely.`; cls = 'var(--warn)'; cat = 'cat-laptop'; }
-  else { title = 'Zero safe bunks. Attend.'; cls = 'var(--danger)'; cat = 'cat-worried'; }
+  else { title = 'Zero safe bunks. Attend.'; cls = 'var(--danger)'; cat = 'cat-sad'; }
 
   document.getElementById('sb-cat').src = `assets/${cat}.svg`;
   document.getElementById('sb-title').innerHTML = `<span style="color:${cls}">${escapeHTML(title)}</span>`;
@@ -1682,7 +1684,7 @@ function renderHomeToday() {
   const todayStr = getLocalDateString();
 
   if (dateExceptions[todayStr]?.type === 'holiday') {
-    box.innerHTML = `<div class="today-note"><img src="assets/cat-books.svg" alt=""><div><strong>Holiday today 🏖️</strong><br>No classes count today. Enjoy!</div></div>`;
+    box.innerHTML = `<div class="today-note"><img src="assets/cat-beach.svg" alt=""><div><strong>Holiday today 🏖️</strong><br>No classes count today. Enjoy!</div></div>`;
     return;
   }
 
@@ -1707,7 +1709,7 @@ function renderHomeToday() {
   const unlinked = classes.length - countable.length;
   const linkLine = unlinked ? `<button class="tl-unlinked" onclick="openTodayTracker()">${ic('pen','ic-sm')}<span>${unlinked} class${unlinked !== 1 ? 'es' : ''} today ${unlinked !== 1 ? "aren't" : "isn't"} linked to a subject</span><span class="unmarked-go">Link ${ic('arrow-right','ic-xs')}</span></button>` : '';
   if (!countable.length) {
-    box.innerHTML = `<div class="today-note"><img src="assets/cat-peek.svg" alt=""><div><strong>Nothing to mark yet</strong><br>Link today's periods to your subjects to track them.</div></div>${linkLine}`;
+    box.innerHTML = `<div class="today-note"><img src="assets/cat-confused.svg" alt=""><div><strong>Nothing to mark yet</strong><br>Link today's periods to your subjects to track them.</div></div>${linkLine}`;
     return;
   }
   const shown = countable.slice(0, 6);
@@ -1758,7 +1760,7 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
         <span class="verdict-title">${escapeHTML(title)}</span>
         <span class="verdict-sub">${escapeHTML(sub)}</span>
       </span>
-      <img class="verdict-illus" src="assets/${cls === 'cooked' ? 'cat-worried' : cls === 'safe' ? 'cat-happy' : 'cat-books'}.svg" alt="">
+      <img class="verdict-illus" src="assets/${cls === 'cooked' ? (atRisk.length > subjects.length / 2 ? 'cat-sad' : 'cat-worried') : cls === 'safe' ? 'cat-chill' : 'cat-laptop'}.svg" alt="">
       <span class="verdict-tap">Am I Cooked? ${ic('arrow-right','ic-sm')}</span>
     </button>`;
 }
@@ -1866,7 +1868,7 @@ function openCooked() {
  
   document.getElementById('ck-emoji').textContent = emoji;
   const ckCat = document.getElementById('ck-cat');
-  if (ckCat) ckCat.src = `assets/${atRisk.length > 0 ? 'cat-worried' : (safeBunks > 5 ? 'cat-happy' : 'cat-books')}.svg`;
+  if (ckCat) ckCat.src = `assets/${atRisk.length > subjects.length / 2 ? 'cat-sad' : atRisk.length > 0 ? 'cat-worried' : (safeBunks > 5 ? 'cat-chill' : 'cat-laptop')}.svg`;
   document.getElementById('ck-verdict').innerHTML = `<span style="${cls}">${verdict}</span>`;
   document.getElementById('ck-msg').textContent = msg;
   document.getElementById('ck-breakdown').innerHTML = subjects.map((s,i) => {
@@ -1915,7 +1917,7 @@ function renderSubject(id, preserveSim) {
   const spIcon = document.getElementById('sp-icon');
   if (spIcon) { spIcon.innerHTML = ic(subjIcon(s.name)); spIcon.style.background = th.bg; spIcon.style.color = th.c; }
   const spCat = document.getElementById('sp-cat');
-  if (spCat) spCat.src = `assets/${!hasClasses(s) ? 'cat-books' : p >= tgt ? (bk > 3 ? 'cat-happy' : 'cat-laptop') : 'cat-worried'}.svg`;
+  if (spCat) spCat.src = `assets/${!hasClasses(s) ? 'cat-box' : p >= tgt ? (p >= tgt + 15 ? 'cat-trophy' : bk > 3 ? 'cat-happy' : 'cat-laptop') : (p < tgt - 15 || !isFinite(nd) ? 'cat-sad' : 'cat-worried')}.svg`;
   const hero = document.getElementById('sp-hero');
   if (hero) hero.style.setProperty('--hero-tint', th.bg);
 
@@ -2354,7 +2356,7 @@ async function saveSubject() {
   if (dayPlan.remove.length && !(await askDialog({
     title: 'Change its days?',
     message: `${v.name} will be ${describeDayPlan(dayPlan)} in your weekly timetable. Attendance already marked stays counted.`,
-    ok: 'Change days', cat: 'cat-peek' }))) return;
+    ok: 'Change days', cat: 'cat-calendar' }))) return;
 
   const saveBtn = document.querySelector('#edit-card .save-btn');
   saveBtn.disabled = true;
@@ -3845,7 +3847,7 @@ function renderValidationReport() {
   if (allIssues.length === 0) {
     container.innerHTML = `
       <div class="empty">
-        <img class="empty-illus" src="assets/cat-happy.svg" alt="">
+        <img class="empty-illus" src="assets/cat-trophy.svg" alt="">
         <h3>All clear ✓</h3>
         <p>No layout conflicts, boundary disagreements or low-confidence text found in this scan.</p>
       </div>
@@ -4567,7 +4569,7 @@ function showPackResult(r) {
 async function confirmImportPack() {
   const p = importedPack;
   if (!p || !currentUser) return;
-  if (p.slots.length && timetable.length && !(await askDialog({ title: 'Replace your timetable?', message: 'Your current weekly timetable will be swapped for the imported one. Your attendance numbers stay as they are.', ok: 'Replace it', cat: 'cat-laptop' }))) return;
+  if (p.slots.length && timetable.length && !(await askDialog({ title: 'Replace your timetable?', message: 'Your current weekly timetable will be swapped for the imported one. Your attendance numbers stay as they are.', ok: 'Replace it', cat: 'cat-mail' }))) return;
   const btn = document.getElementById('pack-import-btn');
   btn.disabled = true; btn.textContent = 'Importing…';
   try {
@@ -4933,7 +4935,7 @@ async function toggleDateHoliday() {
     if (plan.makeups.length) parts.push(`${plan.makeups.length} makeup/planned class${plan.makeups.length !== 1 ? 'es' : ''}`);
     if (plan.follows) parts.push('the timetable swap');
     if (parts.length) {
-      if (!(await askDialog({ title: 'Make it a holiday?', message: `This day has ${parts.join(' and ')}. A holiday doesn't count, so ${parts.length > 1 || marked.length + plan.makeups.length > 1 ? 'they' : 'it'} will be cleared and your totals adjusted.`, ok: 'Mark as holiday', cat: 'cat-books' }))) return;
+      if (!(await askDialog({ title: 'Make it a holiday?', message: `This day has ${parts.join(' and ')}. A holiday doesn't count, so ${parts.length > 1 || marked.length + plan.makeups.length > 1 ? 'they' : 'it'} will be cleared and your totals adjusted.`, ok: 'Mark as holiday', cat: 'cat-beach' }))) return;
       if (!(await clearMarksForDate(date))) { toast('Could not clear marks for this day', 'err'); renderTracker(); return; }
     }
     dateExceptions[date] = { type: 'holiday', note: 'College Holiday' };
@@ -5141,7 +5143,7 @@ async function confirmDaySwap() {
   // Marks on the old schedule's classes would no longer show, so clear them first
   const markedScheduled = getScheduledClassesForDate(date).filter(c => c.status).map(c => c.slotId);
   if (markedScheduled.length) {
-    if (!(await askDialog({ title: 'Switch the timetable?', message: `${markedScheduled.length} class${markedScheduled.length !== 1 ? 'es are' : ' is'} already marked on this day. Switching clears ${markedScheduled.length !== 1 ? 'those marks' : 'that mark'} and adjusts your totals.`, ok: 'Switch', cat: 'cat-peek' }))) return;
+    if (!(await askDialog({ title: 'Switch the timetable?', message: `${markedScheduled.length} class${markedScheduled.length !== 1 ? 'es are' : ' is'} already marked on this day. Switching clears ${markedScheduled.length !== 1 ? 'those marks' : 'that mark'} and adjusts your totals.`, ok: 'Switch', cat: 'cat-calendar' }))) return;
     if (!(await removeMarks(date, markedScheduled))) { toast('Could not clear marks for this day', 'err'); return; }
   }
   plan.follows = follows;
@@ -5326,7 +5328,7 @@ function renderTracker() {
             <div class="daily-stat-box ${pendingCount === 0 ? 'green' : 'amber'}"><span class="ds-icon">${ic(pendingCount === 0 ? 'check' : 'clock','ic-sm')}</span><div><div class="daily-stat-val">${pendingCount}</div><div class="daily-stat-lbl">${pendingCount === 0 ? 'All done ✓' : 'Pending'}</div></div></div>
           </div>
         </div>
-        <img class="daily-summary-illus" src="assets/${isHoliday ? 'cat-books' : allDone ? 'cat-happy' : totalCount === 0 ? 'cat-books' : markedCount === 0 ? 'cat-peek' : 'cat-laptop'}.svg" alt="">
+        <img class="daily-summary-illus" src="assets/${isHoliday ? 'cat-beach' : allDone ? 'cat-trophy' : totalCount === 0 ? 'cat-books' : markedCount === 0 ? (isToday ? 'cat-clock' : 'cat-peek') : 'cat-laptop'}.svg" alt="">
       </div>
     `;
   }
@@ -5335,7 +5337,7 @@ function renderTracker() {
   if (isHoliday) {
     content.innerHTML = `
       <div class="card empty">
-        <img class="empty-illus" src="assets/cat-books.svg" alt="">
+        <img class="empty-illus" src="assets/cat-beach.svg" alt="">
         <h3>Enjoy your holiday! 🏖️</h3>
         <p>No classes scheduled for today. Attendance records are paused.</p>
       </div>

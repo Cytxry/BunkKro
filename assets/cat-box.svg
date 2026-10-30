@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 140" role="img" aria-label="A cat peeking out of a cardboard box">
+<g stroke="#343F83" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M30 88h100v42q0 6-6 6H36q-6 0-6-6z" fill="#E4B98A"/>
+    <path d="M62 50L57 25L76 40Z" fill="#F6C99B"/><path d="M84 40L103 25L98 50Z" fill="#F6C99B"/>
+    <path d="M64 45L60 31L71 40Z" fill="#F4A6A6" stroke="none"/><path d="M89 40L100 31L96 45Z" fill="#F4A6A6" stroke="none"/>
+    <circle cx="80" cy="64" r="25" fill="#F6C99B"/>
+    <ellipse cx="80" cy="73" rx="13" ry="9" fill="#FFF6EC" stroke="none"/>
+    <circle cx="70" cy="62" r="4.5" fill="#343F83" stroke="none"/><circle cx="90" cy="62" r="4.5" fill="#343F83" stroke="none"/><path d="M78 69.5l2 2 2-2z" fill="#E58A8A" stroke-width="1.5"/><path d="M80 74q-2 3-5 2M80 74q2 3 5 2" fill="none" stroke-width="2"/>
+    <path d="M22 88h116l-8-12H30z" fill="#D9A877"/>
+    <path d="M30 88l-14 15 14 5M130 88l14 15-14 5" fill="#D9A877"/>
+    <ellipse cx="64" cy="89" rx="8" ry="6" fill="#F6C99B"/><ellipse cx="96" cy="89" rx="8" ry="6" fill="#F6C99B"/>
+    <path d="M62 112h36M66 120h28" fill="none" stroke="#B5835A" stroke-width="2.2"/>
+  </g>
+  <circle cx="71.5" cy="60.5" r="1.5" fill="#fff"/><circle cx="91.5" cy="60.5" r="1.5" fill="#fff"/>
+  <ellipse cx="63" cy="71" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/><ellipse cx="97" cy="71" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/>
+  <path transform="translate(130 30) scale(0.8)" d="M0-7C1-1 1-1 7 0C1 1 1 1 0 7C-1 1-1 1-7 0C-1-1-1-1 0-7Z" fill="#F2C14E"/><path transform="translate(28 40) scale(0.55)" d="M0-7C1-1 1-1 7 0C1 1 1 1 0 7C-1 1-1 1-7 0C-1-1-1-1 0-7Z" fill="#6574BE"/>
+</svg>

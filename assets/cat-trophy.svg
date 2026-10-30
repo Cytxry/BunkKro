@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 140" role="img" aria-label="A proud cat holding a trophy">
+<g stroke="#343F83" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    
+    <path d="M106 124C130 126 134 104 120 98" fill="none" stroke-width="11"/><path d="M106 124C130 126 134 104 120 98" fill="none" stroke="#F6C99B" stroke-width="6"/>
+    <ellipse cx="80" cy="108" rx="32" ry="26" fill="#F6C99B"/>
+    <ellipse cx="80" cy="113" rx="16" ry="15" fill="#FFF6EC" stroke="none"/>
+    <ellipse cx="66" cy="132" rx="11" ry="6" fill="#F6C99B"/>
+    <ellipse cx="94" cy="132" rx="11" ry="6" fill="#F6C99B"/>
+    <g transform="rotate(0 80 64)">
+      <path d="M62 50L57 25L76 40Z" fill="#F6C99B"/>
+      <path d="M84 40L103 25L98 50Z" fill="#F6C99B"/>
+      <path d="M64 45L60 31L71 40Z" fill="#F4A6A6" stroke="none"/>
+      <path d="M89 40L100 31L96 45Z" fill="#F4A6A6" stroke="none"/>
+      <circle cx="80" cy="64" r="25" fill="#F6C99B"/>
+      <ellipse cx="80" cy="73" rx="13" ry="9" fill="#FFF6EC" stroke="none"/>
+      <path d="M66 61q4-6 8 0M86 61q4-6 8 0" fill="none"/>
+      <path d="M78 69.5l2 2 2-2z" fill="#E58A8A" stroke-width="1.5"/>
+      <path d="M73 72q7 9 14 0z" fill="#E58A8A" stroke-width="2"/>
+      
+    </g>
+    <path d="M65 90h30l-3 17q-1 7-12 8q-11-1-12-8z" fill="#F2C14E"/><path d="M65 93q-9 0-8 7q1 5 9 5M95 93q9 0 8 7q-1 5-9 5" fill="none" stroke-width="2.4"/><path d="M76 115h8v5h-8zM69 120h22v6H69z" fill="#F2C14E"/><path d="M74 98l4 6 6-9" fill="none" stroke="#fff" stroke-width="2.6"/>
+    <ellipse cx="61" cy="104" rx="8" ry="6" fill="#F6C99B"/><ellipse cx="99" cy="104" rx="8" ry="6" fill="#F6C99B"/>
+    
+  </g>
+  
+  <g transform="rotate(0 80 64)"><ellipse cx="63" cy="71" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/><ellipse cx="97" cy="71" rx="4.5" ry="2.6" fill="#F4A6A6" opacity=".85"/></g>
+  <path transform="translate(24 40) scale(0.9)" d="M0-7C1-1 1-1 7 0C1 1 1 1 0 7C-1 1-1 1-7 0C-1-1-1-1 0-7Z" fill="#F2C14E"/><path transform="translate(138 34) scale(0.75)" d="M0-7C1-1 1-1 7 0C1 1 1 1 0 7C-1 1-1 1-7 0C-1-1-1-1 0-7Z" fill="#F2C14E"/><path transform="translate(132 96) scale(0.6)" d="M0-7C1-1 1-1 7 0C1 1 1 1 0 7C-1 1-1 1-7 0C-1-1-1-1 0-7Z" fill="#6574BE"/><rect x="20" y="78" width="6" height="11" rx="2" fill="#E59A8C" transform="rotate(25 23 83)"/><rect x="134" y="62" width="6" height="11" rx="2" fill="#8DB580" transform="rotate(-20 137 67)"/>
+</svg>
