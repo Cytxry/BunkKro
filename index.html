@@ -135,6 +135,12 @@
   <!-- Top-right account controls -->
   <header class="topbar">
     <div class="top-controls">
+      <div class="pop-host">
+        <button class="streak-pill" id="streak-card" onclick="openStreakCalendar(event)" aria-haspopup="dialog" aria-expanded="false" aria-controls="streak-pop" aria-label="Attendance streak" title="Your streak">
+          <span class="streak-fire" aria-hidden="true">🔥</span><span class="streak-count" id="streak-count">0</span>
+        </button>
+        <div class="popover" id="streak-pop" role="dialog" aria-labelledby="streak-pop-title" data-width="300" hidden></div>
+      </div>
       <button class="icon-btn" id="theme-toggle" onclick="toggleTheme()" aria-label="Switch to dark theme" title="Switch theme"><svg class="ic"><use href="#i-sun"/></svg></button>
       <div class="profile" id="profile">
         <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()" aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu" aria-label="Account menu" title="Account">
@@ -179,10 +185,6 @@
           <div id="home-today"></div>
           <div id="home-unmarked"></div>
         </section>
-        <div class="pop-host">
-          <div class="streak-row" id="streak-row"></div>
-          <div class="popover" id="streak-pop" role="dialog" aria-labelledby="streak-pop-title" data-width="300" hidden></div>
-        </div>
         <section class="card" id="history-card">
           <div class="card-title">Class history
             <span class="chart-legend"><span><i style="background:var(--primary-soft)"></i>Present</span><span><i style="background:var(--absent-bar)"></i>Absent</span></span>

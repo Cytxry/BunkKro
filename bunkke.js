@@ -1278,6 +1278,7 @@ function renderNav() {
     </button>`;
   }).join('');
   renderWisdom();
+  renderStreak();
 }
 
 function updateGlobalTarget(v) {
@@ -1523,42 +1524,47 @@ function closeSafeBunks() {
   if (safePopTrigger && document.body.contains(safePopTrigger)) safePopTrigger.focus({ preventScroll: true });
 }
 
-// ── Check-in history ──
-// Existing storage only keeps `streak` + `lastCheck`. By construction of checkIn(),
-// a streak of N means N consecutive check-ins ending on lastCheck, so that range is
-// exact history. New check-ins are appended from here on.
-// Dates are the student's LOCAL day: UTC days put an India check-in made
-// between midnight and 5:30 AM on the previous day.
+// ── Streak ──
+// Worked out from your saved attendance, so it's the same on every device and
+// the extension counts too: a day "counts" when at least one class on it is
+// marked. Days with nothing to mark (weekends, holidays, no classes) are
+// skipped rather than breaking it, and today only counts once it's marked.
 function utcDayKey(d) { return getLocalDateString(d); }
 function shiftDayKey(key, n) { const [y, m, d] = key.split('-').map(Number); return getLocalDateString(new Date(y, m - 1, d + n)); }
-function getCheckinHistory() {
-  let hist = null;
-  try { hist = JSON.parse(localStorage.getItem('bk_checkins') || 'null'); } catch (e) { hist = null; }
-  if (!Array.isArray(hist)) {
-    hist = [];
-    if (lastCheck && streak > 0) for (let i = 0; i < streak; i++) hist.push(shiftDayKey(lastCheck, -i));
-    try { localStorage.setItem('bk_checkins', JSON.stringify(hist)); } catch (e) {}
-  }
-  return [...new Set(hist.filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)))].sort();
+function markedDays() {
+  return Object.keys(dailyPeriodLogs)
+    .filter(d => DATE_RE.test(d) && Object.values(dailyPeriodLogs[d] || {}).some(l => l && l.status))
+    .sort();
 }
-function recordCheckin(key) {
-  const hist = getCheckinHistory();
-  if (!hist.includes(key)) hist.push(key);
-  try { localStorage.setItem('bk_checkins', JSON.stringify(hist.sort())); } catch (e) {}
+function isFreeDay(key) {
+  if (dateExceptions[key]?.type === 'holiday') return true;
+  return !getAllClassesForDate(key).some(c => isMarkable(c, key));
 }
 function activeStreak() {
-  const today = utcDayKey(new Date());
-  return (lastCheck === today || lastCheck === shiftDayKey(today, -1)) ? streak : 0;
+  const marked = new Set(markedDays());
+  if (!marked.size) return 0;
+  const today = getLocalDateString(), first = [...marked][0];
+  let n = 0, k = marked.has(today) ? today : shiftDayKey(today, -1); // today isn't over yet
+  for (let i = 0; i < 400 && k >= first; i++, k = shiftDayKey(k, -1)) {
+    if (marked.has(k)) n++;
+    else if (!isFreeDay(k)) break;
+  }
+  return n;
 }
 function bestStreak(hist) {
-  let best = 0, run = 0, prev = null;
-  hist.forEach(k => { run = prev && shiftDayKey(prev, 1) === k ? run + 1 : 1; best = Math.max(best, run); prev = k; });
+  if (!hist.length) return 0;
+  const marked = new Set(hist), today = getLocalDateString();
+  let best = 0, run = 0;
+  for (let k = hist[0], i = 0; k <= today && i < 800; k = shiftDayKey(k, 1), i++) {
+    if (marked.has(k)) best = Math.max(best, ++run);
+    else if (k !== today && !isFreeDay(k)) run = 0;
+  }
   return Math.max(best, activeStreak());
 }
+function getCheckinHistory() { return markedDays(); }
 
 let calMonth = null; // { y, m }
 function openStreakCalendar(e) {
-  if (e && e.target.closest('.checkin-btn')) return;
   if (!document.getElementById('streak-pop')?.hidden) { closePopover('streak-pop'); return; }
   const now = new Date();
   calMonth = { y: now.getFullYear(), m: now.getMonth() };
@@ -1597,7 +1603,7 @@ function streakCalendarHTML() {
     const hit = set.has(key);
     if (hit) monthCount++;
     const isToday = key === todayKey;
-    cells += `<span class="cal-cell${hit ? ' hit' : ''}${isToday ? ' today' : ''}" ${hit ? `title="Checked in"` : ''}>${hit ? `<span class="cal-flame" aria-hidden="true">${ic('fire-solid')}</span>` : ''}<span class="cal-d">${d}</span>${hit ? '<span class="sr-only">checked in</span>' : ''}</span>`;
+    cells += `<span class="cal-cell${hit ? ' hit' : ''}${isToday ? ' today' : ''}" ${hit ? `title="Marked attendance"` : ''}>${hit ? `<span class="cal-flame" aria-hidden="true">${ic('fire-solid')}</span>` : ''}<span class="cal-d">${d}</span>${hit ? '<span class="sr-only">marked attendance</span>' : ''}</span>`;
   }
   const monthName = new Date(y, m, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   return `
@@ -1611,11 +1617,11 @@ function streakCalendarHTML() {
       <span class="cal-month">${monthName}</span>
       <button class="cal-nav cal-next" onclick="shiftCalMonth(1)" ${atMax ? 'disabled' : ''} aria-label="Next month">${ic('chevron-right','ic-sm')}</button>
     </div>
-    <div class="cal-grid" role="grid" aria-label="${monthName} check-ins">
+    <div class="cal-grid" role="grid" aria-label="${monthName} days with attendance marked">
       ${['M','T','W','T','F','S','S'].map(w => `<span class="cal-wd">${w}</span>`).join('')}
       ${cells}
     </div>
-    ${hist.length ? '' : '<p class="pop-meta">No check-ins recorded yet — tap “Check in” to start your streak.</p>'}
+    <p class="pop-meta">${hist.length ? 'Mark any class on a class day to keep it going. Days without classes don\'t break it.' : 'Mark your first class on Daily Classes to start your streak.'}</p>
     <div class="pop-foot"><span>Current <strong>${cur}</strong></span><span>Best <strong>${best}</strong></span><span>This month <strong>${monthCount}</strong></span></div>
   `;
 }
@@ -1761,25 +1767,22 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
 //  STREAK
 // ══════════════════════════════════════════════════════
 function renderStreak() {
+  const pill = document.getElementById('streak-card');
+  if (!pill) return;
   const today = getLocalDateString();
-  const checked = lastCheck === today;
-  const examDays = daysUntil(examDate);
   const cur = activeStreak();
-  closePopover('streak-pop', false);
-
-  document.getElementById('streak-row').innerHTML = `
-    <div class="streak-card" id="streak-card" role="button" tabindex="0" aria-haspopup="dialog" aria-expanded="false" aria-controls="streak-pop"
-         aria-label="View your check-in calendar" onclick="openStreakCalendar(event)" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();openStreakCalendar(event)}">
-      <div class="streak-icon" aria-hidden="true">🔥</div>
-      <div class="streak-info">
-        <div class="streak-num">${cur}<small>day streak</small></div>
-        <div class="streak-lbl">${examDate ? `🎓 Exam in <strong style="color:${examDays<=7?'var(--danger)':'inherit'}">${examDays}</strong> days · ` : ''}<span class="streak-link">View calendar</span></div>
-      </div>
-      <button class="checkin-btn ${checked?'checked':''}" ${checked ? 'disabled' : 'onclick="event.stopPropagation(); checkIn()"'}>
-        ${checked ? '✓ Checked in' : 'Check in 👀'}
-      </button>
-    </div>
-  `;
+  const freeToday = isFreeDay(today);
+  const doneToday = markedDays().includes(today);
+  document.getElementById('streak-count').textContent = cur;
+  pill.classList.toggle('lit', cur > 0 && (doneToday || freeToday));
+  pill.classList.toggle('pending', cur > 0 && !doneToday && !freeToday);
+  pill.classList.toggle('cold', cur === 0);
+  const tip = doneToday ? `${cur}-day streak — today's done`
+    : cur > 0 && freeToday ? `${cur}-day streak — no classes today`
+    : cur > 0 ? `${cur}-day streak — mark today's classes to keep it`
+    : 'Mark a class to start a streak';
+  pill.title = tip;
+  pill.setAttribute('aria-label', `${tip}. Open streak calendar`);
 }
 
 // ══════════════════════════════════════════════════════
@@ -1829,19 +1832,7 @@ function toggleTheme() {
   if (currPage === 'timetable' && scannerState.activeTab === 'studio') renderStudioCanvas();
 }
 
-function checkIn() {
-  const today = getLocalDateString();
-  if (lastCheck !== today) {
-    const yesterday = shiftDayKey(today, -1);
-    getCheckinHistory(); // seed from the pre-existing streak before it changes
-    streak = lastCheck === yesterday ? streak + 1 : 1;
-    lastCheck = today;
-    savePrefs();
-    recordCheckin(today);
-    renderStreak();
-  }
-  openCooked();
-}
+
  
 // ══════════════════════════════════════════════════════
 //  AM I COOKED MODAL

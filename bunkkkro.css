@@ -367,6 +367,19 @@ nav{padding:4px 0 10px;flex:1 0 auto}
 ══════════════════════════════════════════ */
 .topbar{display:flex;justify-content:flex-end;align-items:center;min-height:52px;margin-bottom:10px;position:relative;z-index:70}
 .top-controls{display:flex;align-items:center;gap:10px}
+/* streak: just the fire + count, opens the streak calendar */
+.top-controls .pop-host{display:flex}
+.streak-pill{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 14px 0 11px;border-radius:14px;border:1px solid var(--border-subtle);background:var(--surface);box-shadow:var(--shadow-sm);font:inherit;cursor:pointer;transition:background .15s,box-shadow .15s,transform .15s}
+.streak-pill:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.streak-pill[aria-expanded="true"]{box-shadow:0 0 0 3px var(--warn-line)}
+.streak-fire{font-size:1.15rem;line-height:1;transition:filter .2s,opacity .2s}
+.streak-count{font-weight:800;font-size:1rem;color:var(--primary-deep);font-variant-numeric:tabular-nums}
+.streak-pill.lit{background:linear-gradient(135deg,var(--p-amber),var(--surface) 90%);border-color:var(--warn-line)}
+.streak-pill.lit .streak-count{color:var(--amber-text)}
+.streak-pill.pending .streak-fire{animation:fire-wait 2.2s ease-in-out infinite}
+.streak-pill.cold .streak-fire{filter:grayscale(1);opacity:.5}
+@keyframes fire-wait{0%,100%{opacity:.55;transform:scale(.92)}50%{opacity:1;transform:scale(1.05)}}
+@media (prefers-reduced-motion: reduce){.streak-pill.pending .streak-fire{animation:none;opacity:.7}}
 .icon-btn{width:44px;height:44px;border-radius:14px;border:1px solid var(--border-subtle);background:var(--surface);color:var(--primary-deep);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);transition:background .15s}
 .icon-btn:hover{background:var(--selected)}
 .profile{position:relative}
@@ -585,19 +598,6 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .ic-xs{width:12px;height:12px}
 
 /* streak */
-.streak-row{display:block}
-.streak-card{cursor:pointer;transition:box-shadow .15s,transform .15s;display:flex;align-items:center;gap:14px;background:linear-gradient(90deg,var(--p-amber),var(--surface) 75%);border:1px solid var(--border-subtle);border-radius:20px;padding:14px 18px;box-shadow:var(--shadow);flex-wrap:wrap}
-.streak-icon{width:46px;height:46px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:1.45rem;flex-shrink:0;box-shadow:var(--shadow-sm)}
-.streak-info{flex:1;min-width:120px}
-.streak-num{font-size:1.45rem;font-weight:800;color:var(--primary-deep);line-height:1;font-variant-numeric:tabular-nums}
-.streak-num small{font-size:.875rem;font-weight:600;color:var(--text2);margin-left:5px}
-.streak-lbl{font-size:.8125rem;color:var(--text2);margin-top:3px}
-.streak-card:hover{transform:translateY(-1px);box-shadow:var(--shadow-lg)}
-.streak-card[aria-expanded="true"]{box-shadow:0 0 0 3px var(--warn-line),var(--shadow)}
-.streak-link{color:var(--primary);font-weight:600;text-decoration:underline;text-underline-offset:2px}
-.checkin-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--solid-warn);color:#fff;border:none;font-weight:700;font-size:.875rem;padding:10px 16px;border-radius:12px;transition:filter .15s;flex-shrink:0}
-.checkin-btn:hover{filter:brightness(.94)}
-.checkin-btn.checked{background:var(--good-bg);color:var(--good);border:1px solid var(--good-line);cursor:default}
 
 /* bar chart */
 .chart-legend{display:inline-flex;gap:14px;font-size:.8125rem;color:var(--text2);font-weight:500}
@@ -1143,6 +1143,7 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
   .main{margin-left:0;padding:78px 16px 40px}
   .topbar{position:fixed;top:8px;right:12px;min-height:0;margin:0;z-index:160}
   .icon-btn{width:42px;height:42px;box-shadow:none}
+  .streak-pill{height:42px;padding:0 11px 0 9px;box-shadow:none}
   .profile-btn{width:42px;height:42px;box-shadow:none}
   .home-top{margin:0 0 18px;padding-right:0;min-height:0}
   .greet-cat{height:60px;margin-left:auto}
