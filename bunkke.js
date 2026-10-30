@@ -1083,16 +1083,16 @@ function renderHome() {
       <span class="sc-val" style="color:${safeBunks>0?'var(--good)':'var(--danger)'}">${safeBunks}</span>
       <span class="sc-sub">${safeBunks>0?'go ahead, skip something':'you are cooked. attend.'}</span>
     </button>
-    <button class="sc tone-pink" onclick="openCooked()" title="Open Am I Cooked?">
-      <span class="sc-top"><span class="sc-chip pink">${ic('alert','ic-sm')}</span><span class="sc-lbl">At risk</span><span class="sc-go">${ic('chevron-right','ic-sm')}</span></span>
-      <span class="sc-val" style="color:${atRisk.length>0?'var(--danger)':'var(--good)'}">${atRisk.length}</span>
-      <span class="sc-sub sc-clip">${atRisk.length>0?escapeHTML(atRisk.map(s=>s.name).join(', ')):'all subjects safe ✓'}</span>
-    </button>
-    <${hasBest ? `button onclick="goPage('subject','${bestBunk.id}')"` : 'div'} class="sc tone-blue">
-      <span class="sc-top"><span class="sc-chip blue">${ic('star','ic-sm')}</span><span class="sc-lbl">Best to bunk</span>${hasBest ? `<span class="sc-go">${ic('chevron-right','ic-sm')}</span>` : ''}</span>
-      <span class="sc-val sc-val-text" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</span>
-      <span class="sc-sub">${hasBest ? bunkable(bestBunk)+' bunk'+(bunkable(bestBunk)!==1?'s':'')+' left' : 'nowhere is safe rn'}</span>
-    </${hasBest ? 'button' : 'div'}>
+    <div class="sc tone-pink">
+      <div class="sc-top"><span class="sc-chip pink">${ic('alert','ic-sm')}</span><span class="sc-lbl">At risk</span></div>
+      <div class="sc-val" style="color:${atRisk.length>0?'var(--danger)':'var(--good)'}">${atRisk.length}</div>
+      <div class="sc-sub sc-clip">${atRisk.length>0?escapeHTML(atRisk.map(s=>s.name).join(', ')):'all subjects safe ✓'}</div>
+    </div>
+    <div class="sc tone-blue">
+      <div class="sc-top"><span class="sc-chip blue">${ic('star','ic-sm')}</span><span class="sc-lbl">Best to bunk</span></div>
+      <div class="sc-val sc-val-text" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</div>
+      <div class="sc-sub">${hasBest ? bunkable(bestBunk)+' bunk'+(bunkable(bestBunk)!==1?'s':'')+' left' : 'nowhere is safe rn'}</div>
+    </div>
   `;
  
   renderVerdictCard(ov, atRisk, safeBunks);
@@ -1834,7 +1834,6 @@ function updateSim() {
   const plan = Math.max(0, parseInt(document.getElementById('sim-input').value)||0);
   const projTotal = s.total + plan;
   const projPct = attPct(s.present, projTotal);
-  const drop = _sp - projPct;
   const safe = projPct >= tgt;
   const bk_now = Math.max(0, Math.floor(s.present*100/tgt) - s.total);
  
@@ -1844,31 +1843,31 @@ function updateSim() {
       ? 'Can safely skip <strong>' + bk_now + '</strong> more.' + (pw>0 ? ' ~' + (bk_now/pw).toFixed(1) + ' weeks worth.' : '')
       : 'Zero safe bunks. Right at the limit.';
     if (remaining !== null) {
-      const projEndTotal = s.total + remaining;
-      const projEndPct = attPct(s.present, projEndTotal);
+      const projEndPct = attPct(s.present + remaining, s.total + remaining);
       h += ' If you attend all <strong>' + remaining + '</strong> remaining classes, you end the semester at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
     }
     document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + h + '</div>';
     return;
   }
  
-  const wkCtx = pw > 0 ? ` (${(plan/pw).toFixed(1)}w)` : '';
+  const wks = n => `${n} week${n !== 1 ? 's' : ''}`;
+  const wkCtx = pw > 0 ? ` (~${wks(Math.round(plan / pw * 10) / 10)} of classes)` : '';
   const extraNd = safe ? 0 : needed({total:projTotal,present:s.present}, tgt);
   const recovCtx = !safe && !isFinite(extraNd) ? ` A ${tgt}% target can't be recovered after a bunk.`
     : !safe && extraNd > 0
-    ? pw > 0 ? ` Need <strong>${extraNd} straight classes</strong> to recover — ~${Math.ceil(extraNd/pw)} weeks.`
+    ? pw > 0 ? ` Need <strong>${extraNd} straight classes</strong> to recover — ~${wks(Math.ceil(extraNd/pw))}.`
              : ` Need <strong>${extraNd} consecutive</strong> to recover.`
     : '';
  
   const reaction = getSimReaction(plan, bk_now, safe, projPct, tgt, subjRoastSeed(s));
  
-  // End-of-semester projection if semTotal is set
+  // End-of-semester projection if semTotal is set: skip `plan` classes,
+  // attend every other class left this semester.
   let eosCtx = '';
   if (s.semTotal && s.semTotal > s.total) {
     const remainAfterBunks = Math.max(0, s.semTotal - s.total - plan);
-    const eosTotal = s.total + plan + remainAfterBunks;
-    const eosPct = attPct(s.present, eosTotal);
-    eosCtx = ' End of sem: <strong style="color:' + pctTextColor(eosPct, tgt) + '">' + eosPct + '%</strong>.';
+    const eosPct = attPct(s.present + remainAfterBunks, s.total + plan + remainAfterBunks);
+    eosCtx = ' Attend the rest and you end the sem at <strong style="color:' + pctTextColor(eosPct, tgt) + '">' + eosPct + '%</strong>.';
   }
  
   let icon, verdict;
@@ -1877,7 +1876,7 @@ function updateSim() {
   } else if (safe) {
     icon = '⚠️'; verdict = '<strong style="color:var(--warn)">' + _sp + '% → ' + projPct + '%</strong> — above ' + tgt + '%' + wkCtx + ' but ' + (plan-bk_now) + ' over limit. ' + reaction + eosCtx;
   } else {
-    icon = '🚨'; verdict = '<strong style="color:var(--danger)">' + _sp + '% → ' + projPct + '%</strong> — <strong>' + Math.abs(drop) + '%</strong> below ' + tgt + '%' + wkCtx + '.' + recovCtx + ' ' + reaction + eosCtx;
+    icon = '🚨'; verdict = '<strong style="color:var(--danger)">' + _sp + '% → ' + projPct + '%</strong> — <strong>' + (tgt - projPct) + '%</strong> below ' + tgt + '%' + wkCtx + '.' + recovCtx + ' ' + reaction + eosCtx;
   }
  
   const bw = Math.min(100,projPct), cw = Math.min(100,_sp);

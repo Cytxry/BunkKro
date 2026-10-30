@@ -581,7 +581,11 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .chip.pink{background:var(--p-pink);color:var(--danger)}
 .chip.amber{background:var(--p-amber);color:var(--amber-text)}
 
-.subj-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+.subj-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:stretch;margin-bottom:20px}
+.subj-grid .adv-card{margin-bottom:0;display:flex;flex-direction:column}
+/* the cat sits on the card's bottom edge, filling the space beside the simulator */
+.subj-grid .adv-card.adv-advisor{overflow:hidden;padding-bottom:0;background:linear-gradient(180deg,var(--surface) 45%,var(--p-lav) 210%)}
+.adv-cat{display:block;width:124px;margin:auto 28px -5px auto;padding-top:16px;pointer-events:none}
 .adv-card,.edit-card{background:var(--surface);border:1px solid var(--border-subtle);border-radius:22px;box-shadow:var(--shadow);padding:22px;margin-bottom:20px}
 .adv-card h4,.edit-card h4{font-size:1.15rem;font-weight:800;color:var(--primary-deep);margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;letter-spacing:-.015em}
 .adv-card h4 .h-sub{font-size:.85rem;font-weight:500;color:var(--text2)}
