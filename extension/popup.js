@@ -9,6 +9,7 @@ let timetableEntries = [];
 let dailyPeriodLogs = {};
 let globalSession = null;
 let todayException = null; // holiday / makeup classes / swapped timetable for today
+let countedUpTo = {};       // subjectId -> date the typed-in numbers already include (from the account)
 
 function escapeHTML(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -74,6 +75,12 @@ async function loadData() {
 
     currentUser = session.user;
     console.log('User logged in:', currentUser.id);
+    // Fresh account data: which subjects' typed-in numbers already include today
+    try {
+      const { data: u } = await supabaseClient.auth.getUser();
+      const cu = u?.user?.user_metadata?.bk_counted_upto;
+      if (cu && typeof cu === 'object') countedUpTo = cu;
+    } catch (e) { /* keep going without it */ }
 
     // 1. Load subjects
     const { data: subjectsData, error: subjectsError } = await supabaseClient
@@ -201,7 +208,9 @@ function renderTodayClasses() {
 
   // Calculate completion
   // Only classes linked to a subject can be marked, so only they count
-  const countable = todayClasses.filter(c => subjects.some(x => x.id === c.subject_id));
+  const todayStr = getLocalDateString();
+  const preCounted = c => typeof countedUpTo[c.subject_id] === 'string' && todayStr <= countedUpTo[c.subject_id];
+  const countable = todayClasses.filter(c => subjects.some(x => x.id === c.subject_id) && !preCounted(c));
   let markedCount = 0;
   countable.forEach(c => {
     const st = dailyPeriodLogs[c.id];
@@ -238,7 +247,8 @@ function renderTodayClasses() {
           ${timeDisplay ? `<span>🕒 ${escapeHTML(timeDisplay)}</span>` : ''}
           ${s ? `<span>${s.present}/${s.total} attended</span>` : ''}
         </div>
-        ${!s ? '<div class="period-meta" style="margin-top:6px">Not linked to a subject — link it in the app to track it.</div>' : `<div class="tracker-btns">
+        ${!s ? '<div class="period-meta" style="margin-top:6px">Not linked to a subject — link it in the app to track it.</div>'
+          : preCounted(c) ? '<div class="period-meta" style="margin-top:6px">✓ Already in the numbers you entered for this subject.</div>' : `<div class="tracker-btns">
           <button class="present ${status === 'p' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.makeup ? 90 : c.period_index}" data-status="p">
             ${status === 'p' ? '✓ Present' : 'Present'}
           </button>

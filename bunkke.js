@@ -427,6 +427,21 @@ async function updateSubject(id, updatedData) {
   }
 }
 
+// Change a subject's counts by a delta, on top of what's saved right now.
+// (Writing this tab's remembered numbers would wipe out classes marked on
+// another device or tab in the meantime.)
+async function applySubjectDelta(s, dTotal, dPresent) {
+  if (!s || (!dTotal && !dPresent)) return true;
+  try {
+    const { data, error } = await supabaseClient.from('subjects').select('total,present')
+      .eq('id', s.id).eq('user_id', currentUser.id).limit(1);
+    if (!error && data && data[0]) { s.total = data[0].total || 0; s.present = data[0].present || 0; }
+  } catch (e) { /* offline: use what this tab has */ }
+  s.total = Math.max(0, s.total + dTotal);
+  s.present = Math.min(s.total, Math.max(0, s.present + dPresent));
+  return updateSubject(s.id, { total: s.total, present: s.present });
+}
+
 // Delete subject from Supabase
 async function deleteSubjectFromDB(subjectId) {
   if (!currentUser) return false;
@@ -639,6 +654,33 @@ function showAuthModal() {
   document.getElementById('logout-btn').style.display = 'none';
   toggleProfileMenu(false);
 }
+
+// Coming back to the tab (phone unlocked, switched from another tab/device):
+// reload so this tab isn't working from numbers that have changed elsewhere.
+// Skipped while something is being edited so nothing typed gets lost.
+let hiddenAt = 0, refreshing = false;
+function busyEditing() {
+  return !!document.querySelector('.overlay.show, .cooked-overlay.show, .chip-input')
+    || (currPage === 'subject' && document.getElementById('edit-card')?.open)
+    || (typeof ttDrag !== 'undefined' && ttDrag.el);
+}
+async function refreshData() {
+  if (!currentUser || refreshing || appLoading || busyEditing()) return;
+  refreshing = true;
+  try {
+    await loadSubjects();
+    await loadTimetable();
+    await loadDailyPeriodLogs();
+    await loadDateExceptions();
+    if (busyEditing()) return;
+    renderAll();
+    if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
+  } finally { refreshing = false; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (hiddenAt && Date.now() - hiddenAt > 20000) refreshData();
+});
 
 let appLoadedFor = null;   // user id whose data is loaded
 let appLoading = null;     // in-flight load, shared by concurrent callers
@@ -970,6 +1012,11 @@ function randToast(type) { return randFrom(TOAST_MSGS[type] || ['Done.']); }
 let globalTarget = parseInt(localStorage.getItem('bk_global_target') || '75');
 let semStart = localStorage.getItem('bk_sem_start') || '';
 let examDate = localStorage.getItem('bk_exam_date') || '';
+let semEnd = localStorage.getItem('bk_sem_end') || '';   // last day of classes
+// subjectId -> 'YYYY-MM-DD': the numbers typed in for that subject already
+// include every class up to and including this day (see "counted up to").
+let countedUpTo = {};
+try { countedUpTo = JSON.parse(localStorage.getItem('bk_counted_upto') || '{}') || {}; } catch { countedUpTo = {}; }
 let streak = parseInt(localStorage.getItem('bk_streak') || '0');
 let lastCheck = localStorage.getItem('bk_last_check') || '';
  
@@ -988,6 +1035,8 @@ function savePrefs() {
   localStorage.setItem('bk_global_target', globalTarget);
   localStorage.setItem('bk_sem_start', semStart);
   localStorage.setItem('bk_exam_date', examDate);
+  localStorage.setItem('bk_sem_end', semEnd);
+  localStorage.setItem('bk_counted_upto', JSON.stringify(countedUpTo));
   localStorage.setItem('bk_streak', streak);
   localStorage.setItem('bk_last_check', lastCheck);
   schedulePrefsSync();
@@ -1002,11 +1051,11 @@ function schedulePrefsSync() {
   if (!currentUser || !supabaseClient?.auth?.updateUser) return;
   clearTimeout(prefsSyncTimer);
   prefsSyncTimer = setTimeout(async () => {
-    const want = { semStart, examDate, target: globalTarget };
-    const have = currentUser?.user_metadata?.bk_prefs || {};
-    if (have.semStart === want.semStart && have.examDate === want.examDate && have.target === want.target) return;
+    const want = { semStart, examDate, semEnd, target: globalTarget };
+    const meta = currentUser?.user_metadata || {};
+    if (JSON.stringify(meta.bk_prefs || {}) === JSON.stringify(want) && JSON.stringify(meta.bk_counted_upto || {}) === JSON.stringify(countedUpTo)) return;
     try {
-      const { data, error } = await supabaseClient.auth.updateUser({ data: { bk_prefs: want } });
+      const { data, error } = await supabaseClient.auth.updateUser({ data: { bk_prefs: want, bk_counted_upto: countedUpTo } });
       if (error) throw error;
       if (data?.user) currentUser = data.user;
     } catch (err) {
@@ -1018,11 +1067,19 @@ function applyPrefsFromAccount() {
   const p = currentUser?.user_metadata?.bk_prefs;
   if (!p || typeof p !== 'object') {
     // First time on an account: upload whatever this device already has
-    if (semStart || examDate || globalTarget !== 75) schedulePrefsSync();
+    if (semStart || examDate || semEnd || globalTarget !== 75 || Object.keys(countedUpTo).length) schedulePrefsSync();
     return;
   }
   if (typeof p.semStart === 'string' && (p.semStart === '' || DATE_RE.test(p.semStart))) semStart = p.semStart;
   if (typeof p.examDate === 'string' && (p.examDate === '' || DATE_RE.test(p.examDate))) examDate = p.examDate;
+  if (typeof p.semEnd === 'string' && (p.semEnd === '' || DATE_RE.test(p.semEnd))) semEnd = p.semEnd;
+  const cu = currentUser?.user_metadata?.bk_counted_upto;
+  if (cu && typeof cu === 'object') {
+    countedUpTo = {};
+    Object.entries(cu).forEach(([k, v]) => { if (typeof v === 'string' && DATE_RE.test(v)) countedUpTo[k] = v; });
+  }
+  localStorage.setItem('bk_sem_end', semEnd);
+  localStorage.setItem('bk_counted_upto', JSON.stringify(countedUpTo));
   const t = Math.round(Number(p.target));
   if (t >= 1 && t <= 100) globalTarget = t;
   localStorage.setItem('bk_global_target', globalTarget);
@@ -1101,6 +1158,10 @@ function estimateHeldByDays(start, counts) {
     held += n;
   }
   return { held, holidays };
+}
+function fmtShort(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 function fmtDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -1204,6 +1265,8 @@ function toggleSidebar() {
 }
 function renderNav() {
   document.getElementById('global-target').value = globalTarget;
+  const sl = document.getElementById('sem-link-text');
+  if (sl) sl.textContent = semStart && semEnd ? `Semester: ${fmtShort(semStart)} – ${fmtShort(semEnd)}` : semStart ? `Semester from ${fmtShort(semStart)}` : 'Set semester dates';
   document.getElementById('nav-subjects').innerHTML = subjects.map((s, i) => {
     const risk = isAtRisk(s);
     const active = currPage === 'subject' && currSubjId === s.id ? ' active' : '';
@@ -1463,9 +1526,11 @@ function closeSafeBunks() {
 // ── Check-in history ──
 // Existing storage only keeps `streak` + `lastCheck`. By construction of checkIn(),
 // a streak of N means N consecutive check-ins ending on lastCheck, so that range is
-// exact history. New check-ins are appended from here on (dates are UTC keys, as in checkIn).
-function utcDayKey(d) { return d.toISOString().split('T')[0]; }
-function shiftDayKey(key, n) { const d = new Date(key + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return utcDayKey(d); }
+// exact history. New check-ins are appended from here on.
+// Dates are the student's LOCAL day: UTC days put an India check-in made
+// between midnight and 5:30 AM on the previous day.
+function utcDayKey(d) { return getLocalDateString(d); }
+function shiftDayKey(key, n) { const [y, m, d] = key.split('-').map(Number); return getLocalDateString(new Date(y, m - 1, d + n)); }
 function getCheckinHistory() {
   let hist = null;
   try { hist = JSON.parse(localStorage.getItem('bk_checkins') || 'null'); } catch (e) { hist = null; }
@@ -1566,7 +1631,7 @@ function unmarkedRecent() {
   for (let i = 7; i >= 1; i--) {
     const d = getLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() - i));
     if (d < from || dateExceptions[d]?.type === 'holiday') continue;
-    const n = getAllClassesForDate(d).filter(c => isCountable(c) && !c.status).length;
+    const n = getAllClassesForDate(d).filter(c => isMarkable(c, d) && !c.status).length;
     if (n) { total += n; earliest = earliest || d; }
   }
   return total ? { total, earliest } : null;
@@ -1630,7 +1695,8 @@ function renderHomeToday() {
     cancelled: { cls: 'cancelled', label: 'Cancelled', icon: '' },
   };
   const countable = classes.filter(isCountable);
-  const marked = countable.filter(c => STATES[c.status]).length;
+  const markable = countable.filter(c => !isPreCounted(c, todayStr));
+  const marked = markable.filter(c => STATES[c.status]).length;
   // Periods not linked to a subject can't be tracked: one line instead of a row each
   const unlinked = classes.length - countable.length;
   const linkLine = unlinked ? `<button class="tl-unlinked" onclick="openTodayTracker()">${ic('pen','ic-sm')}<span>${unlinked} class${unlinked !== 1 ? 'es' : ''} today ${unlinked !== 1 ? "aren't" : "isn't"} linked to a subject</span><span class="unmarked-go">Link ${ic('arrow-right','ic-xs')}</span></button>` : '';
@@ -1639,12 +1705,17 @@ function renderHomeToday() {
     return;
   }
   const shown = countable.slice(0, 6);
-  box.innerHTML = `${countable.length ? `<div class="tl-progress"><span class="tl-progress-bar"><span style="width:${Math.round(marked / countable.length * 100)}%"></span></span><span>${marked}/${countable.length} marked</span></div>` : ''}
+  box.innerHTML = `${markable.length ? `<div class="tl-progress"><span class="tl-progress-bar"><span style="width:${Math.round(marked / markable.length * 100)}%"></span></span><span>${marked}/${markable.length} marked</span></div>` : ''}
   <ol class="timeline">${shown.map(c => {
     const s = subjects.find(x => x.id === c.subjectId);
     const name = s ? s.name : c.subjectName;
     const time = c.startTime ? (c.endTime ? `${c.startTime} – ${c.endTime}` : c.startTime) : (c.isExtra ? 'Extra class' : c.isMakeup ? 'Makeup class' : `Period ${c.period}`);
     const st = STATES[c.status];
+    if (s && isPreCounted(c, todayStr)) return `<li class="tl-row is-counted">
+      <span class="tl-dot" aria-hidden="true">${ic('check', 'ic-xs')}</span>
+      <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span><span class="tl-time">${escapeHTML(time)}</span></span>
+      <span class="tl-state">In your numbers</span>
+    </li>`;
     if (!s) return `<li class="tl-row is-unlinked">
       <span class="tl-dot" aria-hidden="true"></span>
       <span class="tl-body"><span class="tl-name">${escapeHTML(name || 'Class')}</span><span class="tl-time">${escapeHTML(time)}</span></span>
@@ -1690,7 +1761,7 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
 //  STREAK
 // ══════════════════════════════════════════════════════
 function renderStreak() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const checked = lastCheck === today;
   const examDays = daysUntil(examDate);
   const cur = activeStreak();
@@ -1759,9 +1830,9 @@ function toggleTheme() {
 }
 
 function checkIn() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   if (lastCheck !== today) {
-    const yesterday = new Date(Date.now()-864e5).toISOString().split('T')[0];
+    const yesterday = shiftDayKey(today, -1);
     getCheckinHistory(); // seed from the pre-existing streak before it changes
     streak = lastCheck === yesterday ? streak + 1 : 1;
     lastCheck = today;
@@ -1883,9 +1954,12 @@ function renderSubject(id, preserveSim) {
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
     const wk = weeklyCount(s) > 0 ? ` That's about ${Math.ceil(nd/weeklyCount(s))} weeks of showing up.` : '';
-    advText = isFinite(nd)
-      ? `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk} No bunks. None. Zero. Go.`
-      : `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`;
+    const left = remainingClasses(s);
+    advText = !isFinite(nd)
+      ? `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`
+      : left !== null && nd > left
+        ? `You'd need <strong>${nd} classes in a row</strong>, but only <strong>${left}</strong> ${left !== 1 ? 'are' : 'is'} left this semester — ${tgt}% is out of reach. Attend everything and talk to your department about condonation early.`
+        : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${left !== null ? ` ${left} class${left !== 1 ? 'es' : ''} left this semester.` : ''} No bunks. None. Zero. Go.`;
   } else {
     pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
     advText = p === tgt
@@ -2029,6 +2103,23 @@ function weeklyCount(s) {
   return n || s.perWeek || 0;
 }
 
+// "Do these numbers already include today's class?" — asked only when the
+// subject has a class today, since that's the only day it can be ambiguous.
+const uptoChoice = {};
+function setUpto(id, v) {
+  uptoChoice[id] = v;
+  document.querySelectorAll(`#${id} .mini-seg button`).forEach(b => { const on = b.dataset.v === v; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+}
+function showUpto(id, show) {
+  const el = document.getElementById(id);
+  if (el) el.hidden = !show;
+  if (!uptoChoice[id]) setUpto(id, 'today');
+}
+// The day the entered numbers count up to
+function uptoDate(id) {
+  return !document.getElementById(id)?.hidden && uptoChoice[id] === 'yesterday' ? dayOffset(-1) : getLocalDateString();
+}
+
 function setDayPicker(id, counts, touched = false) {
   dayPickers[id] = { counts: { ...emptyDays(), ...counts }, touched };
   renderDayPicker(id);
@@ -2097,6 +2188,76 @@ function describeDayPlan(plan) {
   return bits.join(' and ');
 }
 
+// ══════════════════════════════════════════════════════
+//  SEMESTER DATES
+// ══════════════════════════════════════════════════════
+function openSemesterDialog() {
+  document.getElementById('sem-start').value = semStart || '';
+  document.getElementById('sem-end').value = semEnd || '';
+  const ov = document.getElementById('sem-overlay');
+  if (!ov.dataset.wired) { ov.dataset.wired = '1'; ov.addEventListener('input', semesterPreview); }
+  semesterPreview();
+  ov.classList.add('show');
+}
+function closeSemesterDialog() { document.getElementById('sem-overlay').classList.remove('show'); }
+function checkSemester(start, end) {
+  if (start && start > getLocalDateString()) return "The first day of classes can't be in the future.";
+  if (start && end && end <= start) return 'The last day has to come after the first day.';
+  if (end && start) {
+    const [a, b] = [start, end].map(x => { const [y, m, d] = x.split('-').map(Number); return new Date(y, m - 1, d); });
+    if ((b - a) / 864e5 > 370) return "That's over a year — check the dates.";
+  }
+  return '';
+}
+function semesterPreview() {
+  const start = document.getElementById('sem-start').value, end = document.getElementById('sem-end').value;
+  const box = document.getElementById('sem-preview');
+  const err = checkSemester(start, end);
+  box.classList.toggle('is-error', !!err);
+  if (err) { box.textContent = err; return; }
+  const today = getLocalDateString();
+  const bits = [];
+  if (start) bits.push(`Week ${Math.floor(weeksSince(start)) + 1} of the semester`);
+  if (end) {
+    const [y, m, d] = end.split('-').map(Number);
+    const days = Math.ceil((new Date(y, m - 1, d) - new Date(today.replace(/-/g, '/'))) / 864e5);
+    bits.push(days >= 0 ? `${days} day${days !== 1 ? 's' : ''} of classes left` : 'classes have ended');
+  }
+  box.textContent = bits.join(' · ');
+}
+function saveSemesterDialog() {
+  const start = document.getElementById('sem-start').value, end = document.getElementById('sem-end').value;
+  const err = checkSemester(start, end);
+  if (err) { semesterPreview(); return; }
+  semStart = start; semEnd = end;
+  savePrefs();
+  closeSemesterDialog();
+  renderNav();
+  if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true); else if (currPage === 'home') renderHome();
+  toast('Semester dates saved');
+}
+
+// Classes still to come for a subject this semester: real class days from
+// today to the last day of classes (swaps, makeups and holidays included).
+// Falls back to "classes in the whole semester" when that was entered.
+function remainingClasses(s) {
+  if (semEnd && timetable.some(t => t.subjectId === s.id && !t.isBreak)) {
+    const today = getLocalDateString();
+    if (semEnd < today) return 0;
+    const day = new Date();
+    let n = 0;
+    for (let i = 0; i < 400; i++, day.setDate(day.getDate() + 1)) {
+      const ds = getLocalDateString(day);
+      if (ds > semEnd) break;
+      if (dateExceptions[ds]?.type === 'holiday') continue;
+      n += getAllClassesForDate(ds).filter(c => c.subjectId === s.id && !c.status && !isPreCounted(c, ds)).length;
+    }
+    return n;
+  }
+  if (s.semTotal && s.semTotal > s.total) return s.semTotal - s.total;
+  return null;
+}
+
 // ── Edit subject ──
 function readEditForm(s) {
   const est = editMode === 'estimate';
@@ -2144,6 +2305,7 @@ function fillEditForm(s) {
   clearFormProblem(body);
   const err = document.getElementById('edit-error');
   if (err) err.hidden = true;
+  setUpto('edit-upto', 'today');
   setEditMode(editMode);
 }
 
@@ -2178,6 +2340,8 @@ function toggleMode() { setEditMode(editMode === 'exact' ? 'estimate' : 'exact')
 function updateEditPreview() {
   const s = subjects.find(x => x.id === currSubjId);
   if (!s) return;
+  const changed = numField('inp-total') !== s.total || numField('inp-present') !== s.present;
+  showUpto('edit-upto', editMode === 'exact' && changed && (numField('inp-total') || 0) > 0 && hasClassToday(pickerDays('edit-days')));
   const r = checkSubjectForm(readEditForm(s), s.id);
   const warn = !r.error && editMode === 'estimate' && s.mode !== 'estimate' && s.total > 0
     ? `<span class="form-warn">Saving replaces your exact count (${s.present}/${s.total}) with this estimate.</span>` : '';
@@ -2214,6 +2378,11 @@ async function saveSubject() {
 
   if (success) {
     if (v.mode === 'estimate' && v.semStart !== semStart) { semStart = v.semStart; savePrefs(); }
+    // New numbers typed in: they cover classes up to today (or yesterday)
+    const numbersChanged = v.total !== before.total || v.present !== before.present || v.mode !== before.mode;
+    if (v.total === 0) { if (countedUpTo[s.id]) setCountedUpTo(s.id, null); }
+    else if (v.mode === 'estimate') setCountedUpTo(s.id, dayOffset(-1));
+    else if (numbersChanged) setCountedUpTo(s.id, uptoDate('edit-upto'));
     // Keep the subject's name on its timetable classes, then apply day changes
     if (v.name !== before.name) timetable.forEach(t => { if (t.subjectId === s.id) t.subjectName = v.name; });
     await applySubjectDays(s.id, v.name, dayPlan);
@@ -2269,6 +2438,8 @@ function startChipEdit(field) {
     Object.assign(s, { total: v.total, present: v.present, target: v.target });
     const ok = await updateSubject(s.id, { name: s.name, code: s.code || '', total: s.total, present: s.present, perWeek: s.perWeek, target: s.target, semTotal: s.semTotal, mode: s.mode });
     if (!ok) Object.assign(s, before);
+    // Quick fixes keep the existing "counted up to"; first numbers ever cover up to today
+    else if (field !== 'target' && !countedUpTo[s.id] && s.total > 0 && before.total === 0) setCountedUpTo(s.id, getLocalDateString());
     renderSubject(s.id, true);
     renderNav();
     if (ok) toast(randToast('save'));
@@ -2315,6 +2486,7 @@ async function confirmDeleteSubject() {
     
     if (trackerError) throw trackerError;
     
+    if (countedUpTo[subjId]) setCountedUpTo(subjId, null);
     // Its timetable classes: remove them, or keep them (unlinked) to link to another subject
     const dropSlots = document.getElementById('del-tt-slots')?.checked;
     const slotIds = new Set(timetable.filter(t => t.subjectId === subjId).map(t => t.id));
@@ -2371,7 +2543,7 @@ function updateSim() {
   const bk_now = Math.max(0, Math.floor(s.present*100/tgt) - s.total);
  
   if (plan === 0) {
-    const remaining = (s.semTotal && s.semTotal > s.total) ? s.semTotal - s.total : null;
+    const remaining = remainingClasses(s);
     const nd0 = needed(s, tgt);
     let h = bk_now > 0
       ? 'Can safely skip <strong>' + bk_now + '</strong> more.' + (pw>0 ? ' ~' + (bk_now/pw).toFixed(1) + ' weeks worth.' : '')
@@ -2381,9 +2553,12 @@ function updateSim() {
             ? 'Already below ' + tgt + '%. Attend the next <strong>' + nd0 + '</strong> class' + (nd0 !== 1 ? 'es' : '') + ' to get back.'
             : 'Already below ' + tgt + '% — that target can\'t be reached anymore.')
         : 'Zero safe bunks. Right at the limit.';
-    if (remaining !== null) {
+    if (remaining === null) {
+      h += ' <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">Set your last day of classes</button> to see where you\'ll end the semester.';
+    } else if (remaining > 0) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
-      h += ' If you attend all <strong>' + remaining + '</strong> remaining classes, you end the semester at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
+      if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h += ' <strong style="color:var(--danger)">Only ' + remaining + ' class' + (remaining !== 1 ? 'es' : '') + ' are left this semester, so ' + tgt + '% is out of reach</strong> — talk to your department about condonation early.';
+      else h += ' If you attend all <strong>' + remaining + '</strong> remaining classes, you end the semester at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
     }
     document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + h + '</div>';
     return;
@@ -2400,11 +2575,11 @@ function updateSim() {
  
   const reaction = getSimReaction(plan, bk_now, safe, projPct, tgt, subjRoastSeed(s));
  
-  // End-of-semester projection if semTotal is set: skip `plan` classes,
-  // attend every other class left this semester.
+  // End-of-semester projection: skip `plan` classes, attend every other class left
   let eosCtx = '';
-  if (s.semTotal && s.semTotal > s.total) {
-    const remainAfterBunks = Math.max(0, s.semTotal - s.total - plan);
+  const remainingNow = remainingClasses(s);
+  if (remainingNow) {
+    const remainAfterBunks = Math.max(0, remainingNow - plan);
     const eosPct = attPct(s.present + remainAfterBunks, s.total + plan + remainAfterBunks);
     eosCtx = ' Attend the rest and you end the sem at <strong style="color:' + pctTextColor(eosPct, tgt) + '">' + eosPct + '%</strong>.';
   }
@@ -2448,7 +2623,7 @@ function selMode(m) {
 function obNext() {
   if (obStep === 0) {
     obStep = 1;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     document.getElementById('ob-sem-start').value = today;
     document.getElementById('ob-target').value = globalTarget;
   } else if (obStep === 1) {
@@ -2569,6 +2744,8 @@ function openAddModal() {
   ov.classList.add('show');
   ['as-name','as-total','as-present','as-missed','as-target','as-semtotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   setDayPicker('as-days', emptyDays());
+  setUpto('as-upto', 'today');
+  showUpto('as-upto', false);
   document.getElementById('as-semstart').value = semStart || '';
   if (!ov.dataset.wired) {
     ov.dataset.wired = '1';
@@ -2619,6 +2796,7 @@ function readAddForm() {
 }
 function updateAddPreview() {
   const f = readAddForm();
+  showUpto('as-upto', addMode === 'exact' && (f.total || 0) > 0 && hasClassToday(pickerDays('as-days')));
   const box = document.getElementById('as-preview');
   // Don't nag about the name before anything has been typed
   if (!f.name && f.total === null && f.present === null && f.missed === null && !f.perWeek) {
@@ -2648,6 +2826,8 @@ async function confirmAdd() {
       const created = subjects[subjects.length - 1];
       const plan = planSubjectDays(created.id, created.name, pickerDays('as-days'));
       await applySubjectDays(created.id, created.name, plan);
+      // Classes already inside these numbers mustn't be marked again
+      if (v.total > 0) setCountedUpTo(created.id, v.mode === 'estimate' ? dayOffset(-1) : uptoDate('as-upto'));
       closeAddModal();
       toast(plan.add.length || plan.link.length ? `${created.name} added — on Daily Classes every ${dayList(pickerDays('as-days'))}` : randToast('add'));
       renderAll();
@@ -2678,7 +2858,7 @@ renderAll();
 document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
 document.getElementById('safe-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeSafeBunks(); });
 document.getElementById('ask-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeAsk(false); });
-['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay','resched-overlay','dayswap-overlay','share-overlay'].forEach(id => {
+['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay','resched-overlay','dayswap-overlay','share-overlay','sem-overlay'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     el.addEventListener('click', e => {
@@ -4186,7 +4366,7 @@ function buildPack() {
   const idx = new Map(subjects.map((s, i) => [s.id, i]));
   return {
     app: 'bunkkro', kind: 'class-pack', version: 1, exportedAt: new Date().toISOString(),
-    semester: { start: semStart || '', examDate: examDate || '', target: globalTarget },
+    semester: { start: semStart || '', end: semEnd || '', examDate: examDate || '', target: globalTarget },
     subjects: subjects.map(s => ({
       name: s.name, code: s.code || '', perWeek: s.perWeek || 0,
       target: s.target || null, semTotal: s.semTotal || null,
@@ -4262,6 +4442,7 @@ function readPack(text) {
   const sem = raw.semester || {};
   const semesterIn = {
     start: DATE_RE.test(sem.start || '') ? sem.start : '',
+    end: DATE_RE.test(sem.end || '') && (!DATE_RE.test(sem.start || '') || sem.end > sem.start) ? sem.end : '',
     examDate: DATE_RE.test(sem.examDate || '') ? sem.examDate : '',
     target: int(sem.target, 1, 100),
   };
@@ -4379,6 +4560,7 @@ function showPackResult(r) {
   const list = arr => escapeHTML(arr.slice(0, 6).map(s => s.name).join(', ')) + (arr.length > 6 ? ` +${arr.length - 6} more` : '');
   const semBits = [];
   if (p.semester.start) semBits.push(`semester start ${escapeHTML(fmtDate(p.semester.start))}`);
+  if (p.semester.end) semBits.push(`last day ${escapeHTML(fmtDate(p.semester.end))}`);
   if (p.semester.target) semBits.push(`${p.semester.target}% target`);
   preview.innerHTML = `
     <ul class="pack-summary">
@@ -4436,6 +4618,7 @@ async function confirmImportPack() {
     // 3. Semester settings
     if (document.getElementById('pack-use-sem')?.checked) {
       if (p.semester.start) semStart = p.semester.start;
+      if (p.semester.end) semEnd = p.semester.end;
       if (p.semester.examDate) examDate = p.semester.examDate;
       if (p.semester.target) globalTarget = p.semester.target;
       savePrefs();
@@ -4778,7 +4961,7 @@ async function clearMarksForDate(date) {
 // Delete marks (by entry id) on a date and take them out of the subject totals.
 async function removeMarks(date, entryIds) {
   const logs = dailyPeriodLogs[date] || {};
-  const touched = new Set();
+  const deltas = new Map();
   let ok = true;
   for (const entryId of entryIds) {
     const log = logs[entryId];
@@ -4792,15 +4975,14 @@ async function removeMarks(date, entryIds) {
     if (error) { console.warn('Clear mark failed:', error); ok = false; break; }
     const subj = subjects.find(x => x.id === log.subjectId);
     if (subj && (log.status === 'p' || log.status === 'a')) {
-      subj.total = Math.max(0, subj.total - 1);
-      if (log.status === 'p') subj.present = Math.max(0, subj.present - 1);
-      touched.add(subj);
+      const d = deltas.get(subj) || [0, 0];
+      deltas.set(subj, [d[0] - 1, d[1] - (log.status === 'p' ? 1 : 0)]);
     }
     delete logs[entryId];
     localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
   }
   // Save totals for every mark already removed, even if a later one failed
-  for (const subj of touched) await updateSubject(subj.id, { total: subj.total, present: subj.present });
+  for (const [subj, [dt, dp]] of deltas) await applySubjectDelta(subj, dt, dp);
   return ok;
 }
 
@@ -4981,6 +5163,17 @@ async function confirmDaySwap() {
 // A class only counts towards attendance when it's linked to one of your subjects
 function isCountable(c) { return subjects.some(x => x.id === c.subjectId); }
 
+// ── "Counted up to": the numbers typed in for a subject already include every
+// class up to that day, so those classes can't be marked (or counted) again.
+function isPreCounted(c, date) { const a = countedUpTo[c.subjectId]; return !!a && date <= a; }
+function isMarkable(c, date) { return isCountable(c) && !isPreCounted(c, date); }
+function setCountedUpTo(subjId, date) {
+  if (date) countedUpTo[subjId] = date; else delete countedUpTo[subjId];
+  savePrefs();
+}
+function dayOffset(n) { const d = new Date(); d.setDate(d.getDate() + n); return getLocalDateString(d); }
+function hasClassToday(counts) { return !!counts[new Date().getDay() || 7]; }
+
 // Get scheduled classes for a specific date (1=Monday ... 7=Sunday)
 function getScheduledClassesForDate(dateStr) {
   const parts = dateStr.split('-').map(Number);
@@ -5050,6 +5243,8 @@ function renderTracker() {
   const todayStr = getLocalDateString();
   const isToday = selectedTrackerDate === todayStr;
   const isFuture = selectedTrackerDate > todayStr;
+  const beforeSem = !!semStart && selectedTrackerDate < semStart;
+  const lockPA = isFuture || beforeSem; // nothing to attend yet / semester hadn't started
   const dayPlan = getDayPlan(selectedTrackerDate);
 
   const parts = selectedTrackerDate.split('-').map(Number);
@@ -5086,6 +5281,10 @@ function renderTracker() {
       banner.className = 'date-status-banner today';
       banner.innerHTML = `${ic('zap')} <span><strong>Today's classes</strong> — mark each period as you attend or bunk.</span>`;
       banner.style.display = 'flex';
+    } else if (beforeSem) {
+      banner.className = 'date-status-banner future';
+      banner.innerHTML = `${ic('calendar')} <span><strong>Before the semester started</strong> (${escapeHTML(fmtDate(semStart))}) — nothing to mark here. <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">Change dates</button></span>`;
+      banner.style.display = 'flex';
     } else if (isFuture) {
       banner.className = 'date-status-banner future';
       banner.innerHTML = `${ic('calendar')} <span><strong>Upcoming day</strong> — present/absent unlock on the day. You can already mark a class cancelled or the day a holiday.</span>`;
@@ -5101,8 +5300,9 @@ function renderTracker() {
   const allClasses = getAllClassesForDate(selectedTrackerDate);
 
   // Daily Completion Stats
-  // Classes not linked to a subject can't be marked, so they don't count as pending
-  const countable = allClasses.filter(isCountable);
+  // Classes not linked to a subject, or already inside numbers you typed in,
+  // can't be marked, so they don't count as pending
+  const countable = allClasses.filter(c => isMarkable(c, selectedTrackerDate));
   const totalCount = countable.length;
   const presentCount = countable.filter(c => c.status === 'p').length;
   const absentCount = countable.filter(c => c.status === 'a').length;
@@ -5199,13 +5399,13 @@ function renderTracker() {
             : '<div class="daily-class-stats" style="color:var(--muted)">No classes counted yet</div>')
             : '<div class="daily-class-stats" style="color:var(--muted)">Not linked to a subject</div>'}
         </div>
-        ${!s && !item.isExtra ? `<div class="tracker-link">
+        ${s && isPreCounted(item, selectedTrackerDate) ? `<div class="tracker-link"><span class="counted-note" title="You entered ${escapeHTML(s.name)}'s numbers counting classes up to ${escapeHTML(fmtDate(countedUpTo[s.id]))}">${ic('check','ic-sm')} Already in the numbers you entered</span></div>` : !s && !item.isExtra ? `<div class="tracker-link">
           ${item.isMakeup
             ? `<button class="btn-sec btn-sm" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')} Remove</button>`
             : `<button class="btn-sec btn-sm" onclick="openEditSlotModal('${item.slotId}')" title="Pick which of your subjects this class is">${ic('pen','ic-sm')} Link to a subject</button>`}
         </div>` : `<div class="tracker-btns" role="group" aria-label="Attendance for ${escapeHTML(displayName)}">
-          <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" ${isFuture && item.status !== 'p' ? 'disabled title="You can mark this once the day comes"' : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
-          <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" ${isFuture && item.status !== 'a' ? 'disabled title="You can mark this once the day comes"' : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
+          <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" ${lockPA && item.status !== 'p' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
+          <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" ${lockPA && item.status !== 'a' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
           <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" aria-pressed="${item.status === 'cancelled'}" title="Cancelled class does not count as absence" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">${ic('ban','ic-sm')} Cancel</button>
           ${item.isMakeup ? `<button class="tbtn rm" title="Remove this class" aria-label="Remove this class" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')}</button>` : ''}
         </div>`}
@@ -5226,6 +5426,17 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
   trackerLocked = true;
 
   const date = selectedTrackerDate;
+  // Already inside the numbers typed in for this subject: marking it would count it twice
+  if (isPreCounted({ subjectId: subjId }, date)) {
+    trackerLocked = false;
+    toast('Already counted in the numbers you entered for this subject', 'err');
+    return;
+  }
+  if (semStart && date < semStart && (newStatus === 'p' || newStatus === 'a') && dailyPeriodLogs[date]?.[slotId]?.status !== newStatus) {
+    trackerLocked = false;
+    toast('That day is before the semester started', 'err');
+    return;
+  }
   // A class can't be attended or missed before its day (cancelling ahead is fine)
   if (date > getLocalDateString() && (newStatus === 'p' || newStatus === 'a') && dailyPeriodLogs[date]?.[slotId]?.status !== newStatus) {
     trackerLocked = false;
@@ -5234,8 +5445,28 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
   }
   if (!dailyPeriodLogs[date]) dailyPeriodLogs[date] = {};
 
-  const prevEntry = dailyPeriodLogs[date][slotId];
+  // Start from what's saved, not what this tab remembers: the class may have
+  // been marked on your phone or in another tab since this page loaded.
+  let prevEntry = dailyPeriodLogs[date][slotId];
+  const seenStatus = prevEntry ? prevEntry.status : null; // what the screen showed
+  try {
+    const { data, error } = await supabaseClient.from('daily_period_logs').select('*')
+      .eq('user_id', currentUser.id).eq('date', date).eq('entry_id', slotId).limit(1);
+    if (!error) {
+      const row = data && data[0];
+      prevEntry = row ? { ...(prevEntry || {}), status: row.status, subjectId: row.subject_id } : null;
+      if (prevEntry) dailyPeriodLogs[date][slotId] = prevEntry; else delete dailyPeriodLogs[date][slotId];
+    }
+  } catch (e) { /* offline: fall back to what this tab knows */ }
   const prevStatus = prevEntry ? prevEntry.status : null;
+  // Already marked this way somewhere else: just show it, don't toggle it off
+  if (prevStatus === newStatus && seenStatus !== newStatus) {
+    trackerLocked = false;
+    await refreshData();
+    renderTracker();
+    toast('Already marked on another device — updated');
+    return;
+  }
 
   const s = subjects.find(x => x.id === subjId);
   // Undo the earlier mark on the subject it was counted for (the slot's
@@ -5283,18 +5514,11 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
     }
 
     // Recalculate totals without double counting: remove the old mark, add the new one
-    const touched = new Set();
-    if (prevSubj && (prevStatus === 'p' || prevStatus === 'a')) {
-      prevSubj.total = Math.max(0, prevSubj.total - 1);
-      if (prevStatus === 'p') prevSubj.present = Math.max(0, prevSubj.present - 1);
-      touched.add(prevSubj);
-    }
-    if (s && (finalStatus === 'p' || finalStatus === 'a')) {
-      s.total += 1;
-      if (finalStatus === 'p') s.present += 1;
-      touched.add(s);
-    }
-    for (const subj of touched) await updateSubject(subj.id, { total: subj.total, present: subj.present });
+    const deltas = new Map();
+    const add = (subj, dt, dp) => { if (!subj) return; const d = deltas.get(subj) || [0, 0]; deltas.set(subj, [d[0] + dt, d[1] + dp]); };
+    if (prevStatus === 'p') add(prevSubj, -1, -1); else if (prevStatus === 'a') add(prevSubj, -1, 0);
+    if (finalStatus === 'p') add(s, 1, 1); else if (finalStatus === 'a') add(s, 1, 0);
+    for (const [subj, [dt, dp]] of deltas) await applySubjectDelta(subj, dt, dp);
 
     // Save to local cache
     localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
@@ -5398,10 +5622,8 @@ async function confirmAddExtraClass() {
   };
   localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
 
-  // Increment subject total & present
-  s.total += 1;
-  s.present += 1;
-  await updateSubject(s.id, { total: s.total, present: s.present });
+  // Increment subject total & present (on top of what's saved right now)
+  await applySubjectDelta(s, 1, 1);
 
   closeExtraClassModal();
   renderNav();

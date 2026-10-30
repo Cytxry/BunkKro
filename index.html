@@ -124,7 +124,7 @@
         <span class="sym">%</span>
       </div>
     </div>
-    <div class="target-hint">default for all subjects</div>
+    <button class="sem-link" id="sem-link" onclick="openSemesterDialog()"><svg class="ic ic-sm"><use href="#i-calendar"/></svg> <span id="sem-link-text">Set semester dates</span></button>
   </div>
 </aside>
 <div class="sidebar-scrim" onclick="toggleSidebar()" aria-hidden="true"></div>
@@ -272,6 +272,13 @@
           <div class="field"><label for="inp-absent">Classes missed <span class="field-hint">(fills itself)</span></label><input type="number" id="inp-absent" placeholder="auto" min="0" inputmode="numeric"></div>
           <div class="field"><label for="inp-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
         </div>
+        <div class="upto" id="edit-upto" hidden>
+        <span>Do these numbers already include <strong>today's</strong> class?</span>
+        <div class="mini-seg" role="radiogroup" aria-label="Numbers include today's class">
+          <button type="button" role="radio" data-v="today" onclick="setUpto('edit-upto','today')">Yes</button>
+          <button type="button" role="radio" data-v="yesterday" onclick="setUpto('edit-upto','yesterday')">Not yet</button>
+        </div>
+      </div>
         <div id="form-est" style="display:none">
           <div class="edit-grid">
             <div class="field"><label for="inp-semstart">Semester start <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="inp-semstart"></div>
@@ -594,6 +601,27 @@
   </div>
 </div>
 
+<!-- ══════ SEMESTER DATES ══════ -->
+<div class="overlay" id="sem-overlay" role="dialog" aria-modal="true" aria-labelledby="sem-title">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-hero">
+      <div><h2 id="sem-title">Semester dates 📅</h2>
+      <p class="sub">Used to estimate classes held so far and to count the classes left before the semester ends.</p></div>
+      <img src="assets/cat-books.svg" alt="">
+    </div>
+    <div class="form-grid-2">
+      <div class="mf"><label for="sem-start">First day of classes</label><input type="date" id="sem-start"></div>
+      <div class="mf"><label for="sem-end">Last day of classes</label><input type="date" id="sem-end"></div>
+    </div>
+    <p class="field-tip">Last day = the final teaching day before exams. Leave blank if you don't know yet.</p>
+    <div class="form-preview" id="sem-preview" aria-live="polite"></div>
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeSemesterDialog()">Cancel</button>
+      <button class="btn-pri" onclick="saveSemesterDialog()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════ IN-APP CONFIRM / QUESTION (replaces browser confirm/prompt) ══════ -->
 <div class="overlay" id="ask-overlay" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-msg">
   <div class="modal modal-center" style="max-width:410px">
@@ -880,6 +908,13 @@
       <div class="form-grid-2">
         <div class="mf"><label for="as-total">Total classes held</label><input type="number" id="as-total" placeholder="e.g. 40" min="0" inputmode="numeric"></div>
         <div class="mf"><label for="as-present">Classes attended</label><input type="number" id="as-present" placeholder="e.g. 32" min="0" inputmode="numeric"></div>
+      </div>
+      <div class="upto" id="as-upto" hidden>
+        <span>Do these numbers already include <strong>today's</strong> class?</span>
+        <div class="mini-seg" role="radiogroup" aria-label="Numbers include today's class">
+          <button type="button" role="radio" data-v="today" onclick="setUpto('as-upto','today')">Yes</button>
+          <button type="button" role="radio" data-v="yesterday" onclick="setUpto('as-upto','yesterday')">Not yet</button>
+        </div>
       </div>
       <p class="field-tip">New subject with no classes yet? Leave both at 0 and mark classes as they happen.</p>
     </div>
