@@ -8,6 +8,7 @@ let subjects = [];
 let timetableEntries = [];
 let dailyPeriodLogs = {};
 let globalSession = null;
+let todayException = null; // holiday / makeup classes / swapped timetable for today
 
 function escapeHTML(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -101,6 +102,13 @@ async function loadData() {
       .eq('user_id', currentUser.id)
       .eq('date', today);
 
+    const { data: exData } = await supabaseClient
+      .from('timetable_exceptions')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .eq('date', today);
+    todayException = (exData && exData[0]) || null;
+
     if (!logsError && logsData) {
       logsData.forEach(row => {
         const key = row.entry_id || row.subject_id;
@@ -123,6 +131,16 @@ function getTodayDayOfWeek() {
   return day === 0 ? 7 : day;
 }
 
+// Same format the web app writes: { follows: 1-7|null, makeups: [{ id, subjectId, name, time }] }
+function todayPlan() {
+  if (!todayException || todayException.type !== 'custom_day') return { follows: null, makeups: [] };
+  let raw = {};
+  try { raw = JSON.parse(todayException.note || '{}') || {}; } catch { raw = {}; }
+  const follows = Number.isInteger(raw.follows) && raw.follows >= 1 && raw.follows <= 7 ? raw.follows : null;
+  const makeups = (Array.isArray(raw.makeups) ? raw.makeups : []).filter(m => m && typeof m.id === 'string' && /^[\w-]{1,40}$/.test(m.id));
+  return { follows, makeups };
+}
+
 function renderTodayClasses() {
   const list = document.getElementById('subjects-list');
   const subText = document.getElementById('today-sub-text');
@@ -130,18 +148,27 @@ function renderTodayClasses() {
   const summaryPct = document.getElementById('summary-pct');
   const summaryFill = document.getElementById('summary-fill');
 
-  const todayDay = getTodayDayOfWeek();
+  const plan = todayPlan();
+  const todayDay = plan.follows || getTodayDayOfWeek();
+  const isHoliday = todayException?.type === 'holiday';
   const d = new Date();
   const dayName = d.toLocaleDateString('en-IN', { weekday: 'long' });
 
   // Filter timetable for today
-  let todayClasses = timetableEntries
+  let todayClasses = isHoliday ? [] : timetableEntries
     .filter(s => s.day_of_week === todayDay && !s.is_break)
     .sort((a, b) => a.period_index - b.period_index);
+  if (!isHoliday) {
+    plan.makeups.forEach(m => todayClasses.push({
+      id: 'makeup_' + m.id, day_of_week: todayDay, period_index: 'M', makeup: true,
+      start_time: /^\d{2}:\d{2}$/.test(m.time || '') ? m.time : '', end_time: '',
+      subject_id: typeof m.subjectId === 'string' ? m.subjectId : null, subject_name: String(m.name || 'Class'), is_break: false
+    }));
+  }
 
   // Only users without any timetable get the "all subjects" fallback; with a
   // timetable, an empty day really has no classes.
-  const isFallback = todayClasses.length === 0 && timetableEntries.length === 0;
+  const isFallback = todayClasses.length === 0 && timetableEntries.length === 0 && !isHoliday;
   if (isFallback && subjects.length > 0) {
     todayClasses = subjects.map((s, i) => ({
       id: s.id,
@@ -162,7 +189,7 @@ function renderTodayClasses() {
     list.innerHTML = `
       <div class="empty-state">
         <img src="img/cat-books.svg" alt="" style="width:140px;margin:0 auto 6px;display:block">
-        <h3>No classes scheduled today</h3>
+        <h3>${isHoliday ? 'Holiday today 🏖️' : 'No classes scheduled today'}</h3>
         <p style="font-size:12px;color:#5E6375">Open the full app to upload your timetable or view upcoming days.</p>
       </div>
     `;
@@ -205,18 +232,18 @@ function renderTodayClasses() {
           ${s ? `<span class="class-pct ${pctClass}">${pct}%</span>` : ''}
         </div>
         <div class="period-meta">
-          <span class="badge-pnum">P${c.period_index}</span>
+          <span class="badge-pnum">${c.makeup ? 'Makeup' : 'P' + c.period_index}</span>
           ${timeDisplay ? `<span>🕒 ${escapeHTML(timeDisplay)}</span>` : ''}
           ${s ? `<span>${s.present}/${s.total} attended</span>` : ''}
         </div>
         <div class="tracker-btns">
-          <button class="present ${status === 'p' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.period_index}" data-status="p">
+          <button class="present ${status === 'p' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.makeup ? 90 : c.period_index}" data-status="p">
             ${status === 'p' ? '✓ Present' : 'Present'}
           </button>
-          <button class="absent ${status === 'a' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.period_index}" data-status="a">
+          <button class="absent ${status === 'a' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.makeup ? 90 : c.period_index}" data-status="a">
             ${status === 'a' ? '✗ Absent' : 'Absent'}
           </button>
-          <button class="cancel ${status === 'cancelled' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.period_index}" data-status="cancelled" title="Cancelled (No absence penalty)">
+          <button class="cancel ${status === 'cancelled' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.makeup ? 90 : c.period_index}" data-status="cancelled" title="Cancelled (No absence penalty)">
             ${status === 'cancelled' ? '🚫' : 'Cancel'}
           </button>
         </div>

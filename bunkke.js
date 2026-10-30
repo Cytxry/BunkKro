@@ -294,7 +294,8 @@ async function loadDateExceptions() {
       data.forEach(row => {
         dateExceptions[row.date] = {
           type: row.type,
-          note: row.note || ''
+          note: row.note || '',
+          ...(row.type === 'custom_day' ? { plan: parseDayPlan(row.note) } : {})
         };
       });
       localStorage.setItem('bk_date_exceptions_' + currentUser.id, JSON.stringify(dateExceptions));
@@ -651,6 +652,7 @@ function showApp() {
   appLoadedFor = uid;
   selectedTrackerDate = getLocalDateString();
   appLoading = (async () => {
+    applyPrefsFromAccount();
     await loadSubjects();
     await loadTimetable();
     await loadDailyPeriodLogs();
@@ -874,6 +876,44 @@ function savePrefs() {
   localStorage.setItem('bk_exam_date', examDate);
   localStorage.setItem('bk_streak', streak);
   localStorage.setItem('bk_last_check', lastCheck);
+  schedulePrefsSync();
+}
+
+// Semester start, exam date and the global target belong to the account
+// (kept in the user's auth metadata — no extra table), so every device sees
+// the same values. localStorage stays as the offline copy.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+let prefsSyncTimer = null;
+function schedulePrefsSync() {
+  if (!currentUser || !supabaseClient?.auth?.updateUser) return;
+  clearTimeout(prefsSyncTimer);
+  prefsSyncTimer = setTimeout(async () => {
+    const want = { semStart, examDate, target: globalTarget };
+    const have = currentUser?.user_metadata?.bk_prefs || {};
+    if (have.semStart === want.semStart && have.examDate === want.examDate && have.target === want.target) return;
+    try {
+      const { data, error } = await supabaseClient.auth.updateUser({ data: { bk_prefs: want } });
+      if (error) throw error;
+      if (data?.user) currentUser = data.user;
+    } catch (err) {
+      console.warn('Could not sync semester settings:', err.message);
+    }
+  }, 500);
+}
+function applyPrefsFromAccount() {
+  const p = currentUser?.user_metadata?.bk_prefs;
+  if (!p || typeof p !== 'object') {
+    // First time on an account: upload whatever this device already has
+    if (semStart || examDate || globalTarget !== 75) schedulePrefsSync();
+    return;
+  }
+  if (typeof p.semStart === 'string' && (p.semStart === '' || DATE_RE.test(p.semStart))) semStart = p.semStart;
+  if (typeof p.examDate === 'string' && (p.examDate === '' || DATE_RE.test(p.examDate))) examDate = p.examDate;
+  const t = Math.round(Number(p.target));
+  if (t >= 1 && t <= 100) globalTarget = t;
+  localStorage.setItem('bk_global_target', globalTarget);
+  localStorage.setItem('bk_sem_start', semStart);
+  localStorage.setItem('bk_exam_date', examDate);
 }
  
 // ══════════════════════════════════════════════════════
@@ -905,18 +945,35 @@ function pctTextColor(p, tgt) {
   if (p >= tgt - 15) return 'var(--warn)';
   return 'var(--danger)';
 }
+// A subject with no classes counted yet has no percentage to judge: it is
+// neither safe nor at risk (0/0 must not show up as a red "0% At risk").
+function hasClasses(s) { return s.total > 0; }
+function isAtRisk(s) { return hasClasses(s) && pct(s) < getTarget(s); }
+function subjStatus(s) { return hasClasses(s) ? pctStatus(pct(s), getTarget(s)) : { cls: 'neutral', label: 'No classes yet' }; }
+function subjPctText(s) { return hasClasses(s) ? pct(s) + '%' : '—'; }
+function subjFill(s) { return hasClasses(s) ? pctColor(pct(s), getTarget(s)) : 'var(--border2)'; }
+function subjTextColor(s) { return hasClasses(s) ? pctTextColor(pct(s), getTarget(s)) : 'var(--muted)'; }
+function subjRoast(s) {
+  return hasClasses(s) ? getRoast(pct(s), getTarget(s), subjRoastSeed(s)) : 'Fresh start — no classes counted yet.';
+}
 function pctStatus(p, tgt) {
   tgt = tgt ?? globalTarget;
   if (p >= tgt) return { cls: 'good', label: 'On track' };
   if (p >= tgt - 15) return { cls: 'warn', label: 'Below target' };
   return { cls: 'danger', label: 'At risk' };
 }
-function weeksFromStart() {
-  if (!semStart) return 0;
-  return Math.max(0, Math.floor((Date.now() - new Date(semStart)) / 864e5 / 7));
+// Whole weeks since a YYYY-MM-DD date, counted from local midnight.
+function weeksSince(dateStr) {
+  if (!dateStr || !DATE_RE.test(dateStr)) return 0;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return Math.max(0, Math.floor((Date.now() - new Date(y, m - 1, d)) / 864e5 / 7));
 }
-function estimateTotal(pw) {
-  return Math.round(weeksFromStart() * (pw || 0));
+function weeksFromStart() { return weeksSince(semStart); }
+function estimateTotalFrom(start, pw) { return Math.round(weeksSince(start) * (pw || 0)); }
+function estimateTotal(pw) { return estimateTotalFrom(semStart, pw); }
+function fmtDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 function daysUntil(d) {
   if (!d) return null;
@@ -971,13 +1028,13 @@ function toggleSidebar() {
 function renderNav() {
   document.getElementById('global-target').value = globalTarget;
   document.getElementById('nav-subjects').innerHTML = subjects.map((s, i) => {
-    const p = pct(s), tgt = getTarget(s), risk = p < tgt;
+    const risk = isAtRisk(s);
     const active = currPage === 'subject' && currSubjId === s.id ? ' active' : '';
-    const st = pctStatus(p, tgt).cls;
+    const st = subjStatus(s).cls;
     return `<button class="nav-item${active}" id="nav-s-${s.id}" onclick="goPage('subject','${s.id}')">
       <span class="nav-dot" style="background:${subjTheme(i).c}"></span>
       <span class="nav-text">${escapeHTML(s.name)}</span>
-      <span class="${risk ? 'nav-risk' : 'nav-safe'} nav-pct ${st}">${p}%</span>
+      <span class="${risk ? 'nav-risk' : 'nav-safe'} nav-pct ${st}">${subjPctText(s)}</span>
     </button>`;
   }).join('');
   renderWisdom();
@@ -986,7 +1043,7 @@ function renderNav() {
 function updateGlobalTarget(v) {
   globalTarget = Math.max(1, Math.min(100, parseInt(v)||75));
   document.getElementById('global-target').value = globalTarget;
-  localStorage.setItem('bk_global_target', globalTarget);
+  savePrefs();
   renderNav();
   if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
   else renderHome();
@@ -1056,7 +1113,10 @@ function renderHome() {
         <img class="empty-illus" src="assets/cat-peek.svg" alt="">
         <h3>No subjects yet</h3>
         <p>Add your subjects to find out if you're cooked.</p>
-        <button class="btn-pri" onclick="openAddModal()">${ic('plus','ic-sm')} Add Subject</button>
+        <div class="empty-actions">
+          <button class="btn-pri" onclick="openAddModal()">${ic('plus','ic-sm')} Add Subject</button>
+          <button class="btn-sec" onclick="openSharePack('in')">${ic('users','ic-sm')} Import from a classmate</button>
+        </div>
       </div>`;
     document.getElementById('bar-chart').innerHTML = '<div class="empty" style="padding:20px;width:100%"><p style="margin:0">Your class history will show up here.</p></div>';
     document.getElementById('quick-view').innerHTML = '<div class="empty" style="padding:20px"><p style="margin:0">Nothing to glance at yet.</p></div>';
@@ -1067,7 +1127,7 @@ function renderHome() {
   const present = subjects.reduce((a,s)=>a+s.present,0);
   const ov = attPct(present, total);
   const safeBunks = subjects.reduce((a,s)=>a+bunkable(s),0);
-  const atRisk = subjects.filter(s=>pct(s)<getTarget(s));
+  const atRisk = subjects.filter(isAtRisk);
   const bestBunk = [...subjects].sort((a,b)=>bunkable(b)-bunkable(a))[0];
   const hasBest = bestBunk && bunkable(bestBunk) > 0;
   const ovCls = pctStatus(ov, globalTarget).cls;
@@ -1099,19 +1159,19 @@ function renderHome() {
  
   document.getElementById('subject-cards').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s);
-    const risk = p < tgt;
-    const st = pctStatus(p, tgt);
+    const risk = isAtRisk(s);
+    const st = subjStatus(s);
     return `<button class="subj-card ${risk?'at-risk':'safe-zone'}" onclick="goPage('subject','${s.id}')">
       <span class="subj-avatar" style="background:${subjTheme(i).c}" aria-hidden="true">${escapeHTML((s.name || '?').trim().charAt(0))}</span>
       <span class="subj-card-main">
         <span class="subj-card-name">${escapeHTML(s.name)}</span>
-        <span class="subj-card-roast">${getRoast(p, tgt, subjRoastSeed(s))}</span>
-        <span class="subj-bar"><span class="subj-bar-fill" style="width:${Math.min(100,p)}%;background:${pctColor(p, tgt)}"></span><span class="subj-bar-target" style="left:${Math.min(100,tgt)}%" title="Target ${tgt}%"></span></span>
+        <span class="subj-card-roast">${subjRoast(s)}</span>
+        <span class="subj-bar"><span class="subj-bar-fill" style="width:${Math.min(100,p)}%;background:${subjFill(s)}"></span><span class="subj-bar-target" style="left:${Math.min(100,tgt)}%" title="Target ${tgt}%"></span></span>
       </span>
       <span class="subj-card-right">
-        <span class="subj-card-pct" style="color:${pctTextColor(p, tgt)}">${p}%</span>
+        <span class="subj-card-pct" style="color:${subjTextColor(s)}">${subjPctText(s)}</span>
         <span class="status-pill ${st.cls}">${st.label}</span>
-        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:(risk?(isFinite(needed(s))?`need ${needed(s)} more`:'can\'t reach target'):'0 bunks left')}</span>
+        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:(risk?(isFinite(needed(s))?`need ${needed(s)} more`:'can\'t reach target'):hasClasses(s)?'0 bunks left':'mark your first class')}</span>
       </span>
       <span class="subj-chev">${ic('chevron-right','ic-sm')}</span>
     </button>`;
@@ -1132,8 +1192,8 @@ function renderHome() {
     return `<button class="qv-row" onclick="goPage('subject','${s.id}')">
       <span class="qv-dot" style="background:${subjTheme(i).c}"></span>
       <span class="qv-name">${escapeHTML(s.name)}</span>
-      <span class="qv-bar"><span style="width:${Math.min(100,p)}%;background:${pctColor(p, tgt)}"></span></span>
-      <span class="qv-pct" style="color:${pctTextColor(p, tgt)}">${p}%</span>
+      <span class="qv-bar"><span style="width:${Math.min(100,p)}%;background:${subjFill(s)}"></span></span>
+      <span class="qv-pct" style="color:${subjTextColor(s)}">${subjPctText(s)}</span>
     </button>`;
   }).join('');
 }
@@ -1333,7 +1393,7 @@ function renderHomeToday() {
     return;
   }
 
-  const classes = [...getScheduledClassesForDate(todayStr), ...getExtraClassesForDate(todayStr)];
+  const classes = getAllClassesForDate(todayStr);
 
   if (!classes.length) {
     box.innerHTML = timetable.length
@@ -1353,11 +1413,11 @@ function renderHomeToday() {
   <ol class="timeline">${shown.map(c => {
     const s = subjects.find(x => x.id === c.subjectId);
     const name = s ? s.name : c.subjectName;
-    const time = c.startTime ? (c.endTime ? `${c.startTime} – ${c.endTime}` : c.startTime) : (c.isExtra ? 'Extra class' : `Period ${c.period}`);
+    const time = c.startTime ? (c.endTime ? `${c.startTime} – ${c.endTime}` : c.startTime) : (c.isExtra ? 'Extra class' : c.isMakeup ? 'Makeup class' : `Period ${c.period}`);
     const st = STATES[c.status];
     return `<li class="tl-row ${st ? 'is-' + st.cls : 'is-pending'}">
       <span class="tl-dot" aria-hidden="true">${st && st.icon ? ic(st.icon, 'ic-xs') : ''}</span>
-      <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span><span class="tl-time">${escapeHTML(time)}${c.isExtra && c.startTime ? ' · Extra' : ''}</span></span>
+      <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span><span class="tl-time">${escapeHTML(time)}${c.isExtra && c.startTime ? ' · Extra' : ''}${c.isMakeup && c.startTime ? ' · Makeup' : ''}</span></span>
       <span class="tl-state">${st ? st.label : 'Not marked'}</span>
     </li>`;
   }).join('')}</ol>${classes.length > shown.length ? `<div class="today-more">+${classes.length - shown.length} more</div>` : ''}`;
@@ -1485,7 +1545,7 @@ function openCooked() {
   const total = subjects.reduce((a,s)=>a+s.total,0);
   const present = subjects.reduce((a,s)=>a+s.present,0);
   const ov = attPct(present, total);
-  const atRisk = subjects.filter(s=>pct(s)<getTarget(s));
+  const atRisk = subjects.filter(isAtRisk);
   const safeBunks = subjects.reduce((a,s)=>a+bunkable(s),0);
  
   let emoji, verdict, msg, cls;
@@ -1514,11 +1574,11 @@ function openCooked() {
   document.getElementById('ck-msg').textContent = msg;
   document.getElementById('ck-breakdown').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s), col = pctColor(p, tgt);
-    const status = p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : (isFinite(needed(s)) ? `💀 -${needed(s)} needed` : '💀 out of reach');
+    const status = !hasClasses(s) ? '🆕 no classes yet' : p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : (isFinite(needed(s)) ? `💀 -${needed(s)} needed` : '💀 out of reach');
     return `<div class="cooked-row">
       <span class="cooked-dot" style="background:${subjTheme(i).c}"></span>
       <span class="subj-n">${escapeHTML(s.name)}</span>
-      <span class="subj-p" style="color:${pctTextColor(p, tgt)}">${p}%</span>
+      <span class="subj-p" style="color:${subjTextColor(s)}">${subjPctText(s)}</span>
       <span class="subj-s">${status}</span>
     </div>`;
   }).join('');
@@ -1538,7 +1598,7 @@ function renderSubject(id, preserveSim) {
   document.getElementById('sp-title').textContent = s.name;
   document.getElementById('sp-meta').textContent = `${s.code||''} · Target: ${tgt}% · ${s.mode==='estimate'?'Estimated':'Exact'} Mode`;
   document.getElementById('sp-name').textContent = s.name;
-  document.getElementById('sp-roast').textContent = getRoast(p, tgt, subjRoastSeed(s));
+  document.getElementById('sp-roast').textContent = subjRoast(s);
   document.getElementById('mode-label').innerHTML = s.mode==='estimate'
     ? `<span class="mode-tag est">📡 Estimated</span>`
     : `<span class="mode-tag exact">🎯 Exact</span>`;
@@ -1549,29 +1609,38 @@ function renderSubject(id, preserveSim) {
   fill.style.stroke = col;
   fill.style.strokeDasharray = circ;
   fill.style.strokeDashoffset = circ - Math.min(100, p)/100*circ;
-  document.getElementById('circ-pct').textContent = p + '%';
-  document.getElementById('circ-pct').style.color = pctTextColor(p, tgt);
+  if (!hasClasses(s)) fill.style.stroke = 'var(--border2)';
+  document.getElementById('circ-pct').textContent = subjPctText(s);
+  document.getElementById('circ-pct').style.color = subjTextColor(s);
 
   // Subject theme (decorative)
   const th = subjTheme(subjects.indexOf(s));
   const spIcon = document.getElementById('sp-icon');
   if (spIcon) { spIcon.innerHTML = ic(subjIcon(s.name)); spIcon.style.background = th.bg; spIcon.style.color = th.c; }
   const spCat = document.getElementById('sp-cat');
-  if (spCat) spCat.src = `assets/${p >= tgt ? (bk > 3 ? 'cat-happy' : 'cat-laptop') : 'cat-worried'}.svg`;
+  if (spCat) spCat.src = `assets/${!hasClasses(s) ? 'cat-books' : p >= tgt ? (bk > 3 ? 'cat-happy' : 'cat-laptop') : 'cat-worried'}.svg`;
   const hero = document.getElementById('sp-hero');
   if (hero) hero.style.setProperty('--hero-tint', th.bg);
 
   // Chips
-  document.getElementById('sp-chips').innerHTML = `
-    <div class="chip indigo"><label>${ic('calendar','ic-sm')} Total</label><div class="cv">${s.total}</div></div>
-    <div class="chip green"><label>${ic('check','ic-sm')} Present</label><div class="cv">${s.present}</div></div>
-    <div class="chip pink"><label>${ic('x','ic-sm')} Absent</label><div class="cv">${s.total-s.present}</div></div>
-    <div class="chip amber"><label>${ic('target','ic-sm')} Target</label><div class="cv">${tgt}%</div></div>
-  `;
+  // Official-numbers subjects: tap Total / Present / Target to change them.
+  // Estimated subjects are worked out from dates, so they're edited below.
+  const editable = s.mode !== 'estimate';
+  const chip = (cls, icon, label, value, field) => editable && field
+    ? `<button type="button" class="chip ${cls} editable" data-field="${field}" onclick="startChipEdit('${field}')" aria-label="${label}: ${value}. Tap to change"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}${ic('pen','ic-xs chip-pen')}</span><span class="cv">${value}</span></button>`
+    : `<div class="chip ${cls}"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}</span><div class="cv">${value}</div></div>`;
+  document.getElementById('sp-chips').innerHTML =
+    chip('indigo', 'calendar', 'Total', s.total, 'total') +
+    chip('green', 'check', 'Present', s.present, 'present') +
+    chip('pink', 'x', 'Absent', s.total - s.present, null) +
+    chip('amber', 'target', 'Target', tgt + '%', 'target');
  
   // Advice
   let pills = '', advText = '';
-  if (p >= tgt && bk > 0) {
+  if (!hasClasses(s)) {
+    pills = `<span class="pill">🆕 Fresh subject</span>`;
+    advText = `No classes counted yet. Mark them on <strong>Daily Classes</strong> as they happen${editable ? ', or tap <strong>Total</strong> / <strong>Present</strong> above to enter your numbers' : ', or open <strong>Edit subject</strong> below'}.`;
+  } else if (p >= tgt && bk > 0) {
     pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
     if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
     const wk = s.perWeek > 0 ? ` (~${(bk/s.perWeek).toFixed(1)} weeks worth)` : '';
@@ -1583,8 +1652,10 @@ function renderSubject(id, preserveSim) {
       ? `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk} No bunks. None. Zero. Go.`
       : `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`;
   } else {
-    pills = `<span class="pill w">⚠️ Exactly at ${tgt}%</span>`;
-    advText = `Literally one absence away from danger. Attend <strong>3–4 more</strong> to build buffer before even thinking about bunking.`;
+    pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
+    advText = p === tgt
+      ? `Literally one absence away from danger. Attend <strong>3–4 more</strong> to build buffer before even thinking about bunking.`
+      : `You're at ${p}%, but skipping even one class drops you below ${tgt}%. Attend <strong>3–4 more</strong> to build a buffer.`;
   }
   document.getElementById('adv-pills').innerHTML = pills;
   document.getElementById('adv-text').innerHTML = advText;
@@ -1592,171 +1663,273 @@ function renderSubject(id, preserveSim) {
   // Simulator
   initSim(s, tgt, p, preserveSim);
  
-  // Edit form
+  // Edit form (collapsed whenever you arrive on a subject)
+  const card = document.getElementById('edit-card');
+  if (card && !preserveSim) card.open = false;
+  const hint = document.getElementById('edit-sum-hint');
+  if (hint) hint.textContent = editable ? 'Name, attendance numbers, target, tracking mode' : 'Estimated subject — change semester start, classes/week, missed classes';
   editMode = s.mode || 'exact';
   fillEditForm(s);
 }
  
+// ══════════════════════════════════════════════════════
+//  SUBJECT FORMS (shared by Add Subject and Edit subject)
+// ══════════════════════════════════════════════════════
+function numField(id) {
+  const raw = (document.getElementById(id)?.value ?? '').trim();
+  if (raw === '') return null;
+  const n = Number(raw);
+  return Number.isInteger(n) ? n : NaN;
+}
+function textField(id) { return (document.getElementById(id)?.value ?? '').trim(); }
+
+// Checks what the user typed and works out the numbers to save.
+// Returns { values } or { error, field } (field = input id to point at).
+function checkSubjectForm(f, excludeId) {
+  const ids = f.ids || {};
+  const name = (f.name || '').trim();
+  if (!name) return { error: 'Give the subject a name.', field: ids.name };
+  if (subjects.some(x => x.id !== excludeId && (x.name || '').trim().toLowerCase() === name.toLowerCase())) {
+    return { error: `You already have a subject called "${name}".`, field: ids.name };
+  }
+  const bad = (v, min, max) => v !== null && v !== undefined && (Number.isNaN(v) || v < min || v > max);
+  if (bad(f.target, 1, 100)) return { error: 'Target must be a whole number from 1 to 100 — or leave it blank to use your global target.', field: ids.target };
+  const target = f.target ?? null;
+
+  if (f.mode !== 'estimate') {
+    if (bad(f.total, 0, 5000)) return { error: 'Total classes held must be a whole number (0 or more).', field: ids.total };
+    if (bad(f.present, 0, 5000)) return { error: 'Classes attended must be a whole number (0 or more).', field: ids.present };
+    const total = f.total ?? 0, present = f.present ?? 0;
+    if (present > total) return { error: `Attended (${present}) can't be more than the total classes held (${total}).`, field: ids.present };
+    if (bad(f.perWeek, 0, 30)) return { error: 'Classes per week should be between 0 and 30.', field: ids.perWeek };
+    return { values: { name, total, present, perWeek: f.perWeek ?? 0, target, semTotal: f.semTotal ?? null, mode: 'exact' } };
+  }
+
+  const start = f.semStart || '';
+  if (!start) return { error: 'Pick the semester start date — the estimate counts classes from that day.', field: ids.semStart };
+  if (start > getLocalDateString()) return { error: "The semester start can't be in the future.", field: ids.semStart };
+  if (f.perWeek === null || bad(f.perWeek, 1, 30)) return { error: 'Enter how many classes this subject has each week (1–30).', field: ids.perWeek };
+  if (bad(f.missed, 0, 5000)) return { error: 'Classes missed must be a whole number (0 or more).', field: ids.missed };
+  const total = estimateTotalFrom(start, f.perWeek), missed = f.missed ?? 0;
+  if (missed > total) {
+    return { error: `You've entered ${missed} missed, but only about ${total} class${total !== 1 ? 'es have' : ' has'} happened since ${fmtDate(start)}.`, field: ids.missed };
+  }
+  if (bad(f.semTotal, 1, 5000)) return { error: 'Classes in the whole semester must be a whole number — or leave it blank.', field: ids.semTotal };
+  if (f.semTotal != null && f.semTotal < total) {
+    return { error: `Classes in the whole semester (${f.semTotal}) can't be fewer than the ~${total} already held.`, field: ids.semTotal };
+  }
+  return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: f.semTotal ?? null, mode: 'estimate', semStart: start } };
+}
+
+// One friendly line describing what will be saved.
+function subjectPreviewHTML(v) {
+  let html = '';
+  if (v.mode === 'estimate') {
+    const w = weeksSince(v.semStart);
+    html += `Since ${escapeHTML(fmtDate(v.semStart))}: ${w} week${w !== 1 ? 's' : ''} × ${v.perWeek}/week ≈ <strong>${v.total}</strong> class${v.total !== 1 ? 'es' : ''} held. `;
+  }
+  if (v.total === 0) {
+    return html + (v.mode === 'estimate' && weeksSince(v.semStart) === 0
+      ? 'The estimate starts counting after the first full week.'
+      : 'No classes counted yet — mark them on Daily Classes as they happen.');
+  }
+  const t = v.target || globalTarget;
+  const fake = { present: v.present, total: v.total, target: v.target };
+  const p = pct(fake), bk = bunkable(fake), nd = needed(fake);
+  html += `<strong>${v.present}/${v.total}</strong> attended → <strong style="color:${pctTextColor(p, t)}">${p}%</strong> · `;
+  html += p >= t
+    ? (bk > 0 ? `${bk} safe bunk${bk !== 1 ? 's' : ''} at ${t}%` : `no bunks to spare at ${t}%`)
+    : (isFinite(nd) ? `attend the next ${nd} to reach ${t}%` : `${t}% can't be reached anymore`);
+  return html;
+}
+
+function showFormProblem(previewId, r) {
+  const box = document.getElementById(previewId);
+  if (box) { box.textContent = r.error; box.classList.add('is-error'); }
+  const input = r.field && document.getElementById(r.field);
+  if (input) { input.classList.add('invalid'); input.setAttribute('aria-invalid', 'true'); input.focus(); }
+}
+function clearFormProblem(scope) {
+  scope?.querySelectorAll('.invalid').forEach(el => { el.classList.remove('invalid'); el.removeAttribute('aria-invalid'); });
+}
+function renderFormPreview(previewId, r, extra = '') {
+  const box = document.getElementById(previewId);
+  if (!box) return;
+  box.classList.toggle('is-error', !!r.error);
+  if (r.error) box.textContent = r.error;
+  else box.innerHTML = subjectPreviewHTML(r.values) + extra;
+}
+
+// ── Edit subject ──
+function readEditForm(s) {
+  const est = editMode === 'estimate';
+  return {
+    mode: editMode,
+    name: textField('inp-subject-name'),
+    total: numField('inp-total'),
+    present: numField('inp-present'),
+    perWeek: numField(est ? 'inp-est-pw' : 'inp-perweek'),
+    target: numField(est ? 'inp-est-target' : 'inp-target'),
+    semStart: textField('inp-semstart'),
+    missed: numField('inp-est-absent'),
+    semTotal: est ? numField('inp-est-semtotal') : (s.semTotal ?? null),
+    ids: {
+      name: 'inp-subject-name', total: 'inp-total', present: 'inp-present',
+      perWeek: est ? 'inp-est-pw' : 'inp-perweek', target: est ? 'inp-est-target' : 'inp-target',
+      semStart: 'inp-semstart', missed: 'inp-est-absent', semTotal: 'inp-est-semtotal',
+    },
+  };
+}
+
 function fillEditForm(s) {
-  const isEst = editMode === 'estimate';
-  
-  // ✨ ADDED: Clear any existing name field first
-  const existingNameField = document.getElementById('edit-name-field');
-  if (existingNameField) existingNameField.remove();
-  
-  // ✨ ADDED: Insert editable name field
-  const editCardTitle = document.querySelector('.edit-card h4');
-  const nameFieldHTML = `
-    <div class="field" id="edit-name-field" style="margin-bottom:14px;margin-top:14px">
-      <label>Subject Name</label>
-      <input type="text" id="inp-subject-name" placeholder="e.g. Mathematics" value="${escapeHTML(s.name)}">
-    </div>
-  `;
-  if (editCardTitle) {
-  editCardTitle.insertAdjacentHTML('afterend', nameFieldHTML);
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+  set('inp-subject-name', s.name);
+  // Both forms are filled so switching mode keeps what's there
+  set('inp-total', s.total);
+  set('inp-present', s.present);
+  set('inp-absent', s.total - s.present);
+  set('inp-perweek', s.perWeek || '');
+  set('inp-target', s.target || '');
+  set('inp-semstart', semStart);
+  set('inp-est-pw', s.perWeek || '');
+  set('inp-est-absent', s.total - s.present);
+  set('inp-est-target', s.target || '');
+  set('inp-est-semtotal', s.semTotal || '');
+  const body = document.querySelector('#edit-card .edit-body');
+  if (body && !body.dataset.wired) {
+    body.dataset.wired = '1';
+    body.addEventListener('input', onEditInput);
   }
-  
-  // Rest of the form
-  document.getElementById('form-exact').style.display = isEst ? 'none' : 'grid';
-  document.getElementById('form-est').style.display = isEst ? 'block' : 'none';
-  if (!isEst) {
-    document.getElementById('inp-total').value = s.total;
-    document.getElementById('inp-present').value = s.present;
-    document.getElementById('inp-absent').value = s.total - s.present;
-    document.getElementById('inp-perweek').value = s.perWeek || '';
-    document.getElementById('inp-target').value = s.target || '';
-    document.getElementById('inp-total').oninput = document.getElementById('inp-present').oninput = () => {
-      const t = parseInt(document.getElementById('inp-total').value)||0;
-      const pr = parseInt(document.getElementById('inp-present').value)||0;
-      document.getElementById('inp-absent').value = Math.max(0, t-pr);
-    };
-  } else {
-    document.getElementById('inp-semstart').value = semStart;
-    document.getElementById('inp-est-pw').value = s.perWeek || '';
-    document.getElementById('inp-est-absent').value = s.total - s.present;
-    document.getElementById('inp-est-target').value = s.target || '';
-    document.getElementById('inp-est-semtotal').value = s.semTotal || '';
-    // live calc note
-    updateEstNote(s);
-    document.getElementById('inp-semstart').oninput =
-    document.getElementById('inp-est-pw').oninput = () => updateEstNote();
+  clearFormProblem(body);
+  const err = document.getElementById('edit-error');
+  if (err) err.hidden = true;
+  setEditMode(editMode);
+}
+
+function onEditInput(e) {
+  const id = e.target.id;
+  const total = numField('inp-total'), present = numField('inp-present'), absent = numField('inp-absent');
+  // Attended and missed fill each other in
+  if (id === 'inp-absent' && Number.isInteger(total) && Number.isInteger(absent)) {
+    document.getElementById('inp-present').value = Math.max(0, total - absent);
+  } else if ((id === 'inp-total' || id === 'inp-present') && Number.isInteger(total) && Number.isInteger(present)) {
+    document.getElementById('inp-absent').value = Math.max(0, total - present);
   }
+  e.target.classList.remove('invalid');
+  e.target.removeAttribute('aria-invalid');
+  updateEditPreview();
 }
- 
-function toggleMode() {
-  editMode = editMode === 'exact' ? 'estimate' : 'exact';
-  const s = subjects.find(x=>x.id===currSubjId);
-  if (s) { s.mode = editMode; fillEditForm(s); }
+
+function setEditMode(m) {
+  editMode = m === 'estimate' ? 'estimate' : 'exact';
+  const est = editMode === 'estimate';
+  document.getElementById('form-exact').style.display = est ? 'none' : 'grid';
+  document.getElementById('form-est').style.display = est ? 'block' : 'none';
+  [['edit-mode-exact', !est], ['edit-mode-estimate', est]].forEach(([id, on]) => {
+    const b = document.getElementById(id);
+    if (b) { b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
+  });
+  clearFormProblem(document.querySelector('#edit-card .edit-body'));
+  updateEditPreview();
 }
- 
- 
-// ══════════════════════════════════════════════════════
-//  ESTIMATED NOTE HELPER
-// ══════════════════════════════════════════════════════
-function updateEstNote(s) {
-  const el = document.getElementById('est-calc-note');
-  if (!el) return;
-  const pw = parseInt(document.getElementById('inp-est-pw')?.value) || (s ? s.perWeek : 0) || 0;
-  const newSem = document.getElementById('inp-semstart')?.value || semStart;
-  const wks = newSem ? Math.max(0, Math.floor((Date.now() - new Date(newSem)) / 864e5 / 7)) : weeksFromStart();
-  const conducted = Math.round(wks * pw);
-  const semTotalV = parseInt(document.getElementById('inp-est-semtotal')?.value) || (s ? s.semTotal : null);
-  const remaining = semTotalV && semTotalV > conducted ? semTotalV - conducted : null;
-  let note = '📡 Estimated — ';
-  if (pw > 0 && wks > 0) {
-    note += `~${conducted} classes conducted so far (${wks} weeks × ${pw}/week).`;
-    if (remaining !== null) note += ` <strong>${remaining} classes remaining</strong> this semester.`;
-    else note += ' Set "Total Classes This Semester" to see remaining classes.';
-  } else {
-    note += 'Set semester start date and classes/week to auto-calculate.';
-  }
-  el.innerHTML = note;
+function toggleMode() { setEditMode(editMode === 'exact' ? 'estimate' : 'exact'); }
+
+function updateEditPreview() {
+  const s = subjects.find(x => x.id === currSubjId);
+  if (!s) return;
+  const r = checkSubjectForm(readEditForm(s), s.id);
+  const warn = !r.error && editMode === 'estimate' && s.mode !== 'estimate' && s.total > 0
+    ? `<span class="form-warn">Saving replaces your exact count (${s.present}/${s.total}) with this estimate.</span>` : '';
+  renderFormPreview('edit-preview', r, warn);
 }
- 
+
 async function saveSubject() {
   const s = subjects.find(x=>x.id===currSubjId);
   if (!s) {
     toast('Subject not found. Refreshing...', 'err');
-    await loadSubjects(); // ✅ RELOAD
-    goPage('home'); // ✅ REDIRECT
+    await loadSubjects();
+    goPage('home');
     return;
   }
+  const r = checkSubjectForm(readEditForm(s), s.id);
+  if (r.error) { showFormProblem('edit-preview', r); return; }
+  const v = r.values;
 
-   const saveBtn = document.querySelector('.edit-card .save-btn');
-    saveBtn.disabled = true; 
-    saveBtn.textContent = 'Saving...'; 
-  
-  const newName = document.getElementById('inp-subject-name')?.value.trim();
-    if (!newName) {
-          toast('Subject name cannot be empty', 'err');
-          saveBtn.disabled = false;
-         saveBtn.textContent = 'Save';
-           return;
-          }
-  if (newName && newName !== s.name) {
-    s.name = newName;
-    document.getElementById('sp-title').textContent = newName;
-    document.getElementById('sp-name').textContent = newName;
-  }
-  
-  if (editMode === 'estimate') {
-    const pw = Math.max(1, parseInt(document.getElementById('inp-est-pw').value)||s.perWeek||3);
-    const absent = Math.max(0, parseInt(document.getElementById('inp-est-absent').value)||0);
-    const tRaw = document.getElementById('inp-est-target').value;
-    const newSem = document.getElementById('inp-semstart').value;
-    if (newSem) { semStart = newSem; savePrefs(); }
+  const saveBtn = document.querySelector('#edit-card .save-btn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
 
-    const semTotalRaw = document.getElementById('inp-est-semtotal').value;
-    const semTotalVal = semTotalRaw ? (Math.max(0, parseInt(semTotalRaw)) || null) : null;
-
-    const total = estimateTotal(pw);
-
-    s.total = total; 
-    s.present = Math.max(0, total-absent);
-    s.perWeek = pw; 
-    s.target = tRaw ? Math.max(1,Math.min(100,parseInt(tRaw)||globalTarget)) : null;
-    s.semTotal = semTotalVal;
-    s.mode = 'estimate';
-
-  } else {
-    const t = Math.max(0, parseInt(document.getElementById('inp-total').value)||0);
-    const pr = Math.max(0, parseInt(document.getElementById('inp-present').value)||0);
-    const pw = Math.max(0, parseInt(document.getElementById('inp-perweek').value)||0);
-    const tRaw = document.getElementById('inp-target').value;
-
-    s.total = t; 
-    s.present = Math.min(pr,t);
-    s.perWeek = pw; 
-    s.target = tRaw ? Math.max(1,Math.min(100,parseInt(tRaw)||globalTarget)) : null;
-    s.mode = 'exact';
-  }
-  
-  // ✅ FIXED: send correctly mapped fields
+  const before = { ...s };
+  Object.assign(s, { name: v.name, total: v.total, present: v.present, perWeek: v.perWeek, target: v.target, semTotal: v.semTotal, mode: v.mode });
   const success = await updateSubject(currSubjId, {
-    name: s.name,
-    code: s.code || '',
-    total: s.total,
-    present: s.present,
-    perWeek: s.perWeek,
-    target: s.target,
-    semTotal: s.semTotal,
-    mode: s.mode
+    name: s.name, code: s.code || '', total: s.total, present: s.present,
+    perWeek: s.perWeek, target: s.target, semTotal: s.semTotal, mode: s.mode
   });
-  
+
   if (success) {
+    if (v.mode === 'estimate' && v.semStart !== semStart) { semStart = v.semStart; savePrefs(); }
     const sv = document.getElementById('sim-input')?.value||0;
     renderSubject(currSubjId, true);
     renderNav();
-    if (document.getElementById('sim-input')) { 
-      document.getElementById('sim-input').value = sv; 
-      updateSim(); 
+    if (document.getElementById('sim-input')) {
+      document.getElementById('sim-input').value = sv;
+      updateSim();
     }
     toast(randToast('save'));
+  } else {
+    Object.assign(s, before); // keep the screen in step with what's actually saved
   }
-    saveBtn.disabled = false;
-  saveBtn.textContent = 'Save';
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save changes';
 }
- 
+
+// ── Tap a number on the subject card to change it (official-numbers subjects) ──
+function startChipEdit(field) {
+  const s = subjects.find(x => x.id === currSubjId);
+  const chip = document.querySelector(`#sp-chips .chip[data-field="${field}"]`);
+  if (!s || !chip) return;
+  const cur = field === 'target' ? (s.target ?? '') : s[field];
+  const box = document.createElement('div');
+  box.className = chip.className.replace('editable', 'editing');
+  box.dataset.field = field;
+  box.innerHTML = `${chip.querySelector('.chip-lbl').outerHTML}
+    <input class="chip-input" type="number" inputmode="numeric" min="${field === 'target' ? 1 : 0}" ${field === 'target' ? `max="100" placeholder="${globalTarget}"` : ''} value="${cur}" aria-label="${field === 'target' ? 'Target %' : field === 'total' ? 'Total classes held' : 'Classes attended'}">`;
+  chip.replaceWith(box);
+  const input = box.querySelector('input');
+  input.focus(); input.select();
+  let done = false;
+  const finish = async (keepOnError) => {
+    if (done) return;
+    const raw = input.value.trim();
+    const n = raw === '' ? null : Number(raw);
+    const f = { mode: 'exact', name: s.name, total: s.total, present: s.present, perWeek: s.perWeek, target: s.target ?? null, semTotal: s.semTotal ?? null };
+    if (field === 'target') f.target = Number.isInteger(n) || n === null ? n : NaN;
+    else f[field] = Number.isInteger(n) ? n : NaN;
+    if (field !== 'target' && n === null) f[field] = NaN;
+    const r = checkSubjectForm(f, s.id);
+    if (r.error) {
+      toast(r.error, 'err');
+      if (keepOnError) { input.focus(); return; }
+      done = true; renderSubject(s.id, true); return;
+    }
+    done = true;
+    const v = r.values;
+    if (v.total === s.total && v.present === s.present && (v.target ?? null) === (s.target ?? null)) { renderSubject(s.id, true); return; }
+    const before = { ...s };
+    Object.assign(s, { total: v.total, present: v.present, target: v.target });
+    const ok = await updateSubject(s.id, { name: s.name, code: s.code || '', total: s.total, present: s.present, perWeek: s.perWeek, target: s.target, semTotal: s.semTotal, mode: s.mode });
+    if (!ok) Object.assign(s, before);
+    renderSubject(s.id, true);
+    renderNav();
+    if (ok) toast(randToast('save'));
+  };
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done = true; renderSubject(s.id, true); }
+  });
+  input.addEventListener('blur', () => finish(false));
+}
+
 async function deleteSubject() {
   const s = subjects.find(x=>x.id===currSubjId);
   if (!s) return;
@@ -1839,9 +2012,15 @@ function updateSim() {
  
   if (plan === 0) {
     const remaining = (s.semTotal && s.semTotal > s.total) ? s.semTotal - s.total : null;
+    const nd0 = needed(s, tgt);
     let h = bk_now > 0
       ? 'Can safely skip <strong>' + bk_now + '</strong> more.' + (pw>0 ? ' ~' + (bk_now/pw).toFixed(1) + ' weeks worth.' : '')
-      : 'Zero safe bunks. Right at the limit.';
+      : s.total === 0 ? 'No classes counted yet — nothing to simulate.'
+      : _sp < tgt
+        ? (isFinite(nd0)
+            ? 'Already below ' + tgt + '%. Attend the next <strong>' + nd0 + '</strong> class' + (nd0 !== 1 ? 'es' : '') + ' to get back.'
+            : 'Already below ' + tgt + '% — that target can\'t be reached anymore.')
+        : 'Zero safe bunks. Right at the limit.';
     if (remaining !== null) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
       h += ' If you attend all <strong>' + remaining + '</strong> remaining classes, you end the semester at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
@@ -2025,137 +2204,83 @@ async function obFinish() {
 // ══════════════════════════════════════════════════════
 //  ADD SUBJECT MODAL
 // ══════════════════════════════════════════════════════
-function openAddModal() { 
-  document.getElementById('add-overlay').classList.add('show'); 
-  selAddMode('estimate');
-  
-  // ✅ ADDED: Pre-fill semester start date if available
-  const savedSemStart = localStorage.getItem('bk_sem_start') || semStart;
-  if (savedSemStart) {
-    const semStartField = document.getElementById('as-semstart');
-    if (semStartField) semStartField.value = savedSemStart;
+function openAddModal() {
+  const ov = document.getElementById('add-overlay');
+  ov.classList.add('show');
+  ['as-name','as-total','as-present','as-perweek','as-pw','as-missed','as-target','as-semtotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('as-semstart').value = semStart || '';
+  if (!ov.dataset.wired) {
+    ov.dataset.wired = '1';
+    ov.addEventListener('input', e => { e.target.classList.remove('invalid'); e.target.removeAttribute('aria-invalid'); updateAddPreview(); });
   }
+  // Without a semester start date, official numbers are the easier start
+  selAddMode(semStart ? 'estimate' : 'exact');
+  setTimeout(() => document.getElementById('as-name')?.focus(), 50);
 }
 function closeAddModal() { document.getElementById('add-overlay').classList.remove('show'); }
 function selAddMode(m) {
   addMode = m;
-  
-  // Update selected state
   ['exact', 'estimate'].forEach(x => {
     const el = document.getElementById(`add-opt-${x}`);
-    if (el) el.classList.toggle('sel', x === m);
+    if (el) { el.classList.toggle('sel', x === m); el.setAttribute('aria-pressed', String(x === m)); }
   });
-  
-  // Toggle field visibility
   document.getElementById('add-exact-fields').style.display = m === 'exact' ? 'block' : 'none';
   document.getElementById('add-est-fields').style.display = m === 'estimate' ? 'block' : 'none';
+  clearFormProblem(document.getElementById('add-overlay'));
+  updateAddPreview();
+}
+function readAddForm() {
+  const est = addMode === 'estimate';
+  return {
+    mode: addMode,
+    name: textField('as-name'),
+    total: numField('as-total'),
+    present: numField('as-present'),
+    perWeek: numField(est ? 'as-pw' : 'as-perweek'),
+    target: numField('as-target'),
+    semStart: textField('as-semstart'),
+    missed: numField('as-missed'),
+    semTotal: est ? numField('as-semtotal') : null,
+    ids: { name: 'as-name', total: 'as-total', present: 'as-present', perWeek: est ? 'as-pw' : 'as-perweek', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: 'as-semtotal' },
+  };
+}
+function updateAddPreview() {
+  const f = readAddForm();
+  const box = document.getElementById('as-preview');
+  // Don't nag about the name before anything has been typed
+  if (!f.name && f.total === null && f.present === null && f.missed === null && f.perWeek === null) {
+    if (box) { box.classList.remove('is-error'); box.textContent = addMode === 'estimate' ? 'Tip: classes held are counted from the semester start × classes per week.' : 'Copy total and attended from your college portal.'; }
+    return;
+  }
+  const r = checkSubjectForm(f.name ? f : { ...f, name: '​' }, null);
+  renderFormPreview('as-preview', r);
 }
 
 async function confirmAdd() {
-  const submitBtn = document.querySelector('#add-overlay .btn-pri');
+  const submitBtn = document.getElementById('add-submit');
+  const r = checkSubjectForm(readAddForm(), null);
+  if (r.error) { showFormProblem('as-preview', r); return; }
+  const v = r.values;
 
-  // 🔒 Prevent spam clicks
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Adding...';
-  }
-
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Adding...'; }
   try {
-    const name = document.getElementById('as-name').value.trim();
-
-    if (!name) {
-      toast('Subject name required', 'err');
-      return;
-    }
-
-    const tRaw = document.getElementById('as-target').value;
-    const target = tRaw ? Math.max(1, Math.min(100, parseInt(tRaw) || globalTarget)) : null;
-
-    let total, present, perWeek, mode;
-    let semTotalAdd = null;
-
-    if (addMode === 'estimate') {
-      perWeek = Math.max(1, parseInt(document.getElementById('as-pw').value) || 3);
-      const missed = Math.max(0, parseInt(document.getElementById('as-missed').value) || 0);
-      
-      // ✅ ADDED: Get semester start date from modal
-      const modalSemStart = document.getElementById('as-semstart').value;
-      
-      // ✅ ADDED: Save to localStorage if provided
-      if (modalSemStart) {
-        localStorage.setItem('bk_sem_start', modalSemStart);
-        semStart = modalSemStart; // Update global variable
-      }
-      
-      const stRaw = document.getElementById('as-semtotal').value;
-      semTotalAdd = stRaw ? (Math.max(0, parseInt(stRaw)) || null) : null;
-      
-      // ✅ FIXED: Calculate total AFTER setting semStart
-      total = estimateTotal(perWeek);
-      present = Math.max(0, total - missed);
-      mode = 'estimate';
-      
-      // ✅ ADDED: Debug logging
-      console.log('Estimate Mode - Missed:', missed, 'Total:', total, 'Present:', present, 'PerWeek:', perWeek);
-
-    } else {
-      total = Math.max(0, parseInt(document.getElementById('as-total').value) || 0);
-      present = Math.max(0, parseInt(document.getElementById('as-present').value) || 0);
-      perWeek = Math.max(0, parseInt(document.getElementById('as-perweek').value) || 3);
-      mode = 'exact';
-      
-      console.log('Exact Mode - Total:', total, 'Present:', present);
-    }
-
-    const newSubject = {
-      name,
-      code: name.slice(0, 2).toUpperCase() + '101',
-      total,
-      present: Math.min(present, total),
-      perWeek,
-      target,
-      semTotal: semTotalAdd,
-      mode
-    };
-
-    const success = await addSubject(newSubject);
-
+    const success = await addSubject({
+      name: v.name,
+      code: v.name.slice(0, 2).toUpperCase() + '101',
+      total: v.total, present: v.present, perWeek: v.perWeek,
+      target: v.target, semTotal: v.semTotal, mode: v.mode
+    });
     if (success) {
+      if (v.mode === 'estimate' && v.semStart !== semStart) { semStart = v.semStart; savePrefs(); }
       closeAddModal();
       toast(randToast('add'));
-
-      // ✅ Safe reset all fields
-      const ids = [
-        'as-name',
-        'as-total',
-        'as-present',
-        'as-perweek',
-        'as-pw',
-        'as-missed',
-        'as-target',
-        'as-semtotal',
-        'as-semstart' // ✅ ADDED
-      ];
-
-      ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-      });
-
-      // ✅ FIXED: Force re-render to show updated data
       renderAll();
     }
-
   } catch (err) {
     console.error('Add subject error:', err);
     toast('Something went wrong', 'err');
-
   } finally {
-    // 🔓 Always re-enable button
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Add Subject';
-    }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Add Subject'; }
   }
 }
  
@@ -2176,7 +2301,7 @@ renderAll();
 // close modals on overlay click
 document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
 document.getElementById('safe-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeSafeBunks(); });
-['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay'].forEach(id => {
+['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay','resched-overlay','dayswap-overlay','share-overlay'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     el.addEventListener('click', e => {
@@ -3272,8 +3397,11 @@ function renderTimetable() {
       <div class="empty">
         <img class="empty-illus" src="assets/cat-peek.svg" alt="">
         <h3>No weekly schedule yet</h3>
-        <p>Upload your timetable screenshot above, or add class periods by hand.</p>
-        <button class="btn-pri" onclick="openAddSlotModal(1, 1)">${ic('plus','ic-sm')} Add first class</button>
+        <p>Upload your timetable screenshot above, add class periods by hand, or import a classmate's setup.</p>
+        <div class="empty-actions">
+          <button class="btn-pri" onclick="openAddSlotModal(1, 1)">${ic('plus','ic-sm')} Add first class</button>
+          <button class="btn-sec" onclick="openSharePack('in')">${ic('users','ic-sm')} Import from a classmate</button>
+        </div>
       </div>
     `;
     return;
@@ -3668,6 +3796,286 @@ function toggleSundayDisplay() {
 }
 
 // ══════════════════════════════════════════════════════
+//  CLASS PACK — share subjects, timetable and semester dates
+//  (never attendance) with classmates as a file or a text code.
+// ══════════════════════════════════════════════════════
+const PACK_PREFIX = 'BUNKKRO1.';
+const PACK_LIMITS = { text: 300000, subjects: 60, slots: 300 };
+let importedPack = null;
+
+function buildPack() {
+  const idx = new Map(subjects.map((s, i) => [s.id, i]));
+  return {
+    app: 'bunkkro', kind: 'class-pack', version: 1, exportedAt: new Date().toISOString(),
+    semester: { start: semStart || '', examDate: examDate || '', target: globalTarget },
+    subjects: subjects.map(s => ({
+      name: s.name, code: s.code || '', perWeek: s.perWeek || 0,
+      target: s.target || null, semTotal: s.semTotal || null,
+    })),
+    timetable: timetable.map(t => ({
+      day: t.day, period: t.period, start: t.startTime || '', end: t.endTime || '',
+      subject: t.isBreak ? null : (idx.has(t.subjectId) ? idx.get(t.subjectId) : null),
+      name: t.isBreak ? (t.subjectName || 'Break') : (subjects[idx.get(t.subjectId)]?.name || t.subjectName || ''),
+      break: !!t.isBreak,
+    })),
+  };
+}
+
+function packToCode(pack) {
+  const bytes = new TextEncoder().encode(JSON.stringify(pack));
+  let bin = '';
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return PACK_PREFIX + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Reads a file's text or a pasted code. Returns { pack } or { error }.
+// Everything in it comes from someone else, so every field is checked.
+function readPack(text) {
+  text = String(text || '').trim();
+  if (!text) return { error: 'Choose a file or paste the text first.' };
+  if (text.length > PACK_LIMITS.text) return { error: 'That file is too big to be a BunkKro class file.' };
+  let raw;
+  try {
+    if (text.startsWith('{')) raw = JSON.parse(text);
+    else {
+      const at = text.indexOf(PACK_PREFIX);
+      if (at < 0) return { error: "That doesn't look like a BunkKro class file or code." };
+      const b64 = text.slice(at + PACK_PREFIX.length).replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      const bin = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+      raw = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+    }
+  } catch {
+    return { error: "Couldn't read that — the text may be cut off. Ask for the file instead." };
+  }
+  if (!raw || raw.app !== 'bunkkro' || raw.kind !== 'class-pack') return { error: "That doesn't look like a BunkKro class file." };
+  if (raw.version > 1) return { error: 'This file was made by a newer version of BunkKro. Refresh the page and try again.' };
+
+  const int = (v, min, max) => (Number.isInteger(v) && v >= min && v <= max ? v : null);
+  const time = v => (typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : '');
+  const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+  // Subjects (duplicate names merged, remembering where each original index went)
+  const subjectsIn = Array.isArray(raw.subjects) ? raw.subjects.slice(0, PACK_LIMITS.subjects) : [];
+  const subs = [], remap = new Map(), byName = new Map();
+  subjectsIn.forEach((s, i) => {
+    const name = str(s?.name, 80);
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (byName.has(key)) { remap.set(i, byName.get(key)); return; }
+    byName.set(key, subs.length); remap.set(i, subs.length);
+    subs.push({ name, code: str(s.code, 20), perWeek: int(s.perWeek, 0, 30) ?? 0, target: int(s.target, 1, 100), semTotal: int(s.semTotal, 1, 5000) });
+  });
+
+  const slotsIn = Array.isArray(raw.timetable) ? raw.timetable.slice(0, PACK_LIMITS.slots) : [];
+  const slots = [];
+  let skipped = Math.max(0, (Array.isArray(raw.timetable) ? raw.timetable.length : 0) - PACK_LIMITS.slots);
+  slotsIn.forEach(t => {
+    const day = int(t?.day, 1, 7), period = int(t?.period, 1, 20);
+    if (!day || !period) { skipped++; return; }
+    const isBreak = t.break === true;
+    const subject = !isBreak && Number.isInteger(t.subject) && remap.has(t.subject) ? remap.get(t.subject) : null;
+    const name = str(t.name, 80) || (subject !== null ? subs[subject].name : isBreak ? 'Break' : '');
+    if (!isBreak && subject === null && !name) { skipped++; return; }
+    slots.push({ day, period, start: time(t.start), end: time(t.end), subject, name, isBreak });
+  });
+
+  if (!subs.length && !slots.length) return { error: 'That class file is empty.' };
+  const sem = raw.semester || {};
+  const semesterIn = {
+    start: DATE_RE.test(sem.start || '') ? sem.start : '',
+    examDate: DATE_RE.test(sem.examDate || '') ? sem.examDate : '',
+    target: int(sem.target, 1, 100),
+  };
+  return { pack: { subjects: subs, slots, semester: semesterIn, skipped } };
+}
+
+function openSharePack(tab) {
+  document.getElementById('share-overlay').classList.add('show');
+  switchShareTab(tab || (subjects.length || timetable.length ? 'out' : 'in'));
+}
+function closeSharePack() {
+  document.getElementById('share-overlay').classList.remove('show');
+}
+function switchShareTab(tab) {
+  const out = tab === 'out';
+  document.getElementById('share-pane-out').hidden = !out;
+  document.getElementById('share-pane-in').hidden = out;
+  [['share-tab-out', out], ['share-tab-in', !out]].forEach(([id, on]) => {
+    const b = document.getElementById(id);
+    b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
+  });
+  if (out) renderShareSummary();
+  else resetImportPane();
+}
+
+function renderShareSummary() {
+  const box = document.getElementById('share-summary');
+  const lessons = timetable.filter(t => !t.isBreak).length;
+  const days = new Set(timetable.filter(t => !t.isBreak).map(t => t.day)).size;
+  const empty = !subjects.length && !timetable.length;
+  box.innerHTML = empty
+    ? '<li>Nothing to share yet — add subjects or set up your timetable first.</li>'
+    : [
+      `📚 <strong>${subjects.length}</strong> subject${subjects.length !== 1 ? 's' : ''}${subjects.length ? ': ' + escapeHTML(subjects.slice(0, 4).map(s => s.name).join(', ')) + (subjects.length > 4 ? '…' : '') : ''}`,
+      `🗓️ <strong>${lessons}</strong> class${lessons !== 1 ? 'es' : ''} a week${days ? ` over ${days} day${days !== 1 ? 's' : ''}` : ''}`,
+      semStart ? `📅 Semester started <strong>${escapeHTML(fmtDate(semStart))}</strong>` : '📅 No semester start date set',
+      `🎯 Target <strong>${globalTarget}%</strong>`,
+      '🔒 Not included: your attendance, marks and history',
+    ].map(x => `<li>${x}</li>`).join('');
+  document.querySelectorAll('#share-pane-out .share-actions button').forEach(b => { b.disabled = empty; });
+  document.getElementById('share-code').hidden = true;
+  const native = document.getElementById('share-native');
+  native.hidden = !(navigator.canShare && navigator.canShare({ files: [packFile()] }));
+}
+
+function packFile() {
+  return new File([JSON.stringify(buildPack(), null, 2)], `bunkkro-class-${getLocalDateString()}.json`, { type: 'application/json' });
+}
+function downloadPack() {
+  const file = packFile();
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url; a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Class file downloaded — send it to your class group');
+}
+async function copyPackCode() {
+  const code = packToCode(buildPack());
+  const box = document.getElementById('share-code');
+  try {
+    await navigator.clipboard.writeText(code);
+    box.hidden = true;
+    toast('Copied — paste it in your class group');
+  } catch {
+    // Clipboard blocked: show the code so it can be copied by hand
+    box.value = code; box.hidden = false; box.focus(); box.select();
+    toast('Select the text below and copy it');
+  }
+}
+async function nativeSharePack() {
+  try { await navigator.share({ files: [packFile()], title: 'BunkKro class setup', text: 'Import this in BunkKro → Smart Timetable → Share / Import' }); }
+  catch (err) { if (err?.name !== 'AbortError') toast('Sharing failed — try Download file', 'err'); }
+}
+
+function resetImportPane() {
+  importedPack = null;
+  document.getElementById('pack-file').value = '';
+  document.getElementById('pack-file-name').textContent = 'Choose the file you received';
+  document.getElementById('pack-text').value = '';
+  document.getElementById('pack-error').hidden = true;
+  document.getElementById('pack-preview').innerHTML = '';
+  document.getElementById('pack-import-btn').disabled = true;
+}
+function onPackFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  document.getElementById('pack-file-name').textContent = file.name;
+  document.getElementById('pack-text').value = '';
+  if (file.size > PACK_LIMITS.text) return showPackResult({ error: 'That file is too big to be a BunkKro class file.' });
+  const reader = new FileReader();
+  reader.onload = () => showPackResult(readPack(reader.result));
+  reader.onerror = () => showPackResult({ error: "Couldn't open that file." });
+  reader.readAsText(file);
+}
+function onPackText() {
+  const text = document.getElementById('pack-text').value;
+  if (text.trim()) document.getElementById('pack-file-name').textContent = 'Choose the file you received';
+  showPackResult(text.trim() ? readPack(text) : { error: '' });
+}
+
+function showPackResult(r) {
+  const err = document.getElementById('pack-error');
+  const preview = document.getElementById('pack-preview');
+  const btn = document.getElementById('pack-import-btn');
+  importedPack = r.pack || null;
+  err.textContent = r.error || ''; err.hidden = !r.error;
+  btn.disabled = !importedPack;
+  if (!importedPack) { preview.innerHTML = ''; return; }
+  const p = importedPack;
+  const have = new Set(subjects.map(s => s.name.trim().toLowerCase()));
+  const fresh = p.subjects.filter(s => !have.has(s.name.toLowerCase()));
+  const known = p.subjects.filter(s => have.has(s.name.toLowerCase()));
+  const lessons = p.slots.filter(t => !t.isBreak).length;
+  const list = arr => escapeHTML(arr.slice(0, 6).map(s => s.name).join(', ')) + (arr.length > 6 ? ` +${arr.length - 6} more` : '');
+  const semBits = [];
+  if (p.semester.start) semBits.push(`semester start ${escapeHTML(fmtDate(p.semester.start))}`);
+  if (p.semester.target) semBits.push(`${p.semester.target}% target`);
+  preview.innerHTML = `
+    <ul class="pack-summary">
+      ${fresh.length ? `<li>➕ <strong>${fresh.length} new subject${fresh.length !== 1 ? 's' : ''}</strong> (starting at 0 classes): ${list(fresh)}</li>` : ''}
+      ${known.length ? `<li>✅ Already in your list, kept as they are: ${list(known)}</li>` : ''}
+      ${p.slots.length ? `<li>🗓️ Weekly timetable with <strong>${lessons}</strong> class${lessons !== 1 ? 'es' : ''}${timetable.length ? ' — <strong>replaces your current timetable</strong>' : ''}</li>` : '<li>🗓️ No timetable in this file — yours stays as it is</li>'}
+      ${p.slots.length && Object.keys(dailyPeriodLogs[getLocalDateString()] || {}).some(k => timetable.some(t => t.id === k)) ? '<li>⚠️ Classes you already marked today stay counted, but won\'t show in today\'s list after the switch</li>' : ''}
+      ${p.skipped ? `<li>⚠️ ${p.skipped} timetable entr${p.skipped !== 1 ? 'ies' : 'y'} couldn't be read and will be skipped</li>` : ''}
+    </ul>
+    ${semBits.length ? `<label class="pack-check"><input type="checkbox" id="pack-use-sem" checked> Also use the ${semBits.join(' and ')} from the file</label>` : ''}`;
+}
+
+async function confirmImportPack() {
+  const p = importedPack;
+  if (!p || !currentUser) return;
+  if (p.slots.length && timetable.length && !confirm('Replace your current weekly timetable with the imported one?')) return;
+  const btn = document.getElementById('pack-import-btn');
+  btn.disabled = true; btn.textContent = 'Importing…';
+  try {
+    // 1. Subjects: reuse ones you already have (by name), add the rest at 0 classes
+    const ids = [];
+    let added = 0;
+    for (const s of p.subjects) {
+      let mine = subjects.find(x => x.name.trim().toLowerCase() === s.name.toLowerCase());
+      if (mine) {
+        // Fill only what's missing; never touch attendance or settings already there
+        const fill = {};
+        if (!mine.perWeek && s.perWeek) fill.perWeek = s.perWeek;
+        if (!mine.semTotal && s.semTotal) fill.semTotal = s.semTotal;
+        if (Object.keys(fill).length) {
+          Object.assign(mine, fill);
+          await updateSubject(mine.id, { name: mine.name, code: mine.code || '', total: mine.total, present: mine.present, perWeek: mine.perWeek, target: mine.target, semTotal: mine.semTotal, mode: mine.mode });
+        }
+      } else {
+        const ok = await addSubject({ name: s.name, code: s.code || s.name.slice(0, 2).toUpperCase() + '101', total: 0, present: 0, perWeek: s.perWeek, target: s.target, semTotal: s.semTotal, mode: 'exact' });
+        if (!ok) throw new Error(`Couldn't add ${s.name}`);
+        mine = subjects[subjects.length - 1];
+        added++;
+      }
+      ids.push(mine.id);
+    }
+
+    // 2. Timetable (fresh ids, linked to your own subjects)
+    if (p.slots.length) {
+      timetable = p.slots.map(t => ({
+        id: newUuid(), day: t.day, period: t.period, startTime: t.start, endTime: t.end,
+        subjectId: t.isBreak || t.subject === null ? null : ids[t.subject],
+        subjectName: t.isBreak ? (t.name || 'Break') : (t.subject !== null ? subjects.find(x => x.id === ids[t.subject])?.name : t.name) || t.name,
+        isBreak: t.isBreak, isUncertain: false,
+      }));
+      timetableMeta.showSunday = timetable.some(t => t.day === 7);
+      await saveTimetableToStorageAndDB();
+    }
+
+    // 3. Semester settings
+    if (document.getElementById('pack-use-sem')?.checked) {
+      if (p.semester.start) semStart = p.semester.start;
+      if (p.semester.examDate) examDate = p.semester.examDate;
+      if (p.semester.target) globalTarget = p.semester.target;
+      savePrefs();
+    }
+
+    closeSharePack();
+    renderAll();
+    goPage('timetable');
+    toast(`Imported ${added ? `${added} subject${added !== 1 ? 's' : ''}` : 'the class'}${p.slots.length ? ' and the timetable' : ''} ✓`);
+  } catch (err) {
+    console.error('Import failed:', err);
+    toast(`Import stopped: ${err.message}`, 'err');
+    renderAll();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Import';
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  TIMETABLE SLOT EDIT / ADD MODAL
 // ══════════════════════════════════════════════════════
 
@@ -3675,6 +4083,7 @@ let currentEditingSlot = null;
 
 function openAddSlotModal(day = 1, period = 1) {
   currentEditingSlot = null;
+  slotError('');
   document.getElementById('slot-modal-title').textContent = 'Add Class Slot 🕒';
   document.getElementById('slot-edit-id').value = '';
   document.getElementById('slot-day').value = day;
@@ -3695,6 +4104,7 @@ function openEditSlotModal(slotId) {
   if (!slot) return;
 
   currentEditingSlot = slot;
+  slotError('');
   document.getElementById('slot-modal-title').textContent = 'Edit Class Slot 🕒';
   document.getElementById('slot-edit-id').value = slot.id;
   document.getElementById('slot-day').value = slot.day;
@@ -3738,15 +4148,29 @@ function onSlotSubjectSelect(subjId) {
   }
 }
 
+function slotError(msg, inputId) {
+  const el = document.getElementById('slot-error');
+  if (el) { el.textContent = msg; el.hidden = !msg; }
+  if (inputId) document.getElementById(inputId)?.focus();
+}
+
 async function saveSlotModal() {
   const day = parseInt(document.getElementById('slot-day').value) || 1;
-  const period = parseInt(document.getElementById('slot-period').value) || 1;
+  const period = Number(document.getElementById('slot-period').value);
   const type = document.getElementById('slot-type').value;
   const isBreak = type === 'break';
   const startTime = document.getElementById('slot-start-time').value.trim();
   const endTime = document.getElementById('slot-end-time').value.trim();
   const subjSelect = document.getElementById('slot-subject-select').value;
   const subjNameInput = document.getElementById('slot-subject-name').value.trim();
+  const editingId = document.getElementById('slot-edit-id').value;
+
+  if (!Number.isInteger(period) || period < 1 || period > 20) return slotError('Period must be a number from 1 to 20.', 'slot-period');
+  if (startTime && endTime && endTime <= startTime) return slotError('The class has to end after it starts.', 'slot-end-time');
+  if (!isBreak && !subjSelect && !subjNameInput) return slotError('Pick one of your subjects, or type the subject name.', 'slot-subject-select');
+  const clash = timetable.find(x => x.id !== editingId && x.day === day && x.period === period);
+  if (clash && !confirm(`${DAYS_MAP.find(d => d.num === day).name} period ${period} already has ${ttSlotLabel(clash)}. Keep both?`)) return;
+  slotError('');
 
   let subjectName = isBreak ? 'Break' : (subjNameInput || 'Unassigned');
   let subjectId = isBreak ? null : (subjSelect || null);
@@ -3950,8 +4374,13 @@ async function toggleDateHoliday() {
     // A holiday doesn't count, so marks already made that day must be undone,
     // otherwise they stay in the totals while being hidden.
     const marked = Object.keys(dailyPeriodLogs[date] || {});
-    if (marked.length) {
-      if (!confirm(`${marked.length} class${marked.length !== 1 ? 'es are' : ' is'} already marked on this day. Marking it a holiday will clear ${marked.length !== 1 ? 'those marks' : 'that mark'}. Continue?`)) return;
+    const plan = getDayPlan(date);
+    const parts = [];
+    if (marked.length) parts.push(`${marked.length} marked class${marked.length !== 1 ? 'es' : ''}`);
+    if (plan.makeups.length) parts.push(`${plan.makeups.length} makeup/planned class${plan.makeups.length !== 1 ? 'es' : ''}`);
+    if (plan.follows) parts.push('the timetable swap');
+    if (parts.length) {
+      if (!confirm(`This day has ${parts.join(' and ')}. Marking it a holiday will clear ${parts.length > 1 || marked.length + plan.makeups.length > 1 ? 'them' : 'it'}. Continue?`)) return;
       if (!(await clearMarksForDate(date))) { toast('Could not clear marks for this day', 'err'); renderTracker(); return; }
     }
     dateExceptions[date] = { type: 'holiday', note: 'College Holiday' };
@@ -3964,10 +4393,17 @@ async function toggleDateHoliday() {
 
 // Remove every mark on a date and take it back out of the subject totals.
 async function clearMarksForDate(date) {
+  return removeMarks(date, Object.keys(dailyPeriodLogs[date] || {}));
+}
+
+// Delete marks (by entry id) on a date and take them out of the subject totals.
+async function removeMarks(date, entryIds) {
   const logs = dailyPeriodLogs[date] || {};
   const touched = new Set();
   let ok = true;
-  for (const [entryId, log] of Object.entries(logs)) {
+  for (const entryId of entryIds) {
+    const log = logs[entryId];
+    if (!log) continue;
     const { error } = await supabaseClient
       .from('daily_period_logs')
       .delete()
@@ -3989,12 +4425,187 @@ async function clearMarksForDate(date) {
   return ok;
 }
 
+// ══════════════════════════════════════════════════════
+//  DAY PLANS — makeup classes, planned extra classes, swapped timetables
+//  Stored per date in timetable_exceptions as type 'custom_day' with a JSON
+//  note: { v, follows: 1-7|null, makeups: [{ id, subjectId, name, time, fromDate, fromEntry }] }
+// ══════════════════════════════════════════════════════
+function parseDayPlan(note) {
+  let raw = {};
+  try { raw = JSON.parse(note || '{}') || {}; } catch { raw = {}; }
+  const follows = Number.isInteger(raw.follows) && raw.follows >= 1 && raw.follows <= 7 ? raw.follows : null;
+  const makeups = (Array.isArray(raw.makeups) ? raw.makeups : [])
+    .filter(m => m && typeof m.id === 'string' && /^[\w-]{1,40}$/.test(m.id))
+    .map(m => ({
+      id: m.id,
+      subjectId: typeof m.subjectId === 'string' ? m.subjectId : null,
+      name: String(m.name || 'Class').slice(0, 80),
+      time: /^\d{2}:\d{2}$/.test(m.time || '') ? m.time : '',
+      fromDate: DATE_RE.test(m.fromDate || '') ? m.fromDate : null,
+      fromEntry: typeof m.fromEntry === 'string' ? m.fromEntry : null,
+    }));
+  return { follows, makeups };
+}
+function getDayPlan(date) {
+  const ex = dateExceptions[date];
+  const plan = ex?.type === 'custom_day' ? (ex.plan || parseDayPlan(ex.note)) : null;
+  return { follows: plan?.follows || null, makeups: [...(plan?.makeups || [])] };
+}
+async function saveDayPlan(date, plan) {
+  const clean = { v: 1, follows: plan.follows || null, makeups: plan.makeups || [] };
+  const empty = !clean.follows && !clean.makeups.length;
+  const note = JSON.stringify(clean);
+  if (empty) delete dateExceptions[date];
+  else dateExceptions[date] = { type: 'custom_day', note, plan: clean };
+  if (!currentUser) return true;
+  localStorage.setItem('bk_date_exceptions_' + currentUser.id, JSON.stringify(dateExceptions));
+  const q = empty
+    ? supabaseClient.from('timetable_exceptions').delete().eq('user_id', currentUser.id).eq('date', date)
+    : supabaseClient.from('timetable_exceptions').upsert({ user_id: currentUser.id, date, type: 'custom_day', note }, { onConflict: 'user_id,date' });
+  const { error } = await q;
+  if (error) {
+    console.warn('Day plan sync failed:', error);
+    toast('Saved on this device, but cloud sync failed', 'err');
+    return false;
+  }
+  return true;
+}
+function makeupId() { return 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+// Makeup and planned classes on a date, shaped like scheduled classes.
+function getMakeupClassesForDate(dateStr) {
+  return getDayPlan(dateStr).makeups.map((m, i) => {
+    const key = 'makeup_' + m.id;
+    const log = dailyPeriodLogs[dateStr]?.[key];
+    return {
+      slotId: key, day: 0, period: 90 + i, startTime: m.time, endTime: '',
+      subjectId: m.subjectId, subjectName: subjects.find(x => x.id === m.subjectId)?.name || m.name,
+      status: log ? log.status : null, isExtra: false, isMakeup: true, makeupId: m.id, fromDate: m.fromDate,
+    };
+  });
+}
+function getAllClassesForDate(dateStr) {
+  return [...getScheduledClassesForDate(dateStr), ...getMakeupClassesForDate(dateStr), ...getExtraClassesForDate(dateStr)];
+}
+
+// Remove a makeup / planned class (and its mark, if it has one).
+async function removeMakeup(date, id) {
+  const plan = getDayPlan(date);
+  const m = plan.makeups.find(x => x.id === id);
+  if (!m) return;
+  const key = 'makeup_' + id;
+  if (dailyPeriodLogs[date]?.[key]) {
+    if (!confirm('This class is already marked. Remove it and its mark?')) return;
+    if (!(await removeMarks(date, [key]))) { toast('Could not remove the mark', 'err'); return; }
+  }
+  plan.makeups = plan.makeups.filter(x => x.id !== id);
+  await saveDayPlan(date, plan);
+  toast(m.fromDate ? 'Makeup class removed' : 'Planned class removed');
+  renderTracker(); renderNav();
+  if (currPage === 'home') renderHome();
+}
+
+// When a cancellation is undone, drop the makeup class it created (unless
+// that makeup has already been marked).
+async function removeLinkedMakeups(fromDate, fromEntry) {
+  let removed = 0, kept = 0;
+  for (const date of Object.keys(dateExceptions)) {
+    const plan = getDayPlan(date);
+    const linked = plan.makeups.filter(m => m.fromDate === fromDate && m.fromEntry === fromEntry);
+    if (!linked.length) continue;
+    const drop = linked.filter(m => !dailyPeriodLogs[date]?.['makeup_' + m.id]);
+    kept += linked.length - drop.length;
+    if (!drop.length) continue;
+    plan.makeups = plan.makeups.filter(m => !drop.includes(m));
+    await saveDayPlan(date, plan);
+    removed += drop.length;
+  }
+  if (removed) toast(`Removed the makeup class${removed !== 1 ? 'es' : ''} for it`);
+  else if (kept) toast('Its makeup class is already marked, so it stays');
+}
+
+// ── "Will it be taken another day?" ──
+let reschedFor = null;
+function openReschedule(ctx) {
+  reschedFor = ctx;
+  document.getElementById('resched-sub').innerHTML = `Will <strong>${escapeHTML(ctx.name)}</strong> be taken on another day? Some colleges hold a makeup class.`;
+  document.getElementById('resched-pick').hidden = true;
+  document.getElementById('resched-ask').hidden = false;
+  document.getElementById('resched-save').hidden = true;
+  document.getElementById('resched-error').hidden = true;
+  document.getElementById('resched-date').value = '';
+  document.getElementById('resched-time').value = ctx.time || '';
+  document.getElementById('resched-overlay').classList.add('show');
+}
+function closeReschedule() {
+  document.getElementById('resched-overlay').classList.remove('show');
+  reschedFor = null;
+}
+function showReschedulePick() {
+  document.getElementById('resched-pick').hidden = false;
+  document.getElementById('resched-ask').hidden = true;
+  document.getElementById('resched-save').hidden = false;
+  document.getElementById('resched-date').focus();
+}
+async function confirmReschedule() {
+  const ctx = reschedFor;
+  if (!ctx) return closeReschedule();
+  const date = document.getElementById('resched-date').value;
+  const time = document.getElementById('resched-time').value;
+  const err = document.getElementById('resched-error');
+  const fail = msg => { err.textContent = msg; err.hidden = false; };
+  if (!DATE_RE.test(date)) return fail('Pick the day the class will be taken.');
+  if (dateExceptions[date]?.type === 'holiday') return fail('That day is marked as a holiday. Pick another day, or remove the holiday first.');
+  const plan = getDayPlan(date);
+  plan.makeups.push({ id: makeupId(), subjectId: ctx.subjectId || null, name: ctx.name, time, fromDate: ctx.date, fromEntry: ctx.slotId });
+  await saveDayPlan(date, plan);
+  closeReschedule();
+  toast(`Makeup class added for ${fmtDate(date)}`);
+  if (currPage === 'tracker') renderTracker();
+  if (currPage === 'home') renderHome();
+}
+
+// ── "This day follows another day's timetable" ──
+function openDaySwap() {
+  const date = selectedTrackerDate;
+  const [y, m, d] = date.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay() || 7;
+  const plan = getDayPlan(date);
+  const sel = document.getElementById('dayswap-select');
+  sel.innerHTML = DAYS_MAP.map(x => `<option value="${x.num}">${x.num === dow ? `Its usual ${x.name} timetable` : `${x.name}'s timetable`}</option>`).join('');
+  sel.value = String(plan.follows || dow);
+  document.getElementById('dayswap-date').textContent = fmtDate(date);
+  document.getElementById('dayswap-overlay').classList.add('show');
+}
+function closeDaySwap() { document.getElementById('dayswap-overlay').classList.remove('show'); }
+async function confirmDaySwap() {
+  const date = selectedTrackerDate;
+  const [y, m, d] = date.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay() || 7;
+  const pick = parseInt(document.getElementById('dayswap-select').value) || dow;
+  const plan = getDayPlan(date);
+  const follows = pick === dow ? null : pick;
+  if ((plan.follows || null) === follows) return closeDaySwap();
+  // Marks on the old schedule's classes would no longer show, so clear them first
+  const markedScheduled = getScheduledClassesForDate(date).filter(c => c.status).map(c => c.slotId);
+  if (markedScheduled.length) {
+    if (!confirm(`${markedScheduled.length} class${markedScheduled.length !== 1 ? 'es are' : ' is'} already marked on this day. Switching the timetable clears ${markedScheduled.length !== 1 ? 'those marks' : 'that mark'}. Continue?`)) return;
+    if (!(await removeMarks(date, markedScheduled))) { toast('Could not clear marks for this day', 'err'); return; }
+  }
+  plan.follows = follows;
+  await saveDayPlan(date, plan);
+  closeDaySwap();
+  toast(follows ? `This day follows ${DAYS_MAP.find(x => x.num === follows).name}'s timetable` : 'Back to the usual timetable');
+  renderTracker(); renderNav();
+}
+
 // Get scheduled classes for a specific date (1=Monday ... 7=Sunday)
 function getScheduledClassesForDate(dateStr) {
   const parts = dateStr.split('-').map(Number);
   const d = new Date(parts[0], parts[1] - 1, parts[2]);
   let dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday ... 6 = Saturday
   dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Convert 0 (Sun) to 7
+  dayOfWeek = getDayPlan(dateStr).follows || dayOfWeek; // "Saturday follows Monday's timetable"
 
   // Filter timetable slots for that day
   const slots = timetable.filter(s => s.day === dayOfWeek && !s.isBreak);
@@ -4056,6 +4667,8 @@ function renderTracker() {
 
   const todayStr = getLocalDateString();
   const isToday = selectedTrackerDate === todayStr;
+  const isFuture = selectedTrackerDate > todayStr;
+  const dayPlan = getDayPlan(selectedTrackerDate);
 
   const parts = selectedTrackerDate.split('-').map(Number);
   const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -4083,9 +4696,17 @@ function renderTracker() {
       banner.className = 'date-status-banner holiday';
       banner.innerHTML = `${ic('umbrella')} <span><strong>College holiday</strong> — no classes are counted as absent today.</span>`;
       banner.style.display = 'flex';
+    } else if (dayPlan.follows) {
+      banner.className = 'date-status-banner today';
+      banner.innerHTML = `${ic('zap')} <span><strong>Follows ${DAYS_MAP.find(x => x.num === dayPlan.follows).name}'s timetable</strong> on this day. <button class="link-btn" style="padding:0" onclick="openDaySwap()">Change</button></span>`;
+      banner.style.display = 'flex';
     } else if (isToday) {
       banner.className = 'date-status-banner today';
       banner.innerHTML = `${ic('zap')} <span><strong>Today's classes</strong> — mark each period as you attend or bunk.</span>`;
+      banner.style.display = 'flex';
+    } else if (isFuture) {
+      banner.className = 'date-status-banner future';
+      banner.innerHTML = `${ic('calendar')} <span><strong>Upcoming day</strong> — present/absent unlock on the day. You can already mark a class cancelled or the day a holiday.</span>`;
       banner.style.display = 'flex';
     } else {
       banner.className = 'date-status-banner future';
@@ -4094,13 +4715,8 @@ function renderTracker() {
     }
   }
 
-  // Get scheduled timetable classes for this day
-  const scheduledClasses = getScheduledClassesForDate(selectedTrackerDate);
-
-  // Include any extra ad-hoc classes logged for this date
-  const extraClasses = getExtraClassesForDate(selectedTrackerDate);
-
-  const allClasses = [...scheduledClasses, ...extraClasses];
+  // Timetable classes (or the day it follows), makeup/planned classes, extra classes
+  const allClasses = getAllClassesForDate(selectedTrackerDate);
 
   // Daily Completion Stats
   const totalCount = allClasses.length;
@@ -4188,17 +4804,22 @@ function renderTracker() {
         <span class="subj-icon dc-icon" style="background:${s ? th.bg : 'var(--surface2)'};color:${s ? th.c : 'var(--muted)'}" aria-hidden="true">${ic(subjIcon(displayName))}</span>
         <div class="daily-class-main">
           <div class="daily-class-meta">
-            <span class="period-badge">${item.isExtra ? 'Extra' : `Period ${item.period}`}</span>
+            <span class="period-badge">${item.isExtra ? 'Extra' : item.isMakeup ? (item.fromDate ? 'Makeup' : 'Extra · planned') : `Period ${item.period}`}</span>
+            ${item.isMakeup && item.fromDate ? `<span class="time-badge">for ${escapeHTML(fmtDate(item.fromDate))}</span>` : ''}
             ${timeDisplay ? `<span class="time-badge">${ic('clock','ic-sm')} ${escapeHTML(timeDisplay)}</span>` : ''}
             ${item.status === 'cancelled' ? '<span class="status-pill warn">Cancelled · no penalty</span>' : ''}
           </div>
           <div class="daily-class-name">${escapeHTML(displayName)}</div>
-          ${s ? `<div class="daily-class-stats"><span class="dc-bar"><span style="width:${Math.min(100, pct(s))}%;background:${pctColor(pct(s))}"></span></span><strong style="color:${pctTextColor(pct(s))}">${pct(s)}%</strong> <span>(${s.present}/${s.total}) · ${bunkable(s)} safe bunks</span></div>` : '<div class="daily-class-stats" style="color:var(--muted)">Unmapped subject</div>'}
+          ${s ? (hasClasses(s)
+            ? `<div class="daily-class-stats"><span class="dc-bar"><span style="width:${Math.min(100, pct(s))}%;background:${subjFill(s)}"></span></span><strong style="color:${subjTextColor(s)}">${pct(s)}%</strong> <span>(${s.present}/${s.total}) · ${bunkable(s)} safe bunk${bunkable(s) !== 1 ? 's' : ''}</span></div>`
+            : '<div class="daily-class-stats" style="color:var(--muted)">No classes counted yet</div>')
+            : '<div class="daily-class-stats" style="color:var(--muted)">Not linked to a subject</div>'}
         </div>
         <div class="tracker-btns" role="group" aria-label="Attendance for ${escapeHTML(displayName)}">
-          <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
-          <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
+          <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" ${isFuture && item.status !== 'p' ? 'disabled title="You can mark this once the day comes"' : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
+          <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" ${isFuture && item.status !== 'a' ? 'disabled title="You can mark this once the day comes"' : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
           <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" aria-pressed="${item.status === 'cancelled'}" title="Cancelled class does not count as absence" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">${ic('ban','ic-sm')} Cancel</button>
+          ${item.isMakeup ? `<button class="tbtn rm" title="Remove this class" aria-label="Remove this class" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')}</button>` : ''}
         </div>
       </div>
     `;
@@ -4217,6 +4838,12 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
   trackerLocked = true;
 
   const date = selectedTrackerDate;
+  // A class can't be attended or missed before its day (cancelling ahead is fine)
+  if (date > getLocalDateString() && (newStatus === 'p' || newStatus === 'a') && dailyPeriodLogs[date]?.[slotId]?.status !== newStatus) {
+    trackerLocked = false;
+    toast('You can mark this once the day comes', 'err');
+    return;
+  }
   if (!dailyPeriodLogs[date]) dailyPeriodLogs[date] = {};
 
   const prevEntry = dailyPeriodLogs[date][slotId];
@@ -4293,6 +4920,14 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
     else if (finalStatus === 'cancelled') toast(`${s ? s.name : 'Class'}: Cancelled (No penalty)`);
     else toast('Attendance unmarked');
 
+    // Cancelled → it may be taken another day; un-cancelled → drop that makeup
+    if (prevStatus === 'cancelled' && finalStatus !== 'cancelled') {
+      await removeLinkedMakeups(date, slotId);
+    } else if (finalStatus === 'cancelled' && !isExtra) {
+      const item = getAllClassesForDate(date).find(c => c.slotId === slotId);
+      openReschedule({ date, slotId, subjectId: subjId || null, name: s ? s.name : (item?.subjectName || 'This class'), time: item?.startTime || '' });
+    }
+
   } catch (err) {
     console.error('Error marking attendance:', err);
     toast('Failed to record attendance', 'err');
@@ -4335,6 +4970,17 @@ async function confirmAddExtraClass() {
 
   const extraId = 'extra_' + Date.now();
   const date = selectedTrackerDate;
+
+  // A future day can't be attended yet: add it as a planned class to mark on the day
+  if (date > getLocalDateString()) {
+    const plan = getDayPlan(date);
+    plan.makeups.push({ id: makeupId(), subjectId: subjId, name: s.name, time: /^\d{2}:\d{2}$/.test(timeNote) ? timeNote : '', fromDate: null, fromEntry: null });
+    await saveDayPlan(date, plan);
+    closeExtraClassModal();
+    renderTracker();
+    toast(`Extra ${s.name} class planned for ${fmtDate(date)}`);
+    return;
+  }
 
   // Record the class first; only count it once it's saved.
   const { error } = await supabaseClient

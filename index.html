@@ -42,6 +42,8 @@
     <symbol id="i-sparkle" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2.5c.6 4.4 2.6 6.4 7 7-4.4.6-6.4 2.6-7 7-.6-4.4-2.6-6.4-7-7 4.4-.6 6.4-2.6 7-7Z"/><path d="M19 15c.3 2 1.1 2.8 3 3-1.9.3-2.7 1.1-3 3-.3-1.9-1.1-2.7-3-3 1.9-.2 2.7-1 3-3Z"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
     <symbol id="i-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
@@ -246,37 +248,49 @@
       </div>
     </div>
 
-    <div class="edit-card">
-      <h4>
-        <span class="h-orb blue">✏️</span> Update numbers
+    <details class="edit-card" id="edit-card">
+      <summary class="edit-sum">
+        <span class="h-orb blue" aria-hidden="true">✏️</span>
+        <span class="edit-sum-text"><strong>Edit subject</strong><span id="edit-sum-hint">Name, attendance numbers, target</span></span>
         <span id="mode-label"></span>
-        <button class="mode-toggle" onclick="toggleMode()">Switch mode</button>
-      </h4>
-      <div id="form-exact" class="edit-grid">
-        <div class="field"><label for="inp-total">Total classes</label><input type="number" id="inp-total" placeholder="e.g. 40" min="0"></div>
-        <div class="field"><label for="inp-present">Present</label><input type="number" id="inp-present" placeholder="e.g. 30" min="0"></div>
-        <div class="field"><label for="inp-absent">Absent</label><input type="number" id="inp-absent" placeholder="auto" readonly></div>
-        <div class="field"><label for="inp-perweek">Classes / week</label><input type="number" id="inp-perweek" placeholder="e.g. 3" min="1" max="30"></div>
-        <div class="field" style="grid-column:span 2"><label for="inp-target">Target % <span class="field-hint">(blank = global)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100"></div>
-      </div>
-      <div id="form-est" style="display:none">
-        <div class="edit-grid">
-          <div class="field"><label for="inp-semstart">Semester start</label><input type="date" id="inp-semstart"></div>
-          <div class="field"><label for="inp-est-pw">Classes / week</label><input type="number" id="inp-est-pw" placeholder="e.g. 3" min="1"></div>
-          <div class="field"><label for="inp-est-absent">Missed classes</label><input type="number" id="inp-est-absent" placeholder="e.g. 5" min="0"></div>
-          <div class="field"><label for="inp-est-target">Target %</label><input type="number" id="inp-est-target" placeholder="e.g. 75" min="1" max="100"></div>
-          <div class="field" style="grid-column:span 2">
-            <label for="inp-est-semtotal">Total classes this semester <span class="field-hint">(full semester count, e.g. 60 — used for end-of-sem projection)</span></label>
-            <input type="number" id="inp-est-semtotal" placeholder="e.g. 60 (optional)" min="0">
+        <svg class="ic edit-chev" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </summary>
+      <div class="edit-body">
+        <div class="mode-seg" role="radiogroup" aria-label="How do you track this subject?">
+          <button type="button" role="radio" id="edit-mode-exact" onclick="setEditMode('exact')"><b>🎯 Official numbers</b><span>Total + present from your portal</span></button>
+          <button type="button" role="radio" id="edit-mode-estimate" onclick="setEditMode('estimate')"><b>⚡ Estimate</b><span>From semester start + classes missed</span></button>
+        </div>
+        <div class="field" style="margin:14px 0 12px">
+          <label for="inp-subject-name">Subject name</label>
+          <input type="text" id="inp-subject-name" placeholder="e.g. Mathematics" maxlength="80">
+        </div>
+        <div id="form-exact" class="edit-grid">
+          <div class="field"><label for="inp-total">Total classes held</label><input type="number" id="inp-total" placeholder="e.g. 40" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-present">Classes attended</label><input type="number" id="inp-present" placeholder="e.g. 30" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-absent">Classes missed <span class="field-hint">(fills itself)</span></label><input type="number" id="inp-absent" placeholder="auto" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-perweek">Classes / week</label><input type="number" id="inp-perweek" placeholder="e.g. 3" min="0" max="30" inputmode="numeric"></div>
+          <div class="field" style="grid-column:span 2"><label for="inp-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
+        </div>
+        <div id="form-est" style="display:none">
+          <div class="edit-grid">
+            <div class="field"><label for="inp-semstart">Semester start <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="inp-semstart"></div>
+            <div class="field"><label for="inp-est-pw">Classes / week</label><input type="number" id="inp-est-pw" placeholder="e.g. 3" min="1" max="30" inputmode="numeric"></div>
+            <div class="field"><label for="inp-est-absent">Classes missed so far</label><input type="number" id="inp-est-absent" placeholder="e.g. 5" min="0" inputmode="numeric"></div>
+            <div class="field"><label for="inp-est-target">Target % <span class="field-hint">(blank = global)</span></label><input type="number" id="inp-est-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
+            <div class="field" style="grid-column:span 2">
+              <label for="inp-est-semtotal">Classes in the whole semester <span class="field-hint">(optional — for the end-of-sem projection)</span></label>
+              <input type="number" id="inp-est-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">
+            </div>
           </div>
         </div>
-        <div class="est-note" id="est-calc-note">📡 Estimated — calculated from your schedule. Adjust for holidays.</div>
+        <div class="form-preview" id="edit-preview" aria-live="polite"></div>
+        <p class="form-err" id="edit-error" role="alert" hidden></p>
+        <div class="edit-actions">
+          <button class="save-btn" onclick="saveSubject()">Save changes</button>
+          <button class="del-btn" onclick="deleteSubject()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Delete subject</button>
+        </div>
       </div>
-      <div class="edit-actions">
-        <button class="save-btn" onclick="saveSubject()">Save</button>
-        <button class="del-btn" onclick="deleteSubject()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Delete</button>
-      </div>
-    </div>
+    </details>
   </div>
 
   <!-- ░░ DAILY TRACKER (TODAY'S CLASSES) ░░ -->
@@ -304,6 +318,7 @@
     <div class="tracker-actions-row">
       <button class="act-chip peach" id="btn-toggle-holiday" onclick="toggleDateHoliday()">🏖️ Mark Day as Holiday</button>
       <button class="act-chip lavender" onclick="openExtraClassModal()">⚡ Add Extra Class</button>
+      <button class="act-chip green" onclick="openDaySwap()" title="For days like “Saturday follows Monday's timetable”">🔁 Follows another day</button>
       <button class="act-chip blue" onclick="goPage('timetable')">📅 Manage Timetable</button>
     </div>
 
@@ -384,7 +399,8 @@
             <h3 class="section-title">Weekly schedule</h3>
             <span id="tt-stats-badge" class="tt-badge">0 classes</span>
           </div>
-          <div style="display:flex;gap:6px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-sec btn-sm" onclick="openSharePack()" id="btn-share-pack"><svg class="ic ic-sm"><use href="#i-users"/></svg> Share / Import</button>
             <button class="btn-sec btn-sm" onclick="toggleSundayDisplay()" id="btn-toggle-sunday">+ Sunday</button>
             <button class="btn-sec btn-sm btn-danger" onclick="confirmClearTimetable()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Clear</button>
           </div>
@@ -535,7 +551,7 @@
     <div class="form-grid-2">
       <div class="mf">
         <label for="slot-period">Period</label>
-        <input type="number" id="slot-period" min="1" max="15" value="1">
+        <input type="number" id="slot-period" min="1" max="20" value="1" inputmode="numeric">
       </div>
       <div class="mf">
         <label for="slot-type">Type</label>
@@ -563,15 +579,95 @@
         <option value="">-- Choose Existing Subject --</option>
       </select>
       <div style="margin-top:10px">
-        <label for="slot-subject-name">Or type a subject name</label>
+        <label for="slot-subject-name">Or type a subject name <span class="field-hint">(only subjects you've added count attendance)</span></label>
         <input type="text" id="slot-subject-name" placeholder="e.g. Mathematics or CS101">
       </div>
     </div>
+
+    <p class="form-err" id="slot-error" role="alert" hidden></p>
 
     <div class="modal-btns">
       <button class="btn-sec" onclick="closeSlotEditModal()">Cancel</button>
       <button class="btn-sec btn-danger" id="btn-delete-slot" onclick="deleteCurrentSlot()">Delete</button>
       <button class="btn-pri" onclick="saveSlotModal()">Save slot</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ SHARE / IMPORT CLASS PACK ══════ -->
+<div class="overlay" id="share-overlay" role="dialog" aria-modal="true" aria-labelledby="share-title">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-hero">
+      <div><h2 id="share-title">Share with classmates 🤝</h2>
+      <p class="sub">One person sets up the class, everyone else imports it. Attendance is never shared.</p></div>
+      <img src="assets/cat-happy.svg" alt="">
+    </div>
+    <div class="mode-seg share-tabs" role="tablist">
+      <button type="button" role="tab" id="share-tab-out" onclick="switchShareTab('out')"><b>📤 Share mine</b><span>Send your setup</span></button>
+      <button type="button" role="tab" id="share-tab-in" onclick="switchShareTab('in')"><b>📥 Import</b><span>Use a classmate's setup</span></button>
+    </div>
+
+    <div id="share-pane-out" class="share-pane">
+      <ul class="pack-summary" id="share-summary"></ul>
+      <div class="share-actions">
+        <button class="btn-pri" onclick="downloadPack()"><svg class="ic ic-sm"><use href="#i-download"/></svg> Download file</button>
+        <button class="btn-sec" onclick="copyPackCode()"><svg class="ic ic-sm"><use href="#i-copy"/></svg> Copy as text</button>
+        <button class="btn-sec" id="share-native" onclick="nativeSharePack()" hidden>Share…</button>
+      </div>
+      <textarea id="share-code" class="pack-code" readonly hidden aria-label="Share code"></textarea>
+      <p class="field-tip" style="margin-top:12px">Classmates open <strong>Smart Timetable → Share / Import → Import</strong> and drop in the file or paste the text.</p>
+    </div>
+
+    <div id="share-pane-in" class="share-pane" hidden>
+      <label class="pack-file"><input type="file" id="pack-file" accept=".json,.txt,application/json,text/plain" onchange="onPackFile(this)"><svg class="ic"><use href="#i-upload"/></svg> <span id="pack-file-name">Choose the file you received</span></label>
+      <div class="mf" style="margin-top:12px">
+        <label for="pack-text">…or paste the text a classmate sent</label>
+        <textarea id="pack-text" class="pack-code" rows="3" placeholder="BUNKKRO1.…" oninput="onPackText()"></textarea>
+      </div>
+      <p class="form-err" id="pack-error" role="alert" hidden></p>
+      <div id="pack-preview"></div>
+      <div class="modal-btns">
+        <button class="btn-sec" onclick="closeSharePack()">Cancel</button>
+        <button class="btn-pri" id="pack-import-btn" onclick="confirmImportPack()" disabled>Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ CANCELLED → RESCHEDULE? ══════ -->
+<div class="overlay" id="resched-overlay" role="dialog" aria-modal="true" aria-labelledby="resched-title">
+  <div class="modal modal-center" style="max-width:420px">
+    <img class="modal-cat" src="assets/cat-books.svg" alt="">
+    <h2 id="resched-title">Class cancelled</h2>
+    <p class="sub" id="resched-sub"></p>
+    <div id="resched-pick" hidden>
+      <div class="form-grid-2" style="text-align:left">
+        <div class="mf"><label for="resched-date">Makeup day</label><input type="date" id="resched-date"></div>
+        <div class="mf"><label for="resched-time">Time <span class="field-hint">(optional)</span></label><input type="time" id="resched-time"></div>
+      </div>
+      <p class="field-tip" style="text-align:left">It'll show up on that day in Daily Classes, ready to mark.</p>
+      <p class="form-err" id="resched-error" role="alert" hidden></p>
+    </div>
+    <div class="modal-btns" id="resched-ask">
+      <button class="btn-sec" onclick="closeReschedule()">No, just cancelled</button>
+      <button class="btn-pri" onclick="showReschedulePick()">Yes, pick the day</button>
+    </div>
+    <div class="modal-btns" id="resched-save" hidden>
+      <button class="btn-sec" onclick="closeReschedule()">Skip</button>
+      <button class="btn-pri" onclick="confirmReschedule()">Add makeup class</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ DAY FOLLOWS ANOTHER DAY'S TIMETABLE ══════ -->
+<div class="overlay" id="dayswap-overlay" role="dialog" aria-modal="true" aria-labelledby="dayswap-title">
+  <div class="modal" style="max-width:420px">
+    <h2 id="dayswap-title">Follows another day 🔁</h2>
+    <p class="sub">Colleges sometimes announce “<em>Saturday follows Monday's timetable</em>”. Pick which timetable <strong id="dayswap-date"></strong> runs on.</p>
+    <div class="mf"><label for="dayswap-select">Timetable for this day</label><select id="dayswap-select"></select></div>
+    <div class="modal-btns">
+      <button class="btn-sec" onclick="closeDaySwap()">Cancel</button>
+      <button class="btn-pri" onclick="confirmDaySwap()">Save</button>
     </div>
   </div>
 </div>
@@ -756,32 +852,35 @@
       </button>
     </div>
 
-    <div class="mf"><label for="as-name">Subject name</label><input type="text" id="as-name" placeholder="e.g. Maths"></div>
+    <div class="mf"><label for="as-name">Subject name</label><input type="text" id="as-name" placeholder="e.g. Maths" maxlength="80"></div>
 
     <div id="add-exact-fields">
       <div class="form-grid-2">
-        <div class="mf"><label for="as-total">Total classes</label><input type="number" id="as-total" placeholder="40" min="0"></div>
-        <div class="mf"><label for="as-present">Present</label><input type="number" id="as-present" placeholder="32" min="0"></div>
+        <div class="mf"><label for="as-total">Total classes held</label><input type="number" id="as-total" placeholder="e.g. 40" min="0" inputmode="numeric"></div>
+        <div class="mf"><label for="as-present">Classes attended</label><input type="number" id="as-present" placeholder="e.g. 32" min="0" inputmode="numeric"></div>
       </div>
-      <div class="mf"><label for="as-perweek">Classes / week</label><input type="number" id="as-perweek" placeholder="3" min="1" max="30"></div>
+      <div class="mf"><label for="as-perweek">Classes / week <span class="field-hint">(optional)</span></label><input type="number" id="as-perweek" placeholder="e.g. 3" min="0" max="30" inputmode="numeric"></div>
+      <p class="field-tip">New subject with no classes yet? Leave both at 0 and mark classes as they happen.</p>
     </div>
 
     <div id="add-est-fields" style="display:none">
+      <div class="mf"><label for="as-semstart">Semester start date <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="as-semstart"></div>
       <div class="form-grid-2">
-        <div class="mf"><label for="as-pw">Classes / week</label><input type="number" id="as-pw" placeholder="3" min="1"></div>
-        <div class="mf"><label for="as-missed">Missed classes</label><input type="number" id="as-missed" placeholder="5" min="0"></div>
+        <div class="mf"><label for="as-pw">Classes / week</label><input type="number" id="as-pw" placeholder="e.g. 3" min="1" max="30" inputmode="numeric"></div>
+        <div class="mf"><label for="as-missed">Classes missed so far</label><input type="number" id="as-missed" placeholder="0" min="0" inputmode="numeric"></div>
       </div>
-      <div class="mf"><label for="as-semstart">Semester start date</label><input type="date" id="as-semstart"></div>
       <div class="mf">
-        <label for="as-semtotal">Total classes this semester <span class="field-hint">(optional, for end-of-sem projection)</span></label>
-        <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0">
+        <label for="as-semtotal">Classes in the whole semester <span class="field-hint">(optional — for the end-of-sem projection)</span></label>
+        <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">
       </div>
     </div>
 
     <div class="mf">
-      <label for="as-target">Target % <span class="field-hint">(blank = global)</span></label>
-      <input type="number" id="as-target" placeholder="75" min="1" max="100">
+      <label for="as-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label>
+      <input type="number" id="as-target" placeholder="75" min="1" max="100" inputmode="numeric">
     </div>
+
+    <div class="form-preview" id="as-preview" aria-live="polite"></div>
 
     <div class="modal-btns">
       <button class="btn-sec" onclick="closeAddModal()">Cancel</button>
