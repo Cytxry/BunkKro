@@ -1134,7 +1134,7 @@ function renderHome() {
 
   document.getElementById('stats-grid').innerHTML = `
     <div class="sc tone-${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">
-      <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl">Overall attendance</span><span class="sc-chip soft indigo sc-end">${ic('chart','ic-sm')}</span></div>
+      <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl" title="Overall attendance">Attendance</span></div>
       <div class="sc-val" style="color:${pctTextColor(ov)}">${ov}<span class="unit">%</span></div>
       <div class="sc-sub">target: ${globalTarget}% · ${present}/${total} classes</div>
     </div>
@@ -1150,7 +1150,7 @@ function renderHome() {
     </div>
     <div class="sc tone-blue">
       <div class="sc-top"><span class="sc-chip blue">${ic('star','ic-sm')}</span><span class="sc-lbl">Best to bunk</span></div>
-      <div class="sc-val sc-val-text" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</div>
+      <div class="sc-val sc-val-text${hasBest && bestBunk.name.length > 12 ? ' long' : ''}" title="${hasBest ? escapeHTML(bestBunk.name) : ''}">${hasBest ? escapeHTML(bestBunk.name) : '—'}</div>
       <div class="sc-sub">${hasBest ? bunkable(bestBunk)+' bunk'+(bunkable(bestBunk)!==1?'s':'')+' left' : 'nowhere is safe rn'}</div>
     </div>
   `;

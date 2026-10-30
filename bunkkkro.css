@@ -382,6 +382,8 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .sc-val{display:block;font-size:2.1rem;font-weight:800;letter-spacing:-.03em;line-height:1;color:var(--primary-deep);font-variant-numeric:tabular-nums}
 .sc-val .unit{font-size:1.3rem;font-weight:800;margin-left:1px}
 .sc-val-text{font-size:1.6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
+/* long subject names: smaller, up to two lines instead of "Data Structur…" */
+.sc-val-text.long{font-size:1.2rem;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2;overflow-wrap:anywhere}
 .sc-sub{display:block;font-size:.85rem;color:var(--text2);margin-top:8px;line-height:1.35}
 .sc-clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
@@ -1113,9 +1115,11 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
   .sc-top{gap:8px}
   .sc-chip{width:30px;height:30px;border-radius:9px}
   .sc-chip.soft{display:none}
-  .sc-lbl{font-size:.85rem}
+  .sc-lbl{font-size:.85rem;white-space:normal;line-height:1.15;overflow:visible}
+  .sc-top{min-height:30px}
   .sc-val{font-size:1.8rem}
   .sc-val-text{font-size:1.3rem}
+  .sc-val-text.long{font-size:1.02rem}
   .sc-sub{font-size:.8rem}
   .verdict-card{flex-wrap:wrap;padding:14px 16px}
   .verdict-emoji{width:48px;height:48px;font-size:1.4rem}
