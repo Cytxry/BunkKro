@@ -200,14 +200,16 @@ function renderTodayClasses() {
   }
 
   // Calculate completion
+  // Only classes linked to a subject can be marked, so only they count
+  const countable = todayClasses.filter(c => subjects.some(x => x.id === c.subject_id));
   let markedCount = 0;
-  todayClasses.forEach(c => {
+  countable.forEach(c => {
     const st = dailyPeriodLogs[c.id];
     if (st) markedCount++;
   });
 
-  const completionPct = Math.round((markedCount / totalClasses) * 100);
-  summaryStats.textContent = `${markedCount} of ${totalClasses} marked`;
+  const completionPct = countable.length ? Math.round((markedCount / countable.length) * 100) : 100;
+  summaryStats.textContent = `${markedCount} of ${countable.length} marked`;
   summaryPct.textContent = `${completionPct}%`;
   summaryFill.style.width = `${completionPct}%`;
 
@@ -236,7 +238,7 @@ function renderTodayClasses() {
           ${timeDisplay ? `<span>🕒 ${escapeHTML(timeDisplay)}</span>` : ''}
           ${s ? `<span>${s.present}/${s.total} attended</span>` : ''}
         </div>
-        <div class="tracker-btns">
+        ${!s ? '<div class="period-meta" style="margin-top:6px">Not linked to a subject — link it in the app to track it.</div>' : `<div class="tracker-btns">
           <button class="present ${status === 'p' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.makeup ? 90 : c.period_index}" data-status="p">
             ${status === 'p' ? '✓ Present' : 'Present'}
           </button>
@@ -246,7 +248,7 @@ function renderTodayClasses() {
           <button class="cancel ${status === 'cancelled' ? 'active' : ''}" data-entry="${c.id}" data-subject="${c.subject_id || ''}" data-period="${c.makeup ? 90 : c.period_index}" data-status="cancelled" title="Cancelled (No absence penalty)">
             ${status === 'cancelled' ? '🚫' : 'Cancel'}
           </button>
-        </div>
+        </div>`}
       </div>
     `;
   }).join('');

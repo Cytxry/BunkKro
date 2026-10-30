@@ -205,6 +205,18 @@ strong{font-weight:700}
 .mf{margin-bottom:14px}
 .field input.invalid,.mf input.invalid{border-color:var(--danger-fill);box-shadow:0 0 0 3px var(--danger-bg)}
 .field-tip{font-size:.78rem;color:var(--muted);margin:-4px 0 12px}
+/* class-day picker (Add / Edit subject) */
+.day-picker{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;outline:none;border-radius:14px}
+.day-picker.invalid{box-shadow:0 0 0 3px var(--danger-bg)}
+.day-chip{position:relative;display:flex;align-items:center;justify-content:center;gap:2px;height:40px;border-radius:12px;border:1.5px solid var(--border2);background:var(--surface);color:var(--text2);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
+.day-chip:hover{border-color:var(--primary-soft);color:var(--primary-deep)}
+.day-chip:active{transform:scale(.96)}
+.day-chip.on{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 3px 8px rgba(69,85,165,.25)}
+.day-chip b{font-size:.7rem;font-weight:800;opacity:.9}
+.day-pick-note{margin:8px 0 0}
+.day-pick-note strong{color:var(--text)}
+.form-ok{color:var(--good);font-weight:600}
+.day-pick-field{margin-bottom:14px}
 /* live "what will be saved" line under subject forms */
 .form-preview{font-size:.85rem;line-height:1.55;color:var(--text2);background:var(--surface2);border-radius:12px;padding:10px 13px;margin:6px 0 4px}
 .form-preview:empty{display:none}
@@ -546,6 +558,13 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .tl-row.is-present .tl-state{color:var(--good)}
 .tl-row.is-absent .tl-state{color:var(--danger)}
 .tl-row.is-cancelled .tl-state{color:var(--warn)}
+.tl-row.is-unlinked .tl-dot{border-style:dashed;border-color:var(--border2)}
+.tl-row.is-unlinked .tl-name{color:var(--muted);font-weight:500}
+.tracker-link{display:flex;align-items:center}
+.unmarked-nudge{display:flex;align-items:center;gap:10px;width:100%;margin-top:14px;padding:10px 12px;border-radius:12px;border:1px dashed var(--warn-line);background:var(--warn-bg);color:var(--warn);font:inherit;font-size:.84rem;text-align:left;cursor:pointer;transition:filter .15s}
+.unmarked-nudge:hover{filter:brightness(.97)}
+.unmarked-nudge strong{color:inherit}
+.unmarked-go{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-weight:700;white-space:nowrap}
 .tl-row.is-cancelled .tl-name{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--text2)}
 .today-more{font-size:.8125rem;color:var(--muted);padding-top:8px}
 .today-note{display:flex;align-items:center;gap:14px;padding:4px 0;color:var(--text2);font-size:.9rem}
@@ -692,6 +711,7 @@ details[open] .edit-sum{border-radius:22px 22px 0 0}
 .pack-file input{position:absolute;opacity:0;width:1px;height:1px}
 .pack-check{display:flex;align-items:center;gap:8px;font-size:.86rem;color:var(--text2);margin:0 0 6px;cursor:pointer}
 .pack-check input{width:17px;height:17px;accent-color:var(--primary)}
+.pack-check.del-tt{justify-content:center;margin-top:12px;font-size:.82rem}
 .edit-actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .edit-actions .del-btn{margin-left:auto}
 .mode-toggle{font-size:.78rem;padding:5px 11px;border-radius:999px;margin-left:auto}

@@ -177,6 +177,7 @@
         <section class="card">
           <div class="card-title">Today's classes <button class="link-btn" onclick="openTodayTracker()">Mark attendance <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></button></div>
           <div id="home-today"></div>
+          <div id="home-unmarked"></div>
         </section>
         <div class="pop-host">
           <div class="streak-row" id="streak-row"></div>
@@ -260,21 +261,24 @@
           <label for="inp-subject-name">Subject name</label>
           <input type="text" id="inp-subject-name" placeholder="e.g. Mathematics" maxlength="80">
         </div>
+        <div class="mf day-pick-field">
+      <label id="edit-days-label">Which days is it on? <span class="field-hint">(tap a day twice for 2 classes that day)</span></label>
+      <div class="day-picker" id="edit-days" role="group" aria-labelledby="edit-days-label" tabindex="-1"></div>
+      <p class="field-tip day-pick-note" id="edit-days-note"></p>
+    </div>
         <div id="form-exact" class="edit-grid">
           <div class="field"><label for="inp-total">Total classes held</label><input type="number" id="inp-total" placeholder="e.g. 40" min="0" inputmode="numeric"></div>
           <div class="field"><label for="inp-present">Classes attended</label><input type="number" id="inp-present" placeholder="e.g. 30" min="0" inputmode="numeric"></div>
           <div class="field"><label for="inp-absent">Classes missed <span class="field-hint">(fills itself)</span></label><input type="number" id="inp-absent" placeholder="auto" min="0" inputmode="numeric"></div>
-          <div class="field"><label for="inp-perweek">Classes / week</label><input type="number" id="inp-perweek" placeholder="e.g. 3" min="0" max="30" inputmode="numeric"></div>
-          <div class="field" style="grid-column:span 2"><label for="inp-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
+          <div class="field"><label for="inp-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
         </div>
         <div id="form-est" style="display:none">
           <div class="edit-grid">
             <div class="field"><label for="inp-semstart">Semester start <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="inp-semstart"></div>
-            <div class="field"><label for="inp-est-pw">Classes / week</label><input type="number" id="inp-est-pw" placeholder="e.g. 3" min="1" max="30" inputmode="numeric"></div>
             <div class="field"><label for="inp-est-absent">Classes missed so far</label><input type="number" id="inp-est-absent" placeholder="e.g. 5" min="0" inputmode="numeric"></div>
             <div class="field"><label for="inp-est-target">Target % <span class="field-hint">(blank = global)</span></label><input type="number" id="inp-est-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
-            <div class="field" style="grid-column:span 2">
-              <label for="inp-est-semtotal">Classes in the whole semester <span class="field-hint">(optional — for the end-of-sem projection)</span></label>
+            <div class="field">
+              <label for="inp-est-semtotal">Classes this semester <span class="field-hint">(optional)</span></label>
               <input type="number" id="inp-est-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">
             </div>
           </div>
@@ -866,22 +870,23 @@
     </div>
 
     <div class="mf"><label for="as-name">Subject name</label><input type="text" id="as-name" placeholder="e.g. Maths" maxlength="80"></div>
+    <div class="mf day-pick-field">
+      <label id="as-days-label">Which days is it on? <span class="field-hint">(tap a day twice for 2 classes that day)</span></label>
+      <div class="day-picker" id="as-days" role="group" aria-labelledby="as-days-label" tabindex="-1"></div>
+      <p class="field-tip day-pick-note" id="as-days-note"></p>
+    </div>
 
     <div id="add-exact-fields">
       <div class="form-grid-2">
         <div class="mf"><label for="as-total">Total classes held</label><input type="number" id="as-total" placeholder="e.g. 40" min="0" inputmode="numeric"></div>
         <div class="mf"><label for="as-present">Classes attended</label><input type="number" id="as-present" placeholder="e.g. 32" min="0" inputmode="numeric"></div>
       </div>
-      <div class="mf"><label for="as-perweek">Classes / week <span class="field-hint">(optional)</span></label><input type="number" id="as-perweek" placeholder="e.g. 3" min="0" max="30" inputmode="numeric"></div>
       <p class="field-tip">New subject with no classes yet? Leave both at 0 and mark classes as they happen.</p>
     </div>
 
     <div id="add-est-fields" style="display:none">
       <div class="mf"><label for="as-semstart">Semester start date <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="as-semstart"></div>
-      <div class="form-grid-2">
-        <div class="mf"><label for="as-pw">Classes / week</label><input type="number" id="as-pw" placeholder="e.g. 3" min="1" max="30" inputmode="numeric"></div>
-        <div class="mf"><label for="as-missed">Classes missed so far</label><input type="number" id="as-missed" placeholder="0" min="0" inputmode="numeric"></div>
-      </div>
+      <div class="mf"><label for="as-missed">Classes missed so far</label><input type="number" id="as-missed" placeholder="0" min="0" inputmode="numeric"></div>
       <div class="mf">
         <label for="as-semtotal">Classes in the whole semester <span class="field-hint">(optional — for the end-of-sem projection)</span></label>
         <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">

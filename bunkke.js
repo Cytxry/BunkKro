@@ -1085,6 +1085,23 @@ function weeksSince(dateStr) {
 function weeksFromStart() { return weeksSince(semStart); }
 function estimateTotalFrom(start, pw) { return Math.round(weeksSince(start) * (pw || 0)); }
 function estimateTotal(pw) { return estimateTotalFrom(semStart, pw); }
+// With known class days: count the real class days from the semester start up
+// to yesterday, skipping days marked as holidays.
+function estimateHeldByDays(start, counts) {
+  if (!start || !DATE_RE.test(start)) return { held: 0, holidays: 0 };
+  const [y, m, d] = start.split('-').map(Number);
+  const day = new Date(y, m - 1, d), today = getLocalDateString();
+  let held = 0, holidays = 0;
+  for (let i = 0; i < 400; i++, day.setDate(day.getDate() + 1)) {
+    const ds = getLocalDateString(day);
+    if (ds >= today) break;
+    const n = counts[day.getDay() || 7] || 0;
+    if (!n) continue;
+    if (dateExceptions[ds]?.type === 'holiday') { holidays += n; continue; }
+    held += n;
+  }
+  return { held, holidays };
+}
 function fmtDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -1379,10 +1396,16 @@ function positionPopover(pop, anchor) {
   leftVp = Math.max(margin, Math.min(leftVp, vw - margin - w));
   const ph = pop.offsetHeight;
   const below = window.innerHeight - a.bottom, above = a.top;
-  const flip = below < ph + 20 && above > below;
+  const fitsBelow = below >= ph + 20, fitsAbove = above >= ph + 20;
+  const flip = !fitsBelow && fitsAbove;
   pop.classList.toggle('above', flip);
   pop.style.left = (leftVp - h.left) + 'px';
   pop.style.top = (flip ? a.top - h.top - ph - 10 : a.bottom - h.top + 10) + 'px';
+  // No room either side (short screens): open below and scroll just enough
+  if (!fitsBelow && !fitsAbove) {
+    const over = a.bottom + 10 + ph + margin - window.innerHeight;
+    if (over > 0) window.scrollBy({ top: over, behavior: 'instant' });
+  }
   pop.style.setProperty('--caret-x', Math.max(18, Math.min(w - 18, a.left + a.width / 2 - leftVp)) + 'px');
 }
 
@@ -1531,8 +1554,38 @@ function streakCalendarHTML() {
   `;
 }
 
+// Classes from the past week that were never marked. Only for people who mark
+// daily (counted from their first mark, never before the semester start).
+function unmarkedRecent() {
+  const tracked = Object.keys(dailyPeriodLogs).filter(d => Object.keys(dailyPeriodLogs[d] || {}).length).sort();
+  if (!tracked.length) return null;
+  const from = [tracked[0], semStart || ''].sort().pop();
+  const today = new Date();
+  let total = 0, earliest = null;
+  for (let i = 7; i >= 1; i--) {
+    const d = getLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() - i));
+    if (d < from || dateExceptions[d]?.type === 'holiday') continue;
+    const n = getAllClassesForDate(d).filter(c => isCountable(c) && !c.status).length;
+    if (n) { total += n; earliest = earliest || d; }
+  }
+  return total ? { total, earliest } : null;
+}
+function openTrackerOn(date) {
+  selectedTrackerDate = date;
+  goPage('tracker');
+}
+function renderUnmarkedNudge() {
+  const box = document.getElementById('home-unmarked');
+  if (!box) return;
+  const u = unmarkedRecent();
+  box.innerHTML = u
+    ? `<button class="unmarked-nudge" onclick="openTrackerOn('${u.earliest}')">${ic('clock','ic-sm')}<span><strong>${u.total} class${u.total !== 1 ? 'es' : ''}</strong> from the past week ${u.total !== 1 ? "aren't" : "isn't"} marked yet</span><span class="unmarked-go">Mark ${ic('arrow-right','ic-xs')}</span></button>`
+    : '';
+}
+
 // Read-only list of today's schedule; marking happens on Daily Classes.
 function renderHomeToday() {
+  renderUnmarkedNudge();
   const box = document.getElementById('home-today');
   if (!box) return;
   const todayStr = getLocalDateString();
@@ -1556,14 +1609,20 @@ function renderHomeToday() {
     a: { cls: 'absent', label: 'Absent', icon: 'x' },
     cancelled: { cls: 'cancelled', label: 'Cancelled', icon: '' },
   };
-  const marked = classes.filter(c => STATES[c.status]).length;
+  const countable = classes.filter(isCountable);
+  const marked = countable.filter(c => STATES[c.status]).length;
   const shown = classes.slice(0, 6);
-  box.innerHTML = `<div class="tl-progress"><span class="tl-progress-bar"><span style="width:${Math.round(marked / classes.length * 100)}%"></span></span><span>${marked}/${classes.length} marked</span></div>
+  box.innerHTML = `${countable.length ? `<div class="tl-progress"><span class="tl-progress-bar"><span style="width:${Math.round(marked / countable.length * 100)}%"></span></span><span>${marked}/${countable.length} marked</span></div>` : ''}
   <ol class="timeline">${shown.map(c => {
     const s = subjects.find(x => x.id === c.subjectId);
     const name = s ? s.name : c.subjectName;
     const time = c.startTime ? (c.endTime ? `${c.startTime} – ${c.endTime}` : c.startTime) : (c.isExtra ? 'Extra class' : c.isMakeup ? 'Makeup class' : `Period ${c.period}`);
     const st = STATES[c.status];
+    if (!s) return `<li class="tl-row is-unlinked">
+      <span class="tl-dot" aria-hidden="true"></span>
+      <span class="tl-body"><span class="tl-name">${escapeHTML(name || 'Class')}</span><span class="tl-time">${escapeHTML(time)}</span></span>
+      <span class="tl-state">Not linked</span>
+    </li>`;
     return `<li class="tl-row ${st ? 'is-' + st.cls : 'is-pending'}">
       <span class="tl-dot" aria-hidden="true">${st && st.icon ? ic(st.icon, 'ic-xs') : ''}</span>
       <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span><span class="tl-time">${escapeHTML(time)}${c.isExtra && c.startTime ? ' · Extra' : ''}${c.isMakeup && c.startTime ? ' · Makeup' : ''}</span></span>
@@ -1792,11 +1851,11 @@ function renderSubject(id, preserveSim) {
   } else if (p >= tgt && bk > 0) {
     pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
     if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
-    const wk = s.perWeek > 0 ? ` (~${(bk/s.perWeek).toFixed(1)} weeks worth)` : '';
+    const wk = weeklyCount(s) > 0 ? ` (~${(bk/weeklyCount(s)).toFixed(1)} weeks worth)` : '';
     advText = `You can skip <strong>${bk} more class${bk!==1?'es':''}</strong> in ${escapeHTML(s.name)} before hitting ${tgt}%${wk}. Space them out — don\'t bunk 2 in a row.`;
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
-    const wk = s.perWeek > 0 ? ` That's about ${Math.ceil(nd/s.perWeek)} weeks of showing up.` : '';
+    const wk = weeklyCount(s) > 0 ? ` That's about ${Math.ceil(nd/weeklyCount(s))} weeks of showing up.` : '';
     advText = isFinite(nd)
       ? `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk} No bunks. None. Zero. Go.`
       : `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`;
@@ -1850,16 +1909,17 @@ function checkSubjectForm(f, excludeId) {
     if (bad(f.present, 0, 5000)) return { error: 'Classes attended must be a whole number (0 or more).', field: ids.present };
     const total = f.total ?? 0, present = f.present ?? 0;
     if (present > total) return { error: `Attended (${present}) can't be more than the total classes held (${total}).`, field: ids.present };
-    if (bad(f.perWeek, 0, 30)) return { error: 'Classes per week should be between 0 and 30.', field: ids.perWeek };
+    if (bad(f.perWeek, 0, 30)) return { error: 'That\'s more classes a week than fit in a timetable.', field: ids.perWeek };
     return { values: { name, total, present, perWeek: f.perWeek ?? 0, target, semTotal: f.semTotal ?? null, mode: 'exact' } };
   }
 
   const start = f.semStart || '';
   if (!start) return { error: 'Pick the semester start date — the estimate counts classes from that day.', field: ids.semStart };
   if (start > getLocalDateString()) return { error: "The semester start can't be in the future.", field: ids.semStart };
-  if (f.perWeek === null || bad(f.perWeek, 1, 30)) return { error: 'Enter how many classes this subject has each week (1–30).', field: ids.perWeek };
+  if (!f.perWeek || bad(f.perWeek, 1, 30)) return { error: 'Pick the days this subject is on — the estimate counts its classes from them.', field: ids.perWeek };
   if (bad(f.missed, 0, 5000)) return { error: 'Classes missed must be a whole number (0 or more).', field: ids.missed };
-  const total = estimateTotalFrom(start, f.perWeek), missed = f.missed ?? 0;
+  const byDays = f.days && dayTotal(f.days) ? estimateHeldByDays(start, f.days) : null;
+  const total = byDays ? byDays.held : estimateTotalFrom(start, f.perWeek), missed = f.missed ?? 0;
   if (missed > total) {
     return { error: `You've entered ${missed} missed, but only about ${total} class${total !== 1 ? 'es have' : ' has'} happened since ${fmtDate(start)}.`, field: ids.missed };
   }
@@ -1867,18 +1927,20 @@ function checkSubjectForm(f, excludeId) {
   if (f.semTotal != null && f.semTotal < total) {
     return { error: `Classes in the whole semester (${f.semTotal}) can't be fewer than the ~${total} already held.`, field: ids.semTotal };
   }
-  return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: f.semTotal ?? null, mode: 'estimate', semStart: start } };
+  return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: f.semTotal ?? null, mode: 'estimate', semStart: start, days: byDays ? f.days : null, holidays: byDays?.holidays || 0 } };
 }
 
 // One friendly line describing what will be saved.
 function subjectPreviewHTML(v) {
   let html = '';
-  if (v.mode === 'estimate') {
+  if (v.mode === 'estimate' && v.days) {
+    html += `Since ${escapeHTML(fmtDate(v.semStart))}, ${escapeHTML(dayList(v.days))} classes: <strong>${v.total}</strong> held${v.holidays ? ` (${v.holidays} skipped for holidays)` : ''}. `;
+  } else if (v.mode === 'estimate') {
     const w = weeksSince(v.semStart);
     html += `Since ${escapeHTML(fmtDate(v.semStart))}: ${w} week${w !== 1 ? 's' : ''} × ${v.perWeek}/week ≈ <strong>${v.total}</strong> class${v.total !== 1 ? 'es' : ''} held. `;
   }
   if (v.total === 0) {
-    return html + (v.mode === 'estimate' && weeksSince(v.semStart) === 0
+    return html + (v.mode === 'estimate' && !v.days && weeksSince(v.semStart) === 0
       ? 'The estimate starts counting after the first full week.'
       : 'No classes counted yet — mark them on Daily Classes as they happen.');
   }
@@ -1909,6 +1971,105 @@ function renderFormPreview(previewId, r, extra = '') {
   else box.innerHTML = subjectPreviewHTML(r.values) + extra;
 }
 
+// ══════════════════════════════════════════════════════
+//  CLASS DAYS — which days a subject is on. Picking days puts the subject in
+//  the weekly timetable, which is what Daily Classes shows; classes/week is
+//  simply how many were picked.
+// ══════════════════════════════════════════════════════
+const DAY_SHORT = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const dayPickers = {}; // picker id -> { counts: {1..7: 0-2}, touched }
+function emptyDays() { return { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 }; }
+function sameSubjectName(a, b) { return (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase(); }
+function subjectDayCounts(subjectId) {
+  const c = emptyDays();
+  timetable.forEach(t => { if (t.subjectId === subjectId && !t.isBreak) c[t.day] = (c[t.day] || 0) + 1; });
+  return c;
+}
+// Timetable classes with this name that aren't linked to any subject yet
+function unlinkedDayCounts(name) {
+  const c = emptyDays();
+  if (!name) return c;
+  timetable.forEach(t => {
+    if (!t.isBreak && !subjects.some(x => x.id === t.subjectId) && sameSubjectName(t.subjectName, name)) c[t.day] = (c[t.day] || 0) + 1;
+  });
+  return c;
+}
+function dayTotal(c) { return Object.values(c).reduce((a, n) => a + n, 0); }
+function dayList(c) { return DAY_SHORT.filter((d, i) => i && c[i]).map((d, i) => d).join(', '); }
+// Classes per week: from the timetable when the subject is in it, else what was typed before
+function weeklyCount(s) {
+  const n = timetable.filter(t => t.subjectId === s.id && !t.isBreak).length;
+  return n || s.perWeek || 0;
+}
+
+function setDayPicker(id, counts, touched = false) {
+  dayPickers[id] = { counts: { ...emptyDays(), ...counts }, touched };
+  renderDayPicker(id);
+}
+function renderDayPicker(id) {
+  const el = document.getElementById(id);
+  const p = dayPickers[id];
+  if (!el || !p) return;
+  el.innerHTML = DAY_SHORT.slice(1).map((d, i) => {
+    const n = p.counts[i + 1] || 0;
+    return `<button type="button" class="day-chip${n ? ' on' : ''}" aria-pressed="${n > 0}" aria-label="${DAYS_MAP[i].name}: ${n} class${n !== 1 ? 'es' : ''}" onclick="onDayChip('${id}', ${i + 1})">${d}${n > 1 ? `<b>×${n}</b>` : ''}</button>`;
+  }).join('');
+  const note = document.getElementById(id + '-note');
+  const total = dayTotal(p.counts);
+  if (note) note.innerHTML = total
+    ? `<strong>${total} class${total !== 1 ? 'es' : ''} a week</strong> · shows on Daily Classes every ${escapeHTML(dayList(p.counts))}.`
+    : (p.note || 'No days picked — it won\'t show on Daily Classes. You can still keep its numbers up to date by hand.');
+}
+function onDayChip(id, day) {
+  const p = dayPickers[id];
+  if (!p) return;
+  p.counts[day] = ((p.counts[day] || 0) + 1) % 3; // off → 1 → 2 → off
+  p.touched = true;
+  renderDayPicker(id);
+  document.getElementById(id)?.classList.remove('invalid');
+  if (id === 'as-days') updateAddPreview(); else updateEditPreview();
+}
+function pickerDays(id) { return dayPickers[id]?.counts || emptyDays(); }
+
+// What changing a subject's days would do to the timetable.
+function planSubjectDays(subjectId, name, counts) {
+  const plan = { link: [], add: [], remove: [] };
+  for (let d = 1; d <= 7; d++) {
+    const mine = timetable.filter(t => t.subjectId === subjectId && !t.isBreak && t.day === d).sort((a, b) => a.period - b.period);
+    let want = counts[d] || 0;
+    if (want < mine.length) { plan.remove.push(...mine.slice(want)); continue; }
+    want -= mine.length;
+    // Reuse unlinked classes with the same name first (e.g. from a scan)
+    const free = timetable.filter(t => !t.isBreak && t.day === d && !subjects.some(x => x.id === t.subjectId) && sameSubjectName(t.subjectName, name)).sort((a, b) => a.period - b.period);
+    plan.link.push(...free.slice(0, want));
+    for (let k = Math.min(want, free.length); k < want; k++) plan.add.push(d);
+  }
+  return plan;
+}
+// Apply it: link, add (at the end of that day, usual times for that period), remove.
+async function applySubjectDays(subjectId, name, plan) {
+  if (!plan.link.length && !plan.add.length && !plan.remove.length) return;
+  plan.link.forEach(t => { t.subjectId = subjectId; t.subjectName = name; t.isUncertain = false; });
+  plan.add.forEach(day => {
+    const period = timetable.filter(t => t.day === day).reduce((m, t) => Math.max(m, t.period), 0) + 1;
+    timetable.push({ id: newUuid(), day, period, ...ttBellTimes(period), subjectId, subjectName: name, isBreak: false, isUncertain: false });
+  });
+  if (plan.remove.length) {
+    const gone = new Set(plan.remove);
+    timetable = timetable.filter(t => !gone.has(t));
+    if (scannerState?.fusedSlots && scannerState.fusedSlots !== timetable) scannerState.fusedSlots = scannerState.fusedSlots.filter(t => !gone.has(t));
+  }
+  if (plan.add.some(d => d === 7)) timetableMeta.showSunday = true;
+  await saveTimetableToStorageAndDB();
+}
+function describeDayPlan(plan) {
+  const days = arr => [...new Set(arr)].sort((a, b) => a - b).map(d => DAY_SHORT[d]).join(', ');
+  const bits = [];
+  if (plan.add.length || plan.link.length) bits.push(`added to ${days([...plan.add, ...plan.link.map(t => t.day)])}`);
+  if (plan.remove.length) bits.push(`removed from ${days(plan.remove.map(t => t.day))}`);
+  return bits.join(' and ');
+}
+
 // ── Edit subject ──
 function readEditForm(s) {
   const est = editMode === 'estimate';
@@ -1917,14 +2078,16 @@ function readEditForm(s) {
     name: textField('inp-subject-name'),
     total: numField('inp-total'),
     present: numField('inp-present'),
-    perWeek: numField(est ? 'inp-est-pw' : 'inp-perweek'),
+    // Picked days decide classes/week; a subject never put on any day keeps its old number
+    perWeek: dayTotal(pickerDays('edit-days')) || (dayTotal(subjectDayCounts(s.id)) ? 0 : (s.perWeek || 0)) || null,
+    days: pickerDays('edit-days'),
     target: numField(est ? 'inp-est-target' : 'inp-target'),
     semStart: textField('inp-semstart'),
     missed: numField('inp-est-absent'),
     semTotal: est ? numField('inp-est-semtotal') : (s.semTotal ?? null),
     ids: {
       name: 'inp-subject-name', total: 'inp-total', present: 'inp-present',
-      perWeek: est ? 'inp-est-pw' : 'inp-perweek', target: est ? 'inp-est-target' : 'inp-target',
+      perWeek: 'edit-days', target: est ? 'inp-est-target' : 'inp-target',
       semStart: 'inp-semstart', missed: 'inp-est-absent', semTotal: 'inp-est-semtotal',
     },
   };
@@ -1937,10 +2100,12 @@ function fillEditForm(s) {
   set('inp-total', s.total);
   set('inp-present', s.present);
   set('inp-absent', s.total - s.present);
-  set('inp-perweek', s.perWeek || '');
   set('inp-target', s.target || '');
   set('inp-semstart', semStart);
-  set('inp-est-pw', s.perWeek || '');
+  const days = subjectDayCounts(s.id);
+  dayPickers['edit-days'] = { counts: days, touched: false,
+    note: s.perWeek ? `No days set yet (you entered ${s.perWeek} a week) — pick them so it shows on Daily Classes.` : '' };
+  renderDayPicker('edit-days');
   set('inp-est-absent', s.total - s.present);
   set('inp-est-target', s.target || '');
   set('inp-est-semtotal', s.semTotal || '');
@@ -2003,6 +2168,11 @@ async function saveSubject() {
   const r = checkSubjectForm(readEditForm(s), s.id);
   if (r.error) { showFormProblem('edit-preview', r); return; }
   const v = r.values;
+  const dayPlan = dayPickers['edit-days']?.touched ? planSubjectDays(s.id, v.name, pickerDays('edit-days')) : { link: [], add: [], remove: [] };
+  if (dayPlan.remove.length && !(await askDialog({
+    title: 'Change its days?',
+    message: `${v.name} will be ${describeDayPlan(dayPlan)} in your weekly timetable. Attendance already marked stays counted.`,
+    ok: 'Change days', cat: 'cat-peek' }))) return;
 
   const saveBtn = document.querySelector('#edit-card .save-btn');
   saveBtn.disabled = true;
@@ -2017,6 +2187,10 @@ async function saveSubject() {
 
   if (success) {
     if (v.mode === 'estimate' && v.semStart !== semStart) { semStart = v.semStart; savePrefs(); }
+    // Keep the subject's name on its timetable classes, then apply day changes
+    if (v.name !== before.name) timetable.forEach(t => { if (t.subjectId === s.id) t.subjectName = v.name; });
+    await applySubjectDays(s.id, v.name, dayPlan);
+    if (v.name !== before.name && !dayPlan.link.length && !dayPlan.add.length && !dayPlan.remove.length && timetable.some(t => t.subjectId === s.id)) saveTimetableToStorageAndDB();
     const sv = document.getElementById('sim-input')?.value||0;
     renderSubject(currSubjId, true);
     renderNav();
@@ -2087,8 +2261,9 @@ async function deleteSubject() {
   const tgt = getTarget(s);
   document.getElementById('delete-msg').innerHTML = `
     <strong style="color:var(--text);font-size:1rem">${escapeHTML(s.name)}</strong><br>
-    <span style="font-weight:600;color:${pctTextColor(p,tgt)}">${p}% attendance</span><br>
+    <span style="font-weight:600;color:${subjTextColor(s)}">${hasClasses(s) ? p + '% attendance' : 'No classes counted yet'}</span><br>
     <span style="font-size:.8125rem;color:var(--text2);margin-top:8px;display:inline-block">This will also delete all tracker history for this subject.</span>
+    ${(() => { const n = timetable.filter(t => t.subjectId === s.id && !t.isBreak).length; return n ? `<label class="pack-check del-tt"><input type="checkbox" id="del-tt-slots" checked> Also remove its ${n} class${n !== 1 ? 'es' : ''} from your weekly timetable</label>` : ''; })()}
   `;
   
   document.getElementById('delete-overlay').classList.add('show');
@@ -2113,8 +2288,17 @@ async function confirmDeleteSubject() {
     
     if (trackerError) throw trackerError;
     
+    // Its timetable classes: remove them, or keep them (unlinked) to link to another subject
+    const dropSlots = document.getElementById('del-tt-slots')?.checked;
+    const slotIds = new Set(timetable.filter(t => t.subjectId === subjId).map(t => t.id));
+
     // Delete subject
     const success = await deleteSubjectFromDB(subjId);
+    if (success && dropSlots && slotIds.size) {
+      timetable = timetable.filter(t => !slotIds.has(t.id));
+      if (scannerState?.fusedSlots && scannerState.fusedSlots !== timetable) scannerState.fusedSlots = scannerState.fusedSlots.filter(t => !slotIds.has(t.id));
+      saveTimetableToStorageAndDB();
+    }
     
     if (success) {
       // Clean up local tracker log
@@ -2152,7 +2336,7 @@ function resetSim() { document.getElementById('sim-input').value = 0; updateSim(
  
 function updateSim() {
   const s = _ss; if (!s) return;
-  const tgt = _st, pw = s.perWeek||0;
+  const tgt = _st, pw = weeklyCount(s);
   const plan = Math.max(0, parseInt(document.getElementById('sim-input').value)||0);
   const projTotal = s.total + plan;
   const projPct = attPct(s.present, projTotal);
@@ -2356,11 +2540,23 @@ async function obFinish() {
 function openAddModal() {
   const ov = document.getElementById('add-overlay');
   ov.classList.add('show');
-  ['as-name','as-total','as-present','as-perweek','as-pw','as-missed','as-target','as-semtotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['as-name','as-total','as-present','as-missed','as-target','as-semtotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  setDayPicker('as-days', emptyDays());
   document.getElementById('as-semstart').value = semStart || '';
   if (!ov.dataset.wired) {
     ov.dataset.wired = '1';
-    ov.addEventListener('input', e => { e.target.classList.remove('invalid'); e.target.removeAttribute('aria-invalid'); updateAddPreview(); });
+    ov.addEventListener('input', e => {
+      e.target.classList.remove('invalid'); e.target.removeAttribute('aria-invalid');
+      // Typed a name that's already in the timetable (e.g. from a scan)? Pre-pick its days.
+      if (e.target.id === 'as-name' && !dayPickers['as-days']?.touched) {
+        const found = unlinkedDayCounts(textField('as-name'));
+        const n = dayTotal(found);
+        dayPickers['as-days'] = { counts: found, touched: false, note: '' };
+        renderDayPicker('as-days');
+        if (n) document.getElementById('as-days-note').innerHTML += ` <span class="form-ok">Found in your timetable — they'll be linked.</span>`;
+      }
+      updateAddPreview();
+    });
   }
   // Without a semester start date, official numbers are the easier start
   selAddMode(semStart ? 'estimate' : 'exact');
@@ -2385,19 +2581,20 @@ function readAddForm() {
     name: textField('as-name'),
     total: numField('as-total'),
     present: numField('as-present'),
-    perWeek: numField(est ? 'as-pw' : 'as-perweek'),
+    perWeek: dayTotal(pickerDays('as-days')) || null,
+    days: pickerDays('as-days'),
     target: numField('as-target'),
     semStart: textField('as-semstart'),
     missed: numField('as-missed'),
     semTotal: est ? numField('as-semtotal') : null,
-    ids: { name: 'as-name', total: 'as-total', present: 'as-present', perWeek: est ? 'as-pw' : 'as-perweek', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: 'as-semtotal' },
+    ids: { name: 'as-name', total: 'as-total', present: 'as-present', perWeek: 'as-days', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: 'as-semtotal' },
   };
 }
 function updateAddPreview() {
   const f = readAddForm();
   const box = document.getElementById('as-preview');
   // Don't nag about the name before anything has been typed
-  if (!f.name && f.total === null && f.present === null && f.missed === null && f.perWeek === null) {
+  if (!f.name && f.total === null && f.present === null && f.missed === null && !f.perWeek) {
     if (box) { box.classList.remove('is-error'); box.textContent = addMode === 'estimate' ? 'Tip: classes held are counted from the semester start × classes per week.' : 'Copy total and attended from your college portal.'; }
     return;
   }
@@ -2421,8 +2618,11 @@ async function confirmAdd() {
     });
     if (success) {
       if (v.mode === 'estimate' && v.semStart !== semStart) { semStart = v.semStart; savePrefs(); }
+      const created = subjects[subjects.length - 1];
+      const plan = planSubjectDays(created.id, created.name, pickerDays('as-days'));
+      await applySubjectDays(created.id, created.name, plan);
       closeAddModal();
-      toast(randToast('add'));
+      toast(plan.add.length || plan.link.length ? `${created.name} added — on Daily Classes every ${dayList(pickerDays('as-days'))}` : randToast('add'));
       renderAll();
     }
   } catch (err) {
@@ -4751,6 +4951,9 @@ async function confirmDaySwap() {
   renderTracker(); renderNav();
 }
 
+// A class only counts towards attendance when it's linked to one of your subjects
+function isCountable(c) { return subjects.some(x => x.id === c.subjectId); }
+
 // Get scheduled classes for a specific date (1=Monday ... 7=Sunday)
 function getScheduledClassesForDate(dateStr) {
   const parts = dateStr.split('-').map(Number);
@@ -4871,10 +5074,12 @@ function renderTracker() {
   const allClasses = getAllClassesForDate(selectedTrackerDate);
 
   // Daily Completion Stats
-  const totalCount = allClasses.length;
-  const presentCount = allClasses.filter(c => c.status === 'p').length;
-  const absentCount = allClasses.filter(c => c.status === 'a').length;
-  const cancelledCount = allClasses.filter(c => c.status === 'cancelled').length;
+  // Classes not linked to a subject can't be marked, so they don't count as pending
+  const countable = allClasses.filter(isCountable);
+  const totalCount = countable.length;
+  const presentCount = countable.filter(c => c.status === 'p').length;
+  const absentCount = countable.filter(c => c.status === 'a').length;
+  const cancelledCount = countable.filter(c => c.status === 'cancelled').length;
   const markedCount = presentCount + absentCount + cancelledCount;
   const pendingCount = totalCount - markedCount;
   const progressPct = totalCount > 0 ? Math.round((markedCount / totalCount) * 100) : 0;
@@ -4967,12 +5172,16 @@ function renderTracker() {
             : '<div class="daily-class-stats" style="color:var(--muted)">No classes counted yet</div>')
             : '<div class="daily-class-stats" style="color:var(--muted)">Not linked to a subject</div>'}
         </div>
-        <div class="tracker-btns" role="group" aria-label="Attendance for ${escapeHTML(displayName)}">
+        ${!s && !item.isExtra ? `<div class="tracker-link">
+          ${item.isMakeup
+            ? `<button class="btn-sec btn-sm" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')} Remove</button>`
+            : `<button class="btn-sec btn-sm" onclick="openEditSlotModal('${item.slotId}')" title="Pick which of your subjects this class is">${ic('pen','ic-sm')} Link to a subject</button>`}
+        </div>` : `<div class="tracker-btns" role="group" aria-label="Attendance for ${escapeHTML(displayName)}">
           <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" ${isFuture && item.status !== 'p' ? 'disabled title="You can mark this once the day comes"' : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
           <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" ${isFuture && item.status !== 'a' ? 'disabled title="You can mark this once the day comes"' : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
           <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" aria-pressed="${item.status === 'cancelled'}" title="Cancelled class does not count as absence" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">${ic('ban','ic-sm')} Cancel</button>
           ${item.isMakeup ? `<button class="tbtn rm" title="Remove this class" aria-label="Remove this class" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')}</button>` : ''}
-        </div>
+        </div>`}
       </div>
     `;
   }).join('');
