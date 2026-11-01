@@ -2199,14 +2199,29 @@ function describeDayPlan(plan) {
 // ══════════════════════════════════════════════════════
 //  SEMESTER DATES
 // ══════════════════════════════════════════════════════
-function openSemesterDialog() {
+// focus: 'start' | 'end' | 'past' (an estimated end already behind us) | undefined. A link that asks for one
+// date opens the dialog on that field with a one-line hint, so the other field is not mistaken for the one asked.
+function openSemesterDialog(focus) {
   document.getElementById('sem-start').value = semStart || '';
   document.getElementById('sem-end').value = semEnd || '';
   document.getElementById('sem-weeks').value = String(semWeeks);
   const ov = document.getElementById('sem-overlay');
   if (!ov.dataset.wired) { ov.dataset.wired = '1'; ov.addEventListener('input', semesterPreview); }
+  const hint = document.getElementById('sem-hint');
+  const field = focus === 'start' ? 'sem-start' : focus ? 'sem-end' : null;
+  const text = focus === 'start'
+    ? 'Just pick the <strong>first day of classes</strong> — BunkKro estimates when the semester ends. Add the last day too if you know it.'
+    : focus === 'past'
+      ? `It's been more than ${semWeeks} weeks since your first day of classes (${escapeHTML(fmtDate(semStart))}). Pick your <strong>last day of classes</strong> — or fix the first day if it's wrong.`
+      : focus === 'end'
+        ? 'Pick your <strong>last day of classes</strong> (the final teaching day before exams).' + (semStart ? ' Your first day is already filled in.' : '')
+        : '';
+  hint.innerHTML = text;
+  hint.hidden = !text;
+  document.querySelectorAll('#sem-overlay .mf').forEach(el => el.classList.toggle('sem-asked', !!field && !!el.querySelector('#' + field)));
   semesterPreview();
   ov.classList.add('show');
+  if (field) setTimeout(() => document.getElementById(field).focus(), 60);
 }
 function closeSemesterDialog() { document.getElementById('sem-overlay').classList.remove('show'); }
 function checkSemester(start, end) {
@@ -2575,18 +2590,20 @@ function updateSim() {
             : 'Already below ' + tgt + '% — that target can\'t be reached anymore.')
         : 'Zero safe bunks. Right at the limit.';
     const end = semEndInfo();
-    const semLink = label => ' <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">' + label + '</button>';
-    if (remaining === null) {
-      if (!end) h += semLink('Add when your semester started') + ' to see where you\'ll end it.';
-      else if (end.estimated && end.date < getLocalDateString()) h += ' Classes have run past ' + semWeeks + ' weeks —' + semLink('set your last day of classes') + ' to see where you\'ll end.';
+    const semLink = (label, focus) => ' <button class="link-btn" style="padding:0" onclick="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
+    if (s.total === 0) {
+      // nothing counted yet: no end-of-semester projection to offer
+    } else if (remaining === null) {
+      if (!end) h += semLink('Add when your semester started', 'start') + ' to see where you\'ll end it.';
+      else if (end.estimated && end.date < getLocalDateString()) h += ' It\'s been over ' + semWeeks + ' weeks since your classes began (' + fmtShort(semStart) + ') —' + semLink('set your last day of classes', 'past') + ' to see where you\'ll end.';
       else if (!timetable.some(t => t.subjectId === s.id && !t.isBreak)) h += ' Put this subject on its class days in the timetable to see where you\'ll end the semester.';
-      else h += semLink('Set your last day of classes') + ' to see where you\'ll end the semester.';
+      else h += semLink('Set your last day of classes', 'end') + ' to see where you\'ll end the semester.';
     } else if (remaining > 0) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
       const about = end && end.estimated ? 'about ' : '';
       if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h += ' <strong style="color:var(--danger)">Only ' + about + remaining + ' class' + (remaining !== 1 ? 'es' : '') + ' are left this semester, so ' + tgt + '% is out of reach</strong> — talk to your department about condonation early.';
       else h += ' If you attend all <strong>' + (about ? '~' : '') + remaining + '</strong> remaining classes, you end the semester at ' + about + '<strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
-      if (end && end.estimated) h += ' <span style="font-size:.85em">(Estimated: classes end around ' + fmtShort(end.date) + ', ' + semWeeks + ' weeks after they began —' + semLink('set the exact last day') + '.)</span>';
+      if (end && end.estimated) h += ' <span style="font-size:.85em">(Estimated: classes end around ' + fmtShort(end.date) + ', ' + semWeeks + ' weeks after they began —' + semLink('set the exact last day', 'end') + '.)</span>';
     }
     document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + h + '</div>';
     return;
