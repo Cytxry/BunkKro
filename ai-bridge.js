@@ -41,10 +41,13 @@
   }
 
   // ── small modal helpers (the app's own overlay / modal / button styles) ──────────────────────────────────────
-  function modal(html, maxWidth) {
+  function modal(html, maxWidth, cat) {
     const overlay = document.createElement('div');
     overlay.className = 'overlay show';
-    overlay.innerHTML = `<div class="modal" style="max-width:${maxWidth || 440}px;max-height:88vh;overflow:auto">${html}</div>`;
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.innerHTML = `<div class="modal modal-center" style="max-width:${maxWidth || 440}px;max-height:88vh;overflow:auto">
+      ${cat ? `<img class="modal-cat" src="assets/${cat}.svg" alt="">` : ''}${html}</div>`;
     document.body.appendChild(overlay);
     return overlay;
   }
@@ -52,15 +55,17 @@
   function choose(title, sub, options, okLabel) {
     return new Promise(resolve => {
       const overlay = modal(`
-        <h2 style="text-align:center">${escapeHtml(title)}</h2>
-        <p class="sub" style="text-align:center">${escapeHtml(sub)}</p>
-        <select id="ai-choice-select" style="width:100%;margin-top:12px;padding:8px">
-          ${options.map((o, i) => `<option value="${i}">${escapeHtml(o.label)}</option>`).join('')}
-        </select>
-        <div class="modal-btns" style="justify-content:center;margin-top:16px">
+        <h2>${escapeHtml(title)}</h2>
+        <p class="sub">${escapeHtml(sub)}</p>
+        <div class="mf" style="text-align:left">
+          <select id="ai-choice-select" aria-label="${escapeHtml(title)}">
+            ${options.map((o, i) => `<option value="${i}">${escapeHtml(o.label)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="modal-btns">
           <button class="btn-sec" data-act="cancel">Cancel</button>
-          <button class="btn-pri" style="background:var(--accent);color:#000" data-act="ok">${escapeHtml(okLabel)}</button>
-        </div>`);
+          <button class="btn-pri" data-act="ok">${escapeHtml(okLabel)}</button>
+        </div>`, 440, 'cat-detective');
       overlay.addEventListener('click', e => {
         const act = e.target.getAttribute && e.target.getAttribute('data-act');
         if (!act) return;
@@ -251,29 +256,29 @@
       <option value="drop">🚫 Not my class (remove)</option>`;
     return new Promise(resolve => {
       const overlay = modal(`
-        <h2 style="text-align:center">Your subjects</h2>
-        <p class="sub" style="text-align:center">BunkKro AI found these classes. Tidy the names once (e.g. drop teacher or room
+        <h2>Your subjects</h2>
+        <p class="sub">BunkKro AI found these classes. Tidy the names once (e.g. drop teacher or room
           text), link them to subjects you already track, or remove classes that are not yours.</p>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;text-align:left">
           ${rows.map(([name, list], i) => {
             const linked = list[0].subjectId;
             const days = [...new Set(list.map(s => DAY_SHORT[s.day]))].join(' ');
             return `
-            <div class="sync-freq-row" style="display:block">
+            <div class="mf" style="border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin:0">
               <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
                 <input data-name="${i}" value="${escapeHtml(linked ? list[0].subjectName : (list[0].aiName || list[0].subjectName || name))}"
-                       style="flex:1;min-width:0;padding:6px;font-size:.8rem" maxlength="60">
-                <span class="sync-freq-badge" title="${escapeHtml(days)}">${list.length} / week</span>
+                       aria-label="Subject name" style="flex:1;min-width:0" maxlength="60">
+                <span class="sync-freq-badge" style="white-space:nowrap" title="${escapeHtml(days)}">${list.length} / week</span>
               </div>
-              <div style="font-size:.62rem;color:var(--muted);margin:4px 0">${escapeHtml(days)} · printed: ${escapeHtml(list[0].rawText || name).slice(0, 90)}</div>
-              <select data-act-row="${i}" style="width:100%;padding:5px;font-size:.75rem">${options(linked ? 'link:' + linked : 'create')}</select>
+              <div style="font-size:.7rem;color:var(--muted);margin:6px 0">${escapeHtml(days)} · printed: ${escapeHtml(list[0].rawText || name).slice(0, 90)}</div>
+              <select data-act-row="${i}" aria-label="What to do with this class">${options(linked ? 'link:' + linked : 'create')}</select>
             </div>`;
           }).join('')}
         </div>
-        <div class="modal-btns" style="justify-content:center;margin-top:16px">
+        <div class="modal-btns">
           <button class="btn-sec" data-act="skip">Skip for now</button>
-          <button class="btn-pri" style="background:var(--accent);color:#000" data-act="ok">Save subjects</button>
-        </div>`, 560);
+          <button class="btn-pri" data-act="ok">Save subjects</button>
+        </div>`, 560, 'cat-books');
       overlay.addEventListener('click', e => {
         const act = e.target.getAttribute && e.target.getAttribute('data-act');
         if (!act) return;
@@ -296,8 +301,8 @@
     if (!el) return;
     const up = await isAvailable(true);
     el.innerHTML = up
-      ? '<span class="eng-pill ok" title="Reads PDFs, photos and scans on this computer">🧠 BunkKro AI on · PDFs &amp; scans supported</span>'
-      : '<span class="eng-pill" title="Double-click start_bunkkro_ai.bat in the BunkKro-AI folder, then upload again">BunkKro AI off · using the built-in scanner</span>';
+      ? '<span class="pill" title="Reads PDFs, photos and scans on this computer">✨ BunkKro AI on · PDFs &amp; scans welcome</span>'
+      : '<span class="pill w" title="Double-click start_bunkkro_ai.bat in the BunkKro-AI folder, then upload again">BunkKro AI off · photos use the built-in scanner</span>';
     const input = document.getElementById('tt-file-input');
     if (input) input.accept = up ? 'image/png, image/jpeg, image/jpg, image/webp, application/pdf' : 'image/png, image/jpeg, image/jpg';
   }
