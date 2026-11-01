@@ -1013,6 +1013,8 @@ let globalTarget = parseInt(localStorage.getItem('bk_global_target') || '75');
 let semStart = localStorage.getItem('bk_sem_start') || '';
 let examDate = localStorage.getItem('bk_exam_date') || '';
 let semEnd = localStorage.getItem('bk_sem_end') || '';   // last day of classes
+// Semester length in weeks, used to estimate the last day of classes when the student only knows the first day
+let semWeeks = (n => (n >= 8 && n <= 30 ? n : 16))(parseInt(localStorage.getItem('bk_sem_weeks') || '16'));
 // subjectId -> 'YYYY-MM-DD': the numbers typed in for that subject already
 // include every class up to and including this day (see "counted up to").
 let countedUpTo = {};
@@ -1036,6 +1038,7 @@ function savePrefs() {
   localStorage.setItem('bk_sem_start', semStart);
   localStorage.setItem('bk_exam_date', examDate);
   localStorage.setItem('bk_sem_end', semEnd);
+  localStorage.setItem('bk_sem_weeks', semWeeks);
   localStorage.setItem('bk_counted_upto', JSON.stringify(countedUpTo));
   localStorage.setItem('bk_streak', streak);
   localStorage.setItem('bk_last_check', lastCheck);
@@ -1051,7 +1054,7 @@ function schedulePrefsSync() {
   if (!currentUser || !supabaseClient?.auth?.updateUser) return;
   clearTimeout(prefsSyncTimer);
   prefsSyncTimer = setTimeout(async () => {
-    const want = { semStart, examDate, semEnd, target: globalTarget };
+    const want = { semStart, examDate, semEnd, semWeeks, target: globalTarget };
     const meta = currentUser?.user_metadata || {};
     if (JSON.stringify(meta.bk_prefs || {}) === JSON.stringify(want) && JSON.stringify(meta.bk_counted_upto || {}) === JSON.stringify(countedUpTo)) return;
     try {
@@ -1073,6 +1076,8 @@ function applyPrefsFromAccount() {
   if (typeof p.semStart === 'string' && (p.semStart === '' || DATE_RE.test(p.semStart))) semStart = p.semStart;
   if (typeof p.examDate === 'string' && (p.examDate === '' || DATE_RE.test(p.examDate))) examDate = p.examDate;
   if (typeof p.semEnd === 'string' && (p.semEnd === '' || DATE_RE.test(p.semEnd))) semEnd = p.semEnd;
+  if (Number.isInteger(p.semWeeks) && p.semWeeks >= 8 && p.semWeeks <= 30) semWeeks = p.semWeeks;
+  localStorage.setItem('bk_sem_weeks', semWeeks);
   const cu = currentUser?.user_metadata?.bk_counted_upto;
   if (cu && typeof cu === 'object') {
     countedUpTo = {};
@@ -1140,6 +1145,15 @@ function weeksSince(dateStr) {
   return Math.max(0, Math.floor((Date.now() - new Date(y, m - 1, d)) / 864e5 / 7));
 }
 function weeksFromStart() { return weeksSince(semStart); }
+
+// The last day of classes used to count what is left: the one the student set, else an estimate from the first day
+// and the semester length (students usually know when classes began, not when they end). null when neither is known.
+function semEndInfo() {
+  if (semEnd && DATE_RE.test(semEnd)) return { date: semEnd, estimated: false };
+  if (!semStart || !DATE_RE.test(semStart)) return null;
+  const [y, m, d] = semStart.split('-').map(Number);
+  return { date: getLocalDateString(new Date(y, m - 1, d + semWeeks * 7 - 1)), estimated: true };
+}
 function estimateTotalFrom(start, pw) { return Math.round(weeksSince(start) * (pw || 0)); }
 function estimateTotal(pw) { return estimateTotalFrom(semStart, pw); }
 // With known class days: count the real class days from the semester start up
@@ -1266,7 +1280,8 @@ function toggleSidebar() {
 function renderNav() {
   document.getElementById('global-target').value = globalTarget;
   const sl = document.getElementById('sem-link-text');
-  if (sl) sl.textContent = semStart && semEnd ? `Semester: ${fmtShort(semStart)} – ${fmtShort(semEnd)}` : semStart ? `Semester from ${fmtShort(semStart)}` : 'Set semester dates';
+  if (sl) sl.textContent = semStart && semEnd ? `Semester: ${fmtShort(semStart)} – ${fmtShort(semEnd)}`
+    : semStart ? `Semester: ${fmtShort(semStart)} – ~${fmtShort(semEndInfo().date)}` : 'Set semester dates';
   document.getElementById('nav-subjects').innerHTML = subjects.map((s, i) => {
     const risk = isAtRisk(s);
     const active = currPage === 'subject' && currSubjId === s.id ? ' active' : '';
@@ -2187,6 +2202,7 @@ function describeDayPlan(plan) {
 function openSemesterDialog() {
   document.getElementById('sem-start').value = semStart || '';
   document.getElementById('sem-end').value = semEnd || '';
+  document.getElementById('sem-weeks').value = String(semWeeks);
   const ov = document.getElementById('sem-overlay');
   if (!ov.dataset.wired) { ov.dataset.wired = '1'; ov.addEventListener('input', semesterPreview); }
   semesterPreview();
@@ -2209,12 +2225,21 @@ function semesterPreview() {
   box.classList.toggle('is-error', !!err);
   if (err) { box.textContent = err; return; }
   const today = getLocalDateString();
+  const weeks = parseInt(document.getElementById('sem-weeks').value) || 16;
+  document.getElementById('sem-weeks-wrap').hidden = !!end;     // the length only matters while the last day is unknown
   const bits = [];
   if (start) bits.push(`Week ${Math.floor(weeksSince(start)) + 1} of the semester`);
-  if (end) {
-    const [y, m, d] = end.split('-').map(Number);
+  let last = end, estimated = false;
+  if (!end && start) {
+    const [y, m, d] = start.split('-').map(Number);
+    last = getLocalDateString(new Date(y, m - 1, d + weeks * 7 - 1));
+    estimated = true;
+  }
+  if (last) {
+    const [y, m, d] = last.split('-').map(Number);
     const days = Math.ceil((new Date(y, m - 1, d) - new Date(today.replace(/-/g, '/'))) / 864e5);
-    bits.push(days >= 0 ? `${days} day${days !== 1 ? 's' : ''} of classes left` : 'classes have ended');
+    if (estimated) bits.push(days >= 0 ? `last day around ${fmtDate(last)} (estimated)` : `past ${weeks} weeks already — set the last day`);
+    else bits.push(days >= 0 ? `${days} day${days !== 1 ? 's' : ''} of classes left` : 'classes have ended');
   }
   box.textContent = bits.join(' · ');
 }
@@ -2223,6 +2248,7 @@ function saveSemesterDialog() {
   const err = checkSemester(start, end);
   if (err) { semesterPreview(); return; }
   semStart = start; semEnd = end;
+  semWeeks = parseInt(document.getElementById('sem-weeks').value) || semWeeks;
   savePrefs();
   closeSemesterDialog();
   renderNav();
@@ -2234,14 +2260,16 @@ function saveSemesterDialog() {
 // today to the last day of classes (swaps, makeups and holidays included).
 // Falls back to "classes in the whole semester" when that was entered.
 function remainingClasses(s) {
-  if (semEnd && timetable.some(t => t.subjectId === s.id && !t.isBreak)) {
-    const today = getLocalDateString();
-    if (semEnd < today) return 0;
+  const end = semEndInfo();
+  const today = getLocalDateString();
+  // an estimated last day already behind us says nothing (the semester ran longer than the usual length)
+  if (end && !(end.estimated && end.date < today) && timetable.some(t => t.subjectId === s.id && !t.isBreak)) {
+    if (end.date < today) return 0;
     const day = new Date();
     let n = 0;
     for (let i = 0; i < 400; i++, day.setDate(day.getDate() + 1)) {
       const ds = getLocalDateString(day);
-      if (ds > semEnd) break;
+      if (ds > end.date) break;
       if (dateExceptions[ds]?.type === 'holiday') continue;
       n += getAllClassesForDate(ds).filter(c => c.subjectId === s.id && !c.status && !isPreCounted(c, ds)).length;
     }
@@ -2546,12 +2574,19 @@ function updateSim() {
             ? 'Already below ' + tgt + '%. Attend the next <strong>' + nd0 + '</strong> class' + (nd0 !== 1 ? 'es' : '') + ' to get back.'
             : 'Already below ' + tgt + '% — that target can\'t be reached anymore.')
         : 'Zero safe bunks. Right at the limit.';
+    const end = semEndInfo();
+    const semLink = label => ' <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">' + label + '</button>';
     if (remaining === null) {
-      h += ' <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">Set your last day of classes</button> to see where you\'ll end the semester.';
+      if (!end) h += semLink('Add when your semester started') + ' to see where you\'ll end it.';
+      else if (end.estimated && end.date < getLocalDateString()) h += ' Classes have run past ' + semWeeks + ' weeks —' + semLink('set your last day of classes') + ' to see where you\'ll end.';
+      else if (!timetable.some(t => t.subjectId === s.id && !t.isBreak)) h += ' Put this subject on its class days in the timetable to see where you\'ll end the semester.';
+      else h += semLink('Set your last day of classes') + ' to see where you\'ll end the semester.';
     } else if (remaining > 0) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
-      if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h += ' <strong style="color:var(--danger)">Only ' + remaining + ' class' + (remaining !== 1 ? 'es' : '') + ' are left this semester, so ' + tgt + '% is out of reach</strong> — talk to your department about condonation early.';
-      else h += ' If you attend all <strong>' + remaining + '</strong> remaining classes, you end the semester at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
+      const about = end && end.estimated ? 'about ' : '';
+      if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h += ' <strong style="color:var(--danger)">Only ' + about + remaining + ' class' + (remaining !== 1 ? 'es' : '') + ' are left this semester, so ' + tgt + '% is out of reach</strong> — talk to your department about condonation early.';
+      else h += ' If you attend all <strong>' + (about ? '~' : '') + remaining + '</strong> remaining classes, you end the semester at ' + about + '<strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
+      if (end && end.estimated) h += ' <span style="font-size:.85em">(Estimated: classes end around ' + fmtShort(end.date) + ', ' + semWeeks + ' weeks after they began —' + semLink('set the exact last day') + '.)</span>';
     }
     document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + h + '</div>';
     return;
@@ -4468,7 +4503,7 @@ function buildPack() {
   const idx = new Map(subjects.map((s, i) => [s.id, i]));
   return {
     app: 'bunkkro', kind: 'class-pack', version: 1, exportedAt: new Date().toISOString(),
-    semester: { start: semStart || '', end: semEnd || '', examDate: examDate || '', target: globalTarget },
+    semester: { start: semStart || '', end: semEnd || '', weeks: semWeeks, examDate: examDate || '', target: globalTarget },
     subjects: subjects.map(s => ({
       name: s.name, code: s.code || '', perWeek: s.perWeek || 0,
       target: s.target || null, semTotal: s.semTotal || null,
@@ -4721,6 +4756,7 @@ async function confirmImportPack() {
     if (document.getElementById('pack-use-sem')?.checked) {
       if (p.semester.start) semStart = p.semester.start;
       if (p.semester.end) semEnd = p.semester.end;
+      if (Number.isInteger(p.semester.weeks) && p.semester.weeks >= 8 && p.semester.weeks <= 30) semWeeks = p.semester.weeks;
       if (p.semester.examDate) examDate = p.semester.examDate;
       if (p.semester.target) globalTarget = p.semester.target;
       savePrefs();

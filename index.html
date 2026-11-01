@@ -616,7 +616,15 @@
       <div class="mf"><label for="sem-start">First day of classes</label><input type="date" id="sem-start"></div>
       <div class="mf"><label for="sem-end">Last day of classes</label><input type="date" id="sem-end"></div>
     </div>
-    <p class="field-tip">Last day = the final teaching day before exams. Leave blank if you don't know yet.</p>
+    <p class="field-tip">Last day = the final teaching day before exams. Don't know it yet? Leave it blank and BunkKro estimates it from when classes began.</p>
+    <div class="mf" id="sem-weeks-wrap">
+      <label for="sem-weeks">Classes usually run for</label>
+      <select id="sem-weeks">
+        <option value="12">12 weeks</option><option value="14">14 weeks</option><option value="15">15 weeks</option>
+        <option value="16">16 weeks (most semesters)</option><option value="17">17 weeks</option><option value="18">18 weeks</option>
+        <option value="20">20 weeks</option><option value="22">22 weeks</option><option value="26">26 weeks (a year term)</option>
+      </select>
+    </div>
     <div class="form-preview" id="sem-preview" aria-live="polite"></div>
     <div class="modal-btns">
       <button class="btn-sec" onclick="closeSemesterDialog()">Cancel</button>
