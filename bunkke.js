@@ -1971,7 +1971,7 @@ function renderSubject(id, preserveSim) {
         ? `Real talk: only <strong>${ab}${left}</strong> class${left !== 1 ? 'es' : ''} left this semester. Even if you show up to every single one, you max out at ${mxs}. ${tgt}% is gone. So stop doing math, attend everything, and talk to your department about condonation early.${remainingNote(li, s)}`
         : left !== null
         ? `You need <strong>${nd} classes in a row</strong> to get back to ${tgt}% — you've got ${ab}${left} left, so it's doable. Attend every one from here and you end the sem at ${mxs}. No bunks. None. Zero. Go.${remainingNote(li, s)}`
-        : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${nd > s.total ? ` That's more classes than you've had all semester so far — <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">set your semester dates</button> to see if it's even possible.` : ''} No bunks. None. Zero. Go.`;
+        : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${nd > s.total ? ` That's more classes than you've had all semester so far — <button class="link-btn" style="padding:0" onclick="openEditCard()">add the days it's on</button> to see if it's still possible.` : ''} No bunks. None. Zero. Go.`;
   } else {
     pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
     advText = p === tgt
@@ -2297,19 +2297,31 @@ function remainingInfo(s) {
     return { n, est: end.estimated, guess: false };
   }
   if (s.semTotal && s.semTotal > s.total) return { n: s.semTotal - s.total, est: false, guess: false };
-  // No dates: a semester is about semWeeks weeks of this subject's classes, minus the ones already held
+  // No usable dates (none, or a first day from an old semester): a semester is about semWeeks weeks of this
+  // subject's classes, minus the ones already held
   const pw = weeklyCount(s);
-  if (!end && pw > 0 && Math.round(semWeeks * pw) > s.total) return { n: Math.round(semWeeks * pw) - s.total, est: true, guess: true };
+  const stale = !!end && end.estimated && end.date < today;
+  if ((!end || stale) && pw > 0 && Math.round(semWeeks * pw) > s.total)
+    return { n: Math.round(semWeeks * pw) - s.total, est: true, guess: true, stale };
   return null;
 }
 function remainingClasses(s) { return remainingInfo(s)?.n ?? null; }
+function openEditCard() {
+  const card = document.getElementById('edit-card');
+  if (!card) return;
+  card.open = true;
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 // Small print under an estimated count, with a link to set the real dates
 function remainingNote(info, s) {
   if (!info?.est) return '';
   const link = (label, focus) => '<button class="link-btn" style="padding:0" onclick="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
   const end = semEndInfo();
-  return ' <span style="font-size:.85em;color:var(--muted)">(' + (info.guess
-    ? 'Estimated from a ' + semWeeks + '-week semester at ' + weeklyCount(s) + ' class' + (weeklyCount(s) !== 1 ? 'es' : '') + '/week — ' + link('set your semester dates', 'start') + ' for the real number.'
+  const perWeek = weeklyCount(s) + ' class' + (weeklyCount(s) !== 1 ? 'es' : '') + '/week';
+  return ' <span style="font-size:.85em;color:var(--muted)">(' + (info.guess && info.stale
+    ? 'Estimated from a ' + semWeeks + '-week semester at ' + perWeek + '. Your saved first day (' + fmtShort(semStart) + ') looks like an old semester — ' + link('update it', 'start') + ' for the real number.'
+    : info.guess
+    ? 'Estimated from a ' + semWeeks + '-week semester at ' + perWeek + ' — ' + link('set your semester dates', 'start') + ' for the real number.'
     : 'Estimated: classes end around ' + fmtShort(end.date) + ', ' + semWeeks + ' weeks after they began — ' + link('set the exact last day', 'end') + '.') + ')</span>';
 }
 
@@ -2642,7 +2654,7 @@ function updateSim() {
     : !safe && extraNd > 0 && leftAfter !== null
     ? ` Getting back takes <strong>${extraNd} straight classes</strong> — you'd have ${ab}${leftAfter} left, so it's doable. Attend every one and you end the sem at ${eosStr}.`
     : !safe && extraNd > 0 && leftAfter === null && extraNd > s.total
-    ? ` Recovering would take <strong>${extraNd} straight classes</strong> — more than you've had all semester.`
+    ? ` Recovering would take <strong>${extraNd} straight classes</strong> — more than you've had all semester. <button class="link-btn" style="padding:0" onclick="openEditCard()">Add the days it's on</button> to see if it's still possible.`
     : !safe && extraNd > 0
     ? pw > 0 ? ` Need <strong>${extraNd} straight classes</strong> to recover — ~${wks(Math.ceil(extraNd/pw))}.`
              : ` Need <strong>${extraNd} consecutive</strong> to recover.`
