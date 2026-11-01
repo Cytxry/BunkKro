@@ -20,7 +20,21 @@
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const cancelled = msg => Object.assign(new Error(msg), { cancelled: true });
 
+  // Only this computer's owner looks for the local AI: the site opened locally, or opted in once with ?ai=1
+  // (?ai=0 turns it off). Other visitors' browsers never probe their own localhost (no "access local devices"
+  // prompts, no console errors) and simply use the built-in scanner.
+  function enabled() {
+    try {
+      const q = new URLSearchParams(location.search).get('ai');
+      if (q === '1') localStorage.setItem('bk_local_ai', '1');
+      if (q === '0') localStorage.removeItem('bk_local_ai');
+      if (localStorage.getItem('bk_local_ai') === '1') return true;
+    } catch (e) { /* storage blocked: fall through to the host check */ }
+    return location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  }
+
   async function isAvailable(force) {
+    if (!enabled()) return false;
     if (!force && available !== null && Date.now() - checkedAt < 15000) return available;
     try {
       const ctl = new AbortController();
@@ -299,6 +313,7 @@
   async function showStatus() {
     const el = document.getElementById('tt-ai-status');
     if (!el) return;
+    if (!enabled()) { el.innerHTML = ''; return; }        // visitors see the upload card exactly as before
     const up = await isAvailable(true);
     el.innerHTML = up
       ? '<span class="pill" title="Reads PDFs, photos and scans on this computer">✨ BunkKro AI on · PDFs &amp; scans welcome</span>'
@@ -309,5 +324,5 @@
 
   window.BunkKroAI = { isAvailable, read, reviewSubjects, issues, BASE };
   showStatus();
-  setInterval(showStatus, 10000);
+  if (enabled()) setInterval(showStatus, 10000);
 })();
