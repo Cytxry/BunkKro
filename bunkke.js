@@ -1963,11 +1963,12 @@ function renderSubject(id, preserveSim) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
     const wk = weeklyCount(s) > 0 ? ` That's about ${Math.ceil(nd/weeklyCount(s))} weeks of showing up.` : '';
     const left = remainingClasses(s);
+    const mx = left !== null ? attPct(s.present + left, s.total + left) : null;
     advText = !isFinite(nd)
       ? `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`
       : left !== null && nd > left
-        ? `You'd need <strong>${nd} classes in a row</strong>, but only <strong>${left}</strong> ${left !== 1 ? 'are' : 'is'} left this semester — ${tgt}% is out of reach. Attend everything and talk to your department about condonation early.`
-        : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${left !== null ? ` ${left} class${left !== 1 ? 'es' : ''} left this semester.` : ''} No bunks. None. Zero. Go.`;
+        ? `Real talk: only <strong>${left}</strong> class${left !== 1 ? 'es' : ''} left this semester. Even if you show up to every single one, you max out at <strong style="color:${pctTextColor(mx, tgt)}">${mx}%</strong>. ${tgt}% is gone. So stop doing math, attend everything, and talk to your department about condonation early.`
+        : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${left !== null ? ` ${left} class${left !== 1 ? 'es' : ''} left this semester.` : nd > s.total ? ` That's more classes than you've had all semester so far — <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">set your semester dates</button> to see if it's even possible.` : ''} No bunks. None. Zero. Go.`;
   } else {
     pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
     advText = p === tgt
@@ -2601,7 +2602,7 @@ function updateSim() {
     } else if (remaining > 0) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
       const about = end && end.estimated ? 'about ' : '';
-      if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h += ' <strong style="color:var(--danger)">Only ' + about + remaining + ' class' + (remaining !== 1 ? 'es' : '') + ' are left this semester, so ' + tgt + '% is out of reach</strong> — talk to your department about condonation early.';
+      if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h = 'Only ' + about + '<strong>' + remaining + '</strong> class' + (remaining !== 1 ? 'es' : '') + ' left. Attend every single one and you still max out at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + about + projEndPct + '%</strong> — ' + tgt + '% is off the table. Nothing to simulate here. Shut up and attend, then go talk condonation.';
       else h += ' If you attend all <strong>' + (about ? '~' : '') + remaining + '</strong> remaining classes, you end the semester at ' + about + '<strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
       if (end && end.estimated) h += ' <span style="font-size:.85em">(Estimated: classes end around ' + fmtShort(end.date) + ', ' + semWeeks + ' weeks after they began —' + semLink('set the exact last day', 'end') + '.)</span>';
     }
@@ -2612,7 +2613,13 @@ function updateSim() {
   const wks = n => `${n} week${n !== 1 ? 's' : ''}`;
   const wkCtx = pw > 0 ? ` (~${wks(Math.round(plan / pw * 10) / 10)} of classes)` : '';
   const extraNd = safe ? 0 : needed({total:projTotal,present:s.present}, tgt);
+  const remainingNow = remainingClasses(s);
+  const leftAfter = remainingNow !== null ? Math.max(0, remainingNow - plan) : null;
   const recovCtx = !safe && !isFinite(extraNd) ? ` A ${tgt}% target can't be recovered after a bunk.`
+    : !safe && extraNd > 0 && leftAfter !== null && extraNd > leftAfter
+    ? ` Recovering would take <strong>${extraNd} straight classes</strong>, but only ${leftAfter} would be left. Not happening.`
+    : !safe && extraNd > 0 && leftAfter === null && extraNd > s.total
+    ? ` Recovering would take <strong>${extraNd} straight classes</strong> — more than you've had all semester.`
     : !safe && extraNd > 0
     ? pw > 0 ? ` Need <strong>${extraNd} straight classes</strong> to recover — ~${wks(Math.ceil(extraNd/pw))}.`
              : ` Need <strong>${extraNd} consecutive</strong> to recover.`
@@ -2622,7 +2629,6 @@ function updateSim() {
  
   // End-of-semester projection: skip `plan` classes, attend every other class left
   let eosCtx = '';
-  const remainingNow = remainingClasses(s);
   if (remainingNow) {
     const remainAfterBunks = Math.max(0, remainingNow - plan);
     const eosPct = attPct(s.present + remainAfterBunks, s.total + plan + remainAfterBunks);
