@@ -1962,13 +1962,16 @@ function renderSubject(id, preserveSim) {
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
     const wk = weeklyCount(s) > 0 ? ` That's about ${Math.ceil(nd/weeklyCount(s))} weeks of showing up.` : '';
-    const left = remainingClasses(s);
+    const li = remainingInfo(s), left = li ? li.n : null, ab = li?.est ? '~' : '';
     const mx = left !== null ? attPct(s.present + left, s.total + left) : null;
+    const mxs = mx !== null ? `<strong style="color:${pctTextColor(mx, tgt)}">${ab}${mx}%</strong>` : '';
     advText = !isFinite(nd)
       ? `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`
       : left !== null && nd > left
-        ? `Real talk: only <strong>${left}</strong> class${left !== 1 ? 'es' : ''} left this semester. Even if you show up to every single one, you max out at <strong style="color:${pctTextColor(mx, tgt)}">${mx}%</strong>. ${tgt}% is gone. So stop doing math, attend everything, and talk to your department about condonation early.`
-        : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${left !== null ? ` ${left} class${left !== 1 ? 'es' : ''} left this semester.` : nd > s.total ? ` That's more classes than you've had all semester so far — <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">set your semester dates</button> to see if it's even possible.` : ''} No bunks. None. Zero. Go.`;
+        ? `Real talk: only <strong>${ab}${left}</strong> class${left !== 1 ? 'es' : ''} left this semester. Even if you show up to every single one, you max out at ${mxs}. ${tgt}% is gone. So stop doing math, attend everything, and talk to your department about condonation early.${remainingNote(li, s)}`
+        : left !== null
+        ? `You need <strong>${nd} classes in a row</strong> to get back to ${tgt}% — you've got ${ab}${left} left, so it's doable. Attend every one from here and you end the sem at ${mxs}. No bunks. None. Zero. Go.${remainingNote(li, s)}`
+        : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${nd > s.total ? ` That's more classes than you've had all semester so far — <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">set your semester dates</button> to see if it's even possible.` : ''} No bunks. None. Zero. Go.`;
   } else {
     pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
     advText = p === tgt
@@ -2275,12 +2278,14 @@ function saveSemesterDialog() {
 // Classes still to come for a subject this semester: real class days from
 // today to the last day of classes (swaps, makeups and holidays included).
 // Falls back to "classes in the whole semester" when that was entered.
-function remainingClasses(s) {
+// { n, est, guess }: est = the count is approximate; guess = it comes from the
+// semester length x classes per week, because no semester dates are set.
+function remainingInfo(s) {
   const end = semEndInfo();
   const today = getLocalDateString();
   // an estimated last day already behind us says nothing (the semester ran longer than the usual length)
   if (end && !(end.estimated && end.date < today) && timetable.some(t => t.subjectId === s.id && !t.isBreak)) {
-    if (end.date < today) return 0;
+    if (end.date < today) return { n: 0, est: false, guess: false };
     const day = new Date();
     let n = 0;
     for (let i = 0; i < 400; i++, day.setDate(day.getDate() + 1)) {
@@ -2289,10 +2294,23 @@ function remainingClasses(s) {
       if (dateExceptions[ds]?.type === 'holiday') continue;
       n += getAllClassesForDate(ds).filter(c => c.subjectId === s.id && !c.status && !isPreCounted(c, ds)).length;
     }
-    return n;
+    return { n, est: end.estimated, guess: false };
   }
-  if (s.semTotal && s.semTotal > s.total) return s.semTotal - s.total;
+  if (s.semTotal && s.semTotal > s.total) return { n: s.semTotal - s.total, est: false, guess: false };
+  // No dates: a semester is about semWeeks weeks of this subject's classes, minus the ones already held
+  const pw = weeklyCount(s);
+  if (!end && pw > 0 && Math.round(semWeeks * pw) > s.total) return { n: Math.round(semWeeks * pw) - s.total, est: true, guess: true };
   return null;
+}
+function remainingClasses(s) { return remainingInfo(s)?.n ?? null; }
+// Small print under an estimated count, with a link to set the real dates
+function remainingNote(info, s) {
+  if (!info?.est) return '';
+  const link = (label, focus) => '<button class="link-btn" style="padding:0" onclick="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
+  const end = semEndInfo();
+  return ' <span style="font-size:.85em;color:var(--muted)">(' + (info.guess
+    ? 'Estimated from a ' + semWeeks + '-week semester at ' + weeklyCount(s) + ' class' + (weeklyCount(s) !== 1 ? 'es' : '') + '/week — ' + link('set your semester dates', 'start') + ' for the real number.'
+    : 'Estimated: classes end around ' + fmtShort(end.date) + ', ' + semWeeks + ' weeks after they began — ' + link('set the exact last day', 'end') + '.') + ')</span>';
 }
 
 // ── Edit subject ──
@@ -2580,7 +2598,7 @@ function updateSim() {
   const bk_now = Math.max(0, Math.floor(s.present*100/tgt) - s.total);
  
   if (plan === 0) {
-    const remaining = remainingClasses(s);
+    const ri = remainingInfo(s), remaining = ri ? ri.n : null;
     const nd0 = needed(s, tgt);
     let h = bk_now > 0
       ? 'Can safely skip <strong>' + bk_now + '</strong> more.' + (pw>0 ? ' ~' + (bk_now/pw).toFixed(1) + ' weeks worth.' : '')
@@ -2601,10 +2619,10 @@ function updateSim() {
       else h += semLink('Set your last day of classes', 'end') + ' to see where you\'ll end the semester.';
     } else if (remaining > 0) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
-      const about = end && end.estimated ? 'about ' : '';
+      const about = ri.est ? 'about ' : '';
       if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h = 'Only ' + about + '<strong>' + remaining + '</strong> class' + (remaining !== 1 ? 'es' : '') + ' left. Attend every single one and you still max out at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + about + projEndPct + '%</strong> — ' + tgt + '% is off the table. Nothing to simulate here. Shut up and attend, then go talk condonation.';
       else h += ' If you attend all <strong>' + (about ? '~' : '') + remaining + '</strong> remaining classes, you end the semester at ' + about + '<strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
-      if (end && end.estimated) h += ' <span style="font-size:.85em">(Estimated: classes end around ' + fmtShort(end.date) + ', ' + semWeeks + ' weeks after they began —' + semLink('set the exact last day', 'end') + '.)</span>';
+      h += remainingNote(ri, s);
     }
     document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + h + '</div>';
     return;
@@ -2613,11 +2631,20 @@ function updateSim() {
   const wks = n => `${n} week${n !== 1 ? 's' : ''}`;
   const wkCtx = pw > 0 ? ` (~${wks(Math.round(plan / pw * 10) / 10)} of classes)` : '';
   const extraNd = safe ? 0 : needed({total:projTotal,present:s.present}, tgt);
-  const remainingNow = remainingClasses(s);
-  const leftAfter = remainingNow !== null ? Math.max(0, remainingNow - plan) : null;
+  const ri = remainingInfo(s), remainingNow = ri ? ri.n : null, ab = ri?.est ? '~' : '';
+  if (remainingNow !== null && plan > remainingNow) {
+    document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">Bro, there ' + (remainingNow !== 1 ? 'are' : 'is') + ' only ' + ab + '<strong>' + remainingNow + '</strong> class' + (remainingNow !== 1 ? 'es' : '') + ' left this semester. You can\'t bunk ' + plan + '.' + remainingNote(ri, s) + '</div>';
+    return;
+  }
+  const leftAfter = remainingNow !== null ? remainingNow - plan : null;
+  // End of semester: skip `plan` classes, attend every other class left
+  const eosPct = leftAfter !== null ? attPct(s.present + leftAfter, projTotal + leftAfter) : null;
+  const eosStr = eosPct !== null ? '<strong style="color:' + pctTextColor(eosPct, tgt) + '">' + ab + eosPct + '%</strong>' : '';
   const recovCtx = !safe && !isFinite(extraNd) ? ` A ${tgt}% target can't be recovered after a bunk.`
     : !safe && extraNd > 0 && leftAfter !== null && extraNd > leftAfter
-    ? ` Recovering would take <strong>${extraNd} straight classes</strong>, but only ${leftAfter} would be left. Not happening.`
+    ? ` Getting back to ${tgt}% would take <strong>${extraNd} straight classes</strong>, but only ${ab}${leftAfter} would be left. Attend all of them anyway and you end the sem at ${eosStr}.`
+    : !safe && extraNd > 0 && leftAfter !== null
+    ? ` Getting back takes <strong>${extraNd} straight classes</strong> — you'd have ${ab}${leftAfter} left, so it's doable. Attend every one and you end the sem at ${eosStr}.`
     : !safe && extraNd > 0 && leftAfter === null && extraNd > s.total
     ? ` Recovering would take <strong>${extraNd} straight classes</strong> — more than you've had all semester.`
     : !safe && extraNd > 0
@@ -2627,13 +2654,7 @@ function updateSim() {
  
   const reaction = getSimReaction(plan, bk_now, safe, projPct, tgt, subjRoastSeed(s));
  
-  // End-of-semester projection: skip `plan` classes, attend every other class left
-  let eosCtx = '';
-  if (remainingNow) {
-    const remainAfterBunks = Math.max(0, remainingNow - plan);
-    const eosPct = attPct(s.present + remainAfterBunks, s.total + plan + remainAfterBunks);
-    eosCtx = ' Attend the rest and you end the sem at <strong style="color:' + pctTextColor(eosPct, tgt) + '">' + eosPct + '%</strong>.';
-  }
+  let eosCtx = (safe && eosPct !== null && leftAfter > 0 ? ' Attend the rest and you end the sem at ' + eosStr + '.' : '') + remainingNote(ri, s);
  
   let icon, verdict;
   if (safe && plan <= bk_now) {
