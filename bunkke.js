@@ -3001,12 +3001,15 @@ function checkEngineStatus() {
 setInterval(checkEngineStatus, 2000);
 setTimeout(checkEngineStatus, 500);
 
-function handleTimetableFileUpload(file) {
+async function handleTimetableFileUpload(file) {
   if (!file) return;
 
   const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
-  if (!validTypes.includes(file.type)) {
-    toast('Please upload a valid PNG or JPG image', 'err');
+  // the local BunkKro AI server (ai-bridge.js) also reads PDFs and other image formats
+  const aiTypes = ['application/pdf', 'image/webp', 'image/bmp', 'image/tiff'];
+  const aiUp = window.BunkKroAI ? await BunkKroAI.isAvailable() : false;
+  if (!validTypes.includes(file.type) && !(aiUp && aiTypes.includes(file.type))) {
+    toast(aiUp ? 'Please upload a PDF or an image' : 'Please upload a valid PNG or JPG image', 'err');
     return;
   }
 
@@ -3018,6 +3021,58 @@ function handleTimetableFileUpload(file) {
   }
 
   processTimetableImage(file);
+}
+
+// Applies the student's choices from the BunkKro AI subjects step: creates new subjects (with the weekly count the
+// timetable gives them), links classes to existing subjects, drops classes that are not theirs, and renumbers periods.
+async function applyAiSubjectPlan(slots, plan) {
+  const dropped = new Set();
+  let created = 0;
+  let canCreate = !!currentUser && isOnline();
+  if (!canCreate && plan.some(g => g.action === 'create')) {
+    toast('Log in (and be online) to create subjects — names are kept on the timetable for now', 'err');
+  }
+  for (const g of plan) {
+    if (g.action === 'drop') {
+      g.slots.forEach(s => dropped.add(s.id));
+      continue;
+    }
+    let subjectId = null;
+    let name = g.name;
+    if (g.action === 'link') {
+      const s = subjects.find(x => x.id === g.subjectId);
+      if (s) { subjectId = s.id; name = s.name; }
+    } else if (g.action === 'create' && canCreate) {
+      const existing = subjects.find(x => x.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        subjectId = existing.id;
+      } else if (await addSubject({ name, code: name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() + '101',
+                                     perWeek: g.slots.length, total: 0, present: 0 })) {
+        subjectId = subjects[subjects.length - 1].id;
+        created++;
+      }
+    }
+    g.slots.forEach(s => {
+      s.subjectId = subjectId;
+      s.subjectName = name;
+      s.matchConfidence = subjectId ? 'confirmed' : 'none';
+    });
+  }
+  const kept = slots.filter(s => !dropped.has(s.id));
+  for (let d = 1; d <= 7; d++) {
+    kept.filter(s => s.day === d)
+      .sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99') || a.period - b.period)
+      .forEach((s, i) => { s.period = i + 1; });
+  }
+  // a class at the same time as another is no longer in doubt once the other one was removed
+  kept.forEach(s => {
+    if (s.overlapsAnotherClass && !kept.some(o => o !== s && o.day === s.day && !o.isBreak && o.startTime &&
+        o.startTime < (s.endTime || s.startTime) && s.startTime < (o.endTime || o.startTime))) {
+      s.overlapsAnotherClass = false;
+    }
+  });
+  if (created) toast(`Created ${created} subject${created > 1 ? 's' : ''} from your timetable ✓`);
+  return kept;
 }
 
 function closeTtConfirmModal() {
@@ -3064,6 +3119,60 @@ async function processTimetableImage(file) {
   currentScannedImageBlob = file;
   const progressBox = document.getElementById('ocr-progress-box');
   if (progressBox) progressBox.style.display = 'block';
+
+  // BunkKro AI (local server) first; the in-browser scanner below stays the fallback for images
+  if (window.BunkKroAI && await BunkKroAI.isAvailable()) {
+    try {
+      setScannerPhase('prep', 10, 'Sending the timetable to BunkKro AI on this computer...');
+      const res = await BunkKroAI.read(file, subjects, setScannerPhase);
+      setScannerPhase('valid', 95, 'Review your subjects...');
+      const plan = await BunkKroAI.reviewSubjects(res.slots, subjects);
+      const slots = plan ? await applyAiSubjectPlan(res.slots, plan) : res.slots;
+      // the page itself in the Studio: every period boxed where it was read (double-click a box to inspect it)
+      scannerState.rawImage = null;
+      scannerState.grid = null;
+      scannerState.ocrResult = null;
+      scannerState.preprocessed = res.studio ? { canvas: res.studio.canvas } : null;
+      scannerState.cells = res.studio ? res.studio.cells : [];
+      scannerState.fusedSlots = slots;
+      scannerState.validation = BunkKroAI.issues ? BunkKroAI.issues(slots) : res.validation;
+      scannerState.history = [JSON.parse(JSON.stringify(slots))];
+      scannerState.historyIndex = 0;
+      updateStudioHistoryButtons();
+      timetable = slots;
+      saveTimetableToStorageAndDB();
+      renderTimetable();
+      renderValidationReport();
+      renderStudioCanvas();
+      setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
+      setTimeout(() => {
+        if (progressBox) progressBox.style.display = 'none';
+        const dropzone = document.getElementById('tt-dropzone');
+        const loadedBar = document.getElementById('tt-loaded-bar');
+        const loadedLabel = document.getElementById('tt-loaded-label');
+        if (dropzone) dropzone.style.display = 'none';
+        if (loadedBar) loadedBar.style.display = 'flex';
+        if (loadedLabel && file && file.name) loadedLabel.textContent = file.name;
+      }, 1200);
+      const unsure = slots.filter(s => s.isUncertain && !s.isBreak).length;
+      const classes = slots.filter(s => !s.isBreak).length;
+      toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}`);
+      return;
+    } catch (aiErr) {
+      console.warn('BunkKro AI:', aiErr.message);
+      if (aiErr.cancelled) {                 // the student cancelled a choice: nothing to fall back to
+        if (progressBox) progressBox.style.display = 'none';
+        toast('Upload cancelled');
+        return;
+      }
+      if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+        if (progressBox) progressBox.style.display = 'none';
+        toast('BunkKro AI: ' + aiErr.message, 'err');
+        return;
+      }
+      toast('BunkKro AI: ' + aiErr.message + ' — trying the built-in scanner', 'err');
+    }
+  }
 
   try {
     if (!window.TimetableScanner) {
