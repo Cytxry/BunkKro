@@ -2610,14 +2610,10 @@ function updateSim() {
         : 'Zero safe bunks. Right at the limit.';
     const end = semEndInfo();
     const semLink = (label, focus) => ' <button class="link-btn" style="padding:0" onclick="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
-    if (s.total === 0) {
-      // nothing counted yet: no end-of-semester projection to offer
-    } else if (remaining === null) {
-      if (!end) h += semLink('Add when your semester started', 'start') + ' to see where you\'ll end it.';
-      else if (end.estimated && end.date < getLocalDateString()) h += ' It\'s been over ' + semWeeks + ' weeks since your classes began (' + fmtShort(semStart) + ') —' + semLink('set your last day of classes', 'past') + ' to see where you\'ll end.';
-      else if (!timetable.some(t => t.subjectId === s.id && !t.isBreak)) h += ' Put this subject on its class days in the timetable to see where you\'ll end the semester.';
-      else h += semLink('Set your last day of classes', 'end') + ' to see where you\'ll end the semester.';
-    } else if (remaining > 0) {
+    // The advice above needs only the classes counted so far. Where the semester ENDS is an extra, shown only when
+    // the classes still to come are known (last day of classes, or one estimated from the first day, or the
+    // semester's class count); otherwise the card does not ask for more dates.
+    if (s.total > 0 && remaining > 0) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
       const about = ri.est ? 'about ' : '';
       if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h = 'Only ' + about + '<strong>' + remaining + '</strong> class' + (remaining !== 1 ? 'es' : '') + ' left. Attend every single one and you still max out at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + about + projEndPct + '%</strong> — ' + tgt + '% is off the table. Nothing to simulate here. Shut up and attend, then go talk condonation.';
