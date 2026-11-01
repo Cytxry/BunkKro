@@ -1005,6 +1005,65 @@ function stablePick(arr, seed) {
   return arr[(h >>> 0) % arr.length];
 }
 function randToast(type) { return randFrom(TOAST_MSGS[type] || ['Done.']); }
+
+// End-of-semester lines for the Bunk Advisor and Simulator. Each situation has several ways to say the same
+// numbers; the pick is stable for the same numbers on one visit (COPY_SALT changes per page load), so the card
+// does not flicker while you look at it but reads fresh next time, and the Simulator line moves as you skip more.
+const COPY_SALT = Math.random().toString(36).slice(2, 8);
+const semB = x => '<strong>' + x + '</strong>';
+const SEM_COPY = {
+  // d: {left, max (html), tgt, ab ('~' or '')}
+  advLost: [
+    d => `Real talk: only ${semB(d.ab + d.left)} class${d.left !== 1 ? 'es' : ''} left this sem. Even a perfect streak tops out at ${d.max}. ${d.tgt}% has left the chat — attend everything and start the condonation talk early.`,
+    d => `Math check: ${d.ab}${d.left} classes to go, best case ${d.max}. ${d.tgt}% isn't happening this semester. Damage-control mode: show up to every single one.`,
+    d => `Bad news first: ${d.tgt}% is out of reach — ${semB(d.ab + d.left)} classes left, ceiling ${d.max}. Good news: every class still pushes you up. Front row till the last day.`,
+    d => `The semester has about ${d.left} classes left, and ${d.tgt}% needs more than that. Your max is ${d.max}. Don't wait for exam week — talk to your department about condonation now.`,
+  ],
+  // d: {nd, left, end (html), tgt, ab, tight}
+  advDoable: [
+    d => `You need ${semB(d.nd + ' classes in a row')} to get back to ${d.tgt}% — with ${d.ab}${d.left} left, ${d.tight ? 'it\'s tight but doable' : 'that\'s very doable'}. Attend them all and you finish around ${d.end}.`,
+    d => `Comeback arc unlocked: ${semB(d.nd + ' straight')} puts you back at ${d.tgt}%. ${d.ab}${d.left} classes to go — a perfect run ends the sem at ${d.end}.`,
+    d => `${d.nd} classes, zero bunks, and you're back above ${d.tgt}%.${d.tight ? ' Not much room for slip-ups.' : ''} Show up to all ${d.ab}${d.left} that are left and you close at ${d.end}.`,
+    d => `It's recoverable. Hit the next ${semB(d.nd)} without missing and you're at ${d.tgt}%; keep it going for all ${d.ab}${d.left} and you end near ${d.end}.`,
+  ],
+  // d: {left, max, tgt, ab}
+  simLost: [
+    d => `Only ${semB(d.ab + d.left)} classes left, and even all of them cap you at ${d.max}. There's nothing to bunk here — just attend.`,
+    d => `Simulator's on strike: ${d.ab}${d.left} classes to go, best finish ${d.max}. ${d.tgt}% is gone, so every bunk only digs deeper.`,
+    d => `Best possible finish: ${d.max}, with ${semB(d.ab + d.left)} classes left. Skipping only lowers that. Attend, then go talk condonation.`,
+  ],
+  // d: {left, end, ab}
+  simEnds: [
+    d => ` Attend all ${semB(d.ab + d.left)} that are left and you finish the sem at ${d.end}.`,
+    d => ` Perfect attendance from here (${d.ab}${d.left} classes) lands you at ${d.end}.`,
+    d => ` ${d.ab}${d.left} classes to go — show up to all of them and you end at ${d.end}.`,
+  ],
+  // d: {plan, left, ab}
+  overLeft: [
+    d => `Bro, there ${d.left !== 1 ? 'are' : 'is'} only ${semB(d.ab + d.left)} class${d.left !== 1 ? 'es' : ''} left this semester. You can't bunk ${d.plan}.`,
+    d => `${d.plan} bunks? The semester only has ${semB(d.ab + d.left)} classes left. Even full-time bunking can't get you there.`,
+    d => `Ambitious. But only ${semB(d.ab + d.left)} classes remain — skipping ${d.plan} isn't on the menu.`,
+  ],
+  // d: {need, left, end, tgt, ab}
+  skipLost: [
+    d => ` Getting back to ${d.tgt}% would take ${semB(d.need + ' straight classes')}, but only ${d.ab}${d.left} would be left. Attend all of them anyway and you end at ${d.end}.`,
+    d => ` That makes ${d.tgt}% unreachable: you'd need ${semB(d.need)} in a row with just ${d.ab}${d.left} to go. Best finish after that: ${d.end}.`,
+    d => ` Recovery needs ${semB(d.need + ' straight classes')}; the semester only has ${d.ab}${d.left} more. A perfect run from there still ends near ${d.end}.`,
+  ],
+  // d: {need, left, end, ab}
+  skipDoable: [
+    d => ` Getting back takes ${semB(d.need + ' straight classes')} — you'd have ${d.ab}${d.left} left, so it's doable. Attend every one and you end at ${d.end}.`,
+    d => ` You'd need a ${semB(d.need + '-class streak')} to recover; ${d.ab}${d.left} would be left, so it's on the table. Full attendance after → ${d.end}.`,
+    d => ` Recoverable: ${semB(d.need)} in a row with ${d.ab}${d.left} to go. Show up to all of them and you finish near ${d.end}.`,
+  ],
+  // d: {end}
+  safeEnd: [
+    d => ` Attend the rest and you end the sem at ${d.end}.`,
+    d => ` Show up for everything after and you close at ${d.end}.`,
+    d => ` After that, perfect attendance lands you at ${d.end}.`,
+  ],
+};
+function semCopy(kind, seed, d) { return stablePick(SEM_COPY[kind], `${COPY_SALT}|${kind}|${seed}`)(d); }
  
 // ══════════════════════════════════════════════════════
 //  STATE
@@ -1957,20 +2016,22 @@ function renderSubject(id, preserveSim) {
   } else if (p >= tgt && bk > 0) {
     pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
     if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
-    const wk = weeklyCount(s) > 0 ? ` (~${(bk/weeklyCount(s)).toFixed(1)} weeks worth)` : '';
+    const cw = classesPerWeek(s).n;
+    const wk = cw > 0 ? ` (~${(bk/cw).toFixed(1)} weeks worth)` : '';
     advText = `You can skip <strong>${bk} more class${bk!==1?'es':''}</strong> in ${escapeHTML(s.name)} before hitting ${tgt}%${wk}. Space them out — don\'t bunk 2 in a row.`;
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
-    const wk = weeklyCount(s) > 0 ? ` That's about ${Math.ceil(nd/weeklyCount(s))} weeks of showing up.` : '';
+    const cw = classesPerWeek(s).n;
+    const wk = cw > 0 ? ` That's about ${Math.ceil(nd/cw)} weeks of showing up.` : '';
     const li = remainingInfo(s), left = li ? li.n : null, ab = li?.est ? '~' : '';
     const mx = left !== null ? attPct(s.present + left, s.total + left) : null;
     const mxs = mx !== null ? `<strong style="color:${pctTextColor(mx, tgt)}">${ab}${mx}%</strong>` : '';
     advText = !isFinite(nd)
       ? `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`
       : left !== null && nd > left
-        ? `Real talk: only <strong>${ab}${left}</strong> class${left !== 1 ? 'es' : ''} left this semester. Even if you show up to every single one, you max out at ${mxs}. ${tgt}% is gone. So stop doing math, attend everything, and talk to your department about condonation early.${remainingNote(li, s)}`
+        ? semCopy('advLost', subjRoastSeed(s), { left, max: mxs, tgt, ab }) + remainingNote(li, s)
         : left !== null
-        ? `You need <strong>${nd} classes in a row</strong> to get back to ${tgt}% — you've got ${ab}${left} left, so it's doable. Attend every one from here and you end the sem at ${mxs}. No bunks. None. Zero. Go.${remainingNote(li, s)}`
+        ? semCopy('advDoable', subjRoastSeed(s), { nd, left, end: mxs, tgt, ab, tight: nd > 0.8 * left }) + remainingNote(li, s)
         : `You need <strong>${nd} consecutive classes</strong> just to reach ${tgt}%.${wk}${nd > s.total ? ` That's more classes than you've had all semester so far — <button class="link-btn" style="padding:0" onclick="openEditCard()">add the days it's on</button> to see if it's still possible.` : ''} No bunks. None. Zero. Go.`;
   } else {
     pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
@@ -2113,6 +2174,30 @@ function dayList(c) { return DAY_SHORT.filter((d, i) => i && c[i]).map((d, i) =>
 function weeklyCount(s) {
   const n = timetable.filter(t => t.subjectId === s.id && !t.isBreak).length;
   return n || s.perWeek || 0;
+}
+
+// Weeks of classes so far: from the first day when it is a current one, else from the subjects whose classes per
+// week are known (classes counted ÷ classes per week, the middle value). null when nothing tells.
+function weeksSoFar() {
+  const end = semEndInfo();
+  if (semStart && DATE_RE.test(semStart) && !(end && end.estimated && end.date < getLocalDateString())) {
+    const w = weeksSince(semStart);
+    if (w >= 1) return w;
+  }
+  const ws = subjects.filter(o => weeklyCount(o) > 0 && o.total > 0).map(o => o.total / weeklyCount(o)).sort((a, b) => a - b);
+  if (!ws.length) return null;
+  const mid = ws.length >> 1;
+  const w = ws.length % 2 ? ws[mid] : (ws[mid - 1] + ws[mid]) / 2;
+  return w >= 1 ? w : null;
+}
+// Classes per week for the estimates: the subject's own (timetable days or its number), else a guess from its
+// classes counted and how far the semester is (subjects added by hand without days). {n, guessed}
+function classesPerWeek(s) {
+  const own = weeklyCount(s);
+  if (own > 0) return { n: own, guessed: false };
+  const w = s.total > 0 ? weeksSoFar() : null;
+  if (!w) return { n: 0, guessed: false };
+  return { n: Math.max(0.5, Math.round(s.total / w * 2) / 2), guessed: true };
 }
 
 // "Do these numbers already include today's class?" — asked only when the
@@ -2299,10 +2384,10 @@ function remainingInfo(s) {
   if (s.semTotal && s.semTotal > s.total) return { n: s.semTotal - s.total, est: false, guess: false };
   // No usable dates (none, or a first day from an old semester): a semester is about semWeeks weeks of this
   // subject's classes, minus the ones already held
-  const pw = weeklyCount(s);
+  const cpw = classesPerWeek(s), pw = cpw.n;
   const stale = !!end && end.estimated && end.date < today;
   if ((!end || stale) && pw > 0 && Math.round(semWeeks * pw) > s.total)
-    return { n: Math.round(semWeeks * pw) - s.total, est: true, guess: true, stale };
+    return { n: Math.round(semWeeks * pw) - s.total, est: true, guess: true, stale, pwGuessed: cpw.guessed };
   return null;
 }
 function remainingClasses(s) { return remainingInfo(s)?.n ?? null; }
@@ -2317,7 +2402,9 @@ function remainingNote(info, s) {
   if (!info?.est) return '';
   const link = (label, focus) => '<button class="link-btn" style="padding:0" onclick="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
   const end = semEndInfo();
-  const perWeek = weeklyCount(s) + ' class' + (weeklyCount(s) !== 1 ? 'es' : '') + '/week';
+  const pwn = classesPerWeek(s).n;
+  const perWeek = (info.pwGuessed ? '~' : '') + pwn + ' class' + (pwn !== 1 ? 'es' : '') + '/week'
+    + (info.pwGuessed ? ', guessed from your other subjects — ' + '<button class="link-btn" style="padding:0" onclick="openEditCard()">add its days</button>' + ' for a better one' : '');
   return ' <span style="font-size:.85em;color:var(--muted)">(' + (info.guess && info.stale
     ? 'Estimated from a ' + semWeeks + '-week semester at ' + perWeek + '. Your saved first day (' + fmtShort(semStart) + ') looks like an old semester — ' + link('update it', 'start') + ' for the real number.'
     : info.guess
@@ -2602,7 +2689,7 @@ function resetSim() { document.getElementById('sim-input').value = 0; updateSim(
  
 function updateSim() {
   const s = _ss; if (!s) return;
-  const tgt = _st, pw = weeklyCount(s);
+  const tgt = _st, pw = classesPerWeek(s).n;
   const plan = Math.max(0, parseInt(document.getElementById('sim-input').value)||0);
   const projTotal = s.total + plan;
   const projPct = attPct(s.present, projTotal);
@@ -2628,8 +2715,10 @@ function updateSim() {
     if (s.total > 0 && remaining > 0) {
       const projEndPct = attPct(s.present + remaining, s.total + remaining);
       const about = ri.est ? 'about ' : '';
-      if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h = 'Only ' + about + '<strong>' + remaining + '</strong> class' + (remaining !== 1 ? 'es' : '') + ' left. Attend every single one and you still max out at <strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + about + projEndPct + '%</strong> — ' + tgt + '% is off the table. Nothing to simulate here. Shut up and attend, then go talk condonation.';
-      else h += ' If you attend all <strong>' + (about ? '~' : '') + remaining + '</strong> remaining classes, you end the semester at ' + about + '<strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + projEndPct + '%</strong>.';
+      const ab0 = ri.est ? '~' : '';
+      const endHtml = '<strong style="color:' + pctTextColor(projEndPct, tgt) + '">' + ab0 + projEndPct + '%</strong>';
+      if (_sp < tgt && isFinite(nd0) && nd0 > remaining) h = semCopy('simLost', subjRoastSeed(s), { left: remaining, max: endHtml, tgt, ab: ab0 });
+      else h += semCopy('simEnds', subjRoastSeed(s), { left: remaining, end: endHtml, ab: ab0 });
       h += remainingNote(ri, s);
     }
     document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + h + '</div>';
@@ -2641,7 +2730,7 @@ function updateSim() {
   const extraNd = safe ? 0 : needed({total:projTotal,present:s.present}, tgt);
   const ri = remainingInfo(s), remainingNow = ri ? ri.n : null, ab = ri?.est ? '~' : '';
   if (remainingNow !== null && plan > remainingNow) {
-    document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">Bro, there ' + (remainingNow !== 1 ? 'are' : 'is') + ' only ' + ab + '<strong>' + remainingNow + '</strong> class' + (remainingNow !== 1 ? 'es' : '') + ' left this semester. You can\'t bunk ' + plan + '.' + remainingNote(ri, s) + '</div>';
+    document.getElementById('sim-result').innerHTML = '<div class="adv-text" style="color:var(--muted)">' + semCopy('overLeft', subjRoastSeed(s) + '|' + plan, { plan, left: remainingNow, ab }) + remainingNote(ri, s) + '</div>';
     return;
   }
   const leftAfter = remainingNow !== null ? remainingNow - plan : null;
@@ -2650,9 +2739,9 @@ function updateSim() {
   const eosStr = eosPct !== null ? '<strong style="color:' + pctTextColor(eosPct, tgt) + '">' + ab + eosPct + '%</strong>' : '';
   const recovCtx = !safe && !isFinite(extraNd) ? ` A ${tgt}% target can't be recovered after a bunk.`
     : !safe && extraNd > 0 && leftAfter !== null && extraNd > leftAfter
-    ? ` Getting back to ${tgt}% would take <strong>${extraNd} straight classes</strong>, but only ${ab}${leftAfter} would be left. Attend all of them anyway and you end the sem at ${eosStr}.`
+    ? semCopy('skipLost', subjRoastSeed(s) + '|' + plan, { need: extraNd, left: leftAfter, end: eosStr, tgt, ab })
     : !safe && extraNd > 0 && leftAfter !== null
-    ? ` Getting back takes <strong>${extraNd} straight classes</strong> — you'd have ${ab}${leftAfter} left, so it's doable. Attend every one and you end the sem at ${eosStr}.`
+    ? semCopy('skipDoable', subjRoastSeed(s) + '|' + plan, { need: extraNd, left: leftAfter, end: eosStr, ab })
     : !safe && extraNd > 0 && leftAfter === null && extraNd > s.total
     ? ` Recovering would take <strong>${extraNd} straight classes</strong> — more than you've had all semester. <button class="link-btn" style="padding:0" onclick="openEditCard()">Add the days it's on</button> to see if it's still possible.`
     : !safe && extraNd > 0
@@ -2662,7 +2751,7 @@ function updateSim() {
  
   const reaction = getSimReaction(plan, bk_now, safe, projPct, tgt, subjRoastSeed(s));
  
-  let eosCtx = (safe && eosPct !== null && leftAfter > 0 ? ' Attend the rest and you end the sem at ' + eosStr + '.' : '') + remainingNote(ri, s);
+  let eosCtx = (safe && eosPct !== null && leftAfter > 0 ? semCopy('safeEnd', subjRoastSeed(s) + '|' + plan, { end: eosStr }) : '') + remainingNote(ri, s);
  
   let icon, verdict;
   if (safe && plan <= bk_now) {
