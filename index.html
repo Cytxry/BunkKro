@@ -333,7 +333,6 @@
       <button class="act-chip peach" onclick="openHolidayPlanner()" title="Got a circular? Add holidays ahead of time">🗓️ Upcoming holidays</button>
       <button class="act-chip lavender" onclick="openExtraClassModal()">⚡ Add Extra Class</button>
       <button class="act-chip green" onclick="openDaySwap()" title="For days like “Saturday follows Monday's timetable”">🔁 Follows another day</button>
-      <button class="act-chip blue" onclick="goPage('timetable')">📅 Manage Timetable</button>
     </div>
 
     <section class="card" style="margin-top:22px">
@@ -373,7 +372,7 @@
         <img class="tt-loaded-illus" src="assets/cat-trophy.svg" alt=""><div class="tt-loaded-check">✓</div>
         <div class="tt-loaded-meta">
           <span class="tt-loaded-label" id="tt-loaded-label">Schedule loaded</span>
-          <span class="tt-loaded-sub"><button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Replace image</button></span>
+          <span class="tt-loaded-sub"><button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Upload a new one</button></span>
         </div>
       </div>
 
@@ -778,7 +777,8 @@
 
 <!-- ══════ UPCOMING HOLIDAYS (from a circular, ahead of time) ══════ -->
 <div class="overlay" id="hol-overlay" role="dialog" aria-modal="true" aria-labelledby="hol-title">
-  <div class="modal" style="max-width:460px">
+  <div class="modal" style="max-width:460px;position:relative">
+    <button class="modal-x" onclick="closeHolidayPlanner()" aria-label="Close">&times;</button>
     <div class="modal-hero">
       <div><h2 id="hol-title">Upcoming holidays 🗓️</h2>
       <p class="sub">Got a circular? Tap the days (or drag across a few) — they won't count as absent, and BunkKro plans around them.</p></div>
@@ -786,11 +786,12 @@
     </div>
     <div class="hol-cal" id="hol-cal" aria-label="Pick holiday days"></div>
     <div class="mf"><label for="hol-name">Name <span class="field-hint">(optional)</span></label><input type="text" id="hol-name" maxlength="40" placeholder="e.g. Diwali break, Sports day"></div>
-    <div class="form-preview" id="hol-preview" aria-live="polite"></div>
-    <div class="modal-btns"><button class="btn-pri" onclick="addPlannedHolidays()">Add holiday</button></div>
+    <div class="hol-foot">
+      <div class="form-preview" id="hol-preview" aria-live="polite"></div>
+      <div class="modal-btns"><button class="btn-pri" id="hol-add" onclick="addPlannedHolidays()">Add holiday</button></div>
+    </div>
     <div class="hol-list-title">Coming up</div>
     <div id="hol-list"></div>
-    <div class="modal-btns"><button class="btn-sec" onclick="closeHolidayPlanner()">Done</button></div>
   </div>
 </div>
 
@@ -799,7 +800,7 @@
   <div class="modal modal-center" style="max-width:420px">
     <img class="modal-cat" src="assets/cat-worried.svg" alt="">
     <h2 id="tt-confirm-title">Replace existing timetable?</h2>
-    <p class="sub">You already have a saved timetable. Scanning this image will replace your current weekly schedule.</p>
+    <p class="sub">Your current weekly schedule will be replaced. After the scan you can choose whether to remove old subjects that aren't in the new one.</p>
     <div class="modal-btns center">
       <button class="btn-sec" onclick="closeTtConfirmModal()">Cancel</button>
       <button class="btn-pri" onclick="confirmProceedScan()">Proceed</button>

@@ -1334,7 +1334,7 @@ function toast(msg, type = 'ok') {
   t.append(String(msg)); // plain text: messages often contain subject names
   t.className = `toast show ${type}`;
   clearTimeout(t._t);
-  t._t = setTimeout(() => t.classList.remove('show'), 2600);
+  t._t = setTimeout(() => t.classList.remove('show'), Math.min(7000, Math.max(2600, String(msg).length * 55)));
 }
  
 // ══════════════════════════════════════════════════════
@@ -1503,6 +1503,11 @@ function renderHome() {
   const hasBest = bestBunk && bunkable(bestBunk) > 0;
   const ovCls = pctStatus(ov, globalTarget).cls;
 
+  // where the safe bunks are, so '8 safe bunks' never reads like permission next to a 'cooked' banner
+  const safeSubs = subjects.filter(x => bunkable(x) > 0);
+  const safeSub = safeBunks <= 0 ? 'you are cooked. attend.'
+    : safeSubs.length === 1 ? `only in ${escapeHTML(safeSubs[0].name)}`
+    : atRisk.length ? `across ${safeSubs.length} subjects — not the risky ones` : 'go ahead, skip something';
   document.getElementById('stats-grid').innerHTML = `
     <div class="sc tone-${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">
       <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl">Overall attendance</span></div>
@@ -1512,7 +1517,7 @@ function renderHome() {
     <button class="sc tone-green" id="safe-card" onclick="openSafeBunks()" aria-haspopup="dialog">
       <span class="sc-top"><span class="sc-chip green">${ic('coffee','ic-sm')}</span><span class="sc-lbl">Safe bunks</span><span class="sc-go">${ic('chevron-right','ic-sm')}</span></span>
       <span class="sc-val" style="color:${safeBunks>0?'var(--good)':'var(--danger)'}">${safeBunks}</span>
-      <span class="sc-sub">${safeBunks>0?'go ahead, skip something':'you are cooked. attend.'}</span>
+      <span class="sc-sub">${safeSub}</span>
     </button>
     <div class="sc tone-pink">
       <div class="sc-top"><span class="sc-chip pink">${ic('alert','ic-sm')}</span><span class="sc-lbl">At risk</span></div>
@@ -2001,7 +2006,7 @@ function openCooked() {
   document.getElementById('ck-msg').textContent = msg;
   document.getElementById('ck-breakdown').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s), col = pctColor(p, tgt);
-    const status = !hasClasses(s) ? '🆕 no classes yet' : p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : (isFinite(needed(s)) ? `💀 -${needed(s)} needed` : '💀 out of reach');
+    const status = !hasClasses(s) ? '🆕 no classes yet' : p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : (isFinite(needed(s)) ? `💀 need ${needed(s)} more` : '💀 out of reach');
     return `<div class="cooked-row">
       <span class="cooked-dot" style="background:${subjTheme(i).c}"></span>
       <span class="subj-n">${escapeHTML(s.name)}</span>
@@ -3155,7 +3160,7 @@ renderAll();
 document.getElementById('cooked-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeCooked(); });
 document.getElementById('safe-overlay').addEventListener('click', e => { if(e.target===e.currentTarget) closeSafeBunks(); });
 document.getElementById('ask-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeAsk(false); });
-['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay','resched-overlay','dayswap-overlay','share-overlay','sem-overlay'].forEach(id => {
+['ob-overlay','add-overlay','delete-overlay','slot-edit-overlay','sync-freq-overlay','extra-class-overlay','tt-confirm-overlay','resched-overlay','dayswap-overlay','share-overlay','sem-overlay','hol-overlay'].forEach(id => {
   const el = document.getElementById(id);
   if (el) {
     el.addEventListener('click', e => {
@@ -3180,6 +3185,8 @@ document.addEventListener('keydown', e => {
   if (document.getElementById('cell-inspector-overlay').classList.contains('show')) { closeCellInspector(); return; }
   const open = [...document.querySelectorAll('.overlay.show')].pop();
   if (open && open.id === 'tt-confirm-overlay') { closeTtConfirmModal(); return; }
+  if (open && open.id === 'hol-overlay') { closeHolidayPlanner(); return; }
+  if (open?.dataset.escape) { open.querySelector(`[data-act="${open.dataset.escape}"]`)?.click(); return; }
   if (open) open.classList.remove('show');
 });
 
@@ -3419,8 +3426,70 @@ function setScannerPhase(phaseName, pct, detailText) {
   });
 }
 
+// After a new timetable replaces an old one, the old timetable's subjects that aren't in the new one are offered
+// for removal (ticked), together with any other subject the new timetable doesn't use (not ticked). Nothing is
+// removed without a yes: removing a subject removes its attendance too.
+async function offerOldSubjectCleanup(oldIds) {
+  if (!currentUser || !oldIds.size) return;
+  const used = new Set(timetable.map(t => t.subjectId).filter(Boolean));
+  const unused = subjects.filter(sb => !used.has(sb.id));
+  if (!unused.length) return;
+  const rows = unused.map(sb => {
+    const wasOld = oldIds.has(sb.id);
+    const counted = sb.total > 0 ? `${sb.present}/${sb.total} classes counted` : 'nothing counted yet';
+    return `<label class="clean-row"><input type="checkbox" value="${escapeHTML(sb.id)}" ${wasOld ? 'checked' : ''}>
+      <span><strong>${escapeHTML(sb.name)}</strong><small>${wasOld ? 'from your old timetable' : 'added by hand'} · ${counted}</small></span></label>`;
+  }).join('');
+  const picked = await new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.className = 'overlay show';
+    ov.dataset.escape = 'keep';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.innerHTML = `<div class="modal modal-center" style="max-width:440px">
+      <img class="modal-cat" src="assets/cat-blue-detective.svg" alt="">
+      <h2>Clean up old subjects?</h2>
+      <p class="sub">These subjects aren't in your new timetable. Tick the ones to remove — their attendance goes with them.</p>
+      <div class="clean-list">${rows}</div>
+      <div class="modal-btns center">
+        <button class="btn-sec" data-act="keep">Keep all</button>
+        <button class="btn-pri danger" data-act="remove">Remove ticked</button>
+      </div></div>`;
+    ov.addEventListener('click', e => {
+      const act = e.target.closest?.('[data-act]')?.dataset.act;
+      if (!act) return;
+      const ids = act === 'remove' ? [...ov.querySelectorAll('input:checked')].map(i => i.value) : [];
+      ov.remove();
+      resolve(ids);
+    });
+    document.body.appendChild(ov);
+  });
+  if (!picked.length) return;
+  let removed = 0;
+  for (const id of picked) if (await removeSubjectCompletely(id)) removed++;
+  saveTimetableToStorageAndDB();
+  renderAll();
+  toast(`Removed ${removed} old subject${removed !== 1 ? 's' : ''} ✓`);
+}
+// A subject and everything that counts for it (as Delete subject does)
+async function removeSubjectCompletely(subjId) {
+  try {
+    const { error } = await supabaseClient.from('tracker_logs').delete().eq('user_id', currentUser.id).eq('subject_id', subjId);
+    if (error) throw error;
+  } catch (err) {
+    console.warn('Could not clear tracker logs:', err.message);
+    return false;
+  }
+  if (countedUpTo[subjId]) setCountedUpTo(subjId, null);
+  const ok = await deleteSubjectFromDB(subjId);
+  if (ok) Object.keys(trackerLog).forEach(date => { if (trackerLog[date]?.[subjId]) delete trackerLog[date][subjId]; });
+  return ok;
+}
+
 async function processTimetableImage(file) {
   currentScannedImageBlob = file;
+  // subjects the timetable used before this upload (offered for removal if the new one drops them)
+  const oldSubjectIds = new Set(timetable.map(t => t.subjectId).filter(Boolean));
   const progressBox = document.getElementById('ocr-progress-box');
   if (progressBox) progressBox.style.display = 'block';
 
@@ -3449,6 +3518,7 @@ async function processTimetableImage(file) {
       renderValidationReport();
       renderStudioCanvas();
       setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
+      setTimeout(() => offerOldSubjectCleanup(oldSubjectIds), 1300);
       setTimeout(() => {
         if (progressBox) progressBox.style.display = 'none';
         const dropzone = document.getElementById('tt-dropzone');
@@ -3571,6 +3641,7 @@ async function processTimetableImage(file) {
     renderTimetable();
     renderValidationReport();
     renderStudioCanvas();
+    setTimeout(() => offerOldSubjectCleanup(oldSubjectIds), 1300);
 
     // Finish
     setScannerPhase('valid', 100, '✓ Multi-engine scan complete!');
@@ -3585,7 +3656,7 @@ async function processTimetableImage(file) {
       if (loadedLabel && file && file.name) loadedLabel.textContent = file.name;
     }, 1200);
 
-    toast('Timetable reconstructed successfully! Inspect in Studio or review below.');
+    toast('Timetable read! Check it below, or open Inspector to see each period on the page.');
 
   } catch (err) {
     console.error('Scan Error:', err);
@@ -5483,6 +5554,8 @@ function holidayPreview() {
   const box = document.getElementById('hol-preview');
   const days = [...holSel].sort();
   box.classList.remove('is-error');
+  const btn = document.getElementById('hol-add');
+  if (btn) btn.textContent = days.length ? `Add ${days.length} day${days.length !== 1 ? 's' : ''}` : 'Add holiday';
   if (!days.length) { box.innerHTML = 'Tap a day, or press and drag across a few.'; return; }
   const classes = days.reduce((n, ds) => n + getAllClassesForDate(ds).filter(c => !c.isBreak).length, 0);
   const stretch = holidayRange(days[0], days[days.length - 1]).length === days.length;
@@ -5517,6 +5590,7 @@ async function addPlannedHolidays() {
   renderTracker();
   renderNav();
   if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
+  if (added) closeHolidayPlanner();
   toast(added ? `Added ${added} holiday day${added !== 1 ? 's' : ''} 🏖️${skipped ? ` · ${skipped} skipped (already marked — change those on the day)` : ''}`
     : 'Those days already have marks — open the day itself to make it a holiday', added ? 'ok' : 'err');
 }
@@ -6008,7 +6082,7 @@ function renderTracker() {
         </div>` : `<div class="tracker-btns" role="group" aria-label="Attendance for ${escapeHTML(displayName)}">
           <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" ${lockPA && item.status !== 'p' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
           <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" ${lockPA && item.status !== 'a' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
-          <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" aria-pressed="${item.status === 'cancelled'}" title="Cancelled class does not count as absence" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">${ic('ban','ic-sm')} Cancel</button>
+          <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" aria-pressed="${item.status === 'cancelled'}" title="The class didn't happen — it won't count as absent" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">${ic('ban','ic-sm')} No class</button>
           ${item.isMakeup ? `<button class="tbtn rm" title="Remove this class" aria-label="Remove this class" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')}</button>` : ''}
         </div>`}
       </div>

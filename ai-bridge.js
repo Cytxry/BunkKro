@@ -55,9 +55,10 @@
   }
 
   // ── small modal helpers (the app's own overlay / modal / button styles) ──────────────────────────────────────
-  function modal(html, maxWidth, cat) {
+  function modal(html, maxWidth, cat, escape) {
     const overlay = document.createElement('div');
     overlay.className = 'overlay show';
+    if (escape) overlay.dataset.escape = escape;      // Escape presses this button (bunkke.js keydown handler)
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.innerHTML = `<div class="modal modal-center" style="max-width:${maxWidth || 440}px;max-height:88vh;overflow:auto">
@@ -79,7 +80,7 @@
         <div class="modal-btns">
           <button class="btn-sec" data-act="cancel">Cancel</button>
           <button class="btn-pri" data-act="ok">${escapeHtml(okLabel)}</button>
-        </div>`, 440, 'cat-detective');
+        </div>`, 440, 'cat-detective', 'cancel');
       overlay.addEventListener('click', e => {
         const act = e.target.getAttribute && e.target.getAttribute('data-act');
         if (!act) return;
@@ -292,7 +293,7 @@
         <div class="modal-btns">
           <button class="btn-sec" data-act="skip">Skip for now</button>
           <button class="btn-pri" data-act="ok">Save subjects</button>
-        </div>`, 560, 'cat-books');
+        </div>`, 560, 'cat-books', 'skip');
       overlay.addEventListener('click', e => {
         const act = e.target.getAttribute && e.target.getAttribute('data-act');
         if (!act) return;
@@ -324,5 +325,13 @@
 
   window.BunkKroAI = { isAvailable, read, reviewSubjects, issues, BASE };
   showStatus();
-  if (enabled()) setInterval(showStatus, 10000);
+  // re-check only while the Smart Timetable page is open: every 10 s while the AI is on, every 45 s while it's off
+  if (enabled()) {
+    const tick = async () => {
+      const page = document.getElementById('page-timetable');
+      if (page && page.classList.contains('active')) await showStatus();
+      setTimeout(tick, available ? 10000 : 45000);
+    };
+    setTimeout(tick, 10000);
+  }
 })();
