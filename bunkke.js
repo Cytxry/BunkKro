@@ -2090,11 +2090,11 @@ function renderSubject(id, preserveSim) {
     } else {
       const kind = o.lost ? 'advLost' : o.left === null ? 'advUnknown' : o.tight ? 'advTight' : 'advDoable';
       advText = semCopy(kind, seed, { tgt }) + statTiles([
-        needTile(o),
-        o.left === null && cw > 0 ? ['indigo', 'clock', 'Weeks', '≈' + Math.ceil(o.need / cw)] : null,
+        needTile(o, tgt),
+        o.left === null && cw > 0 && o.need / cw <= semWeeks ? ['indigo', 'clock', 'Weeks', '≈' + Math.ceil(o.need / cw)] : null,
         leftTile(o),
         bestTile(o, tgt, o.lost ? 'Best finish' : 'You finish'),
-      ]) + remainingNote(o.ri, s);
+      ]) + (o.ri ? remainingNote(o.ri, s) : noEstimateNote(s));
     }
   } else {
     pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
@@ -2242,13 +2242,14 @@ function weeklyCount(s) {
 
 // Weeks of classes so far: from the first day when it is a current one, else from the subjects whose classes per
 // week are known (classes counted ÷ classes per week, the middle value). null when nothing tells.
-function weeksSoFar() {
+function weeksSoFar(excludeId) {
   const end = semEndInfo();
   if (semStart && DATE_RE.test(semStart) && !(end && end.estimated && end.date < getLocalDateString())) {
     const w = weeksSince(semStart);
     if (w >= 1) return w;
   }
-  const ws = subjects.filter(o => weeklyCount(o) > 0 && o.total > 0).map(o => o.total / weeklyCount(o)).sort((a, b) => a - b);
+  const ws = subjects.filter(o => o.id !== excludeId && weeklyCount(o) > 0 && o.total > 0)
+    .map(o => o.total / weeklyCount(o)).filter(w => w <= semWeeks * 1.25).sort((a, b) => a - b);
   if (!ws.length) return null;
   const mid = ws.length >> 1;
   const w = ws.length % 2 ? ws[mid] : (ws[mid - 1] + ws[mid]) / 2;
@@ -2258,10 +2259,11 @@ function weeksSoFar() {
 // classes counted and how far the semester is (subjects added by hand without days). {n, guessed}
 function classesPerWeek(s) {
   const own = weeklyCount(s);
-  const w = s.total > 0 ? weeksSoFar() : null;
-  // the subject's own number, unless it cannot be right: 24 classes at 1/week would be 24 weeks into a semester
-  // the other subjects say is ~8 weeks old (a class day missing from the timetable, or an old number)
-  if (own > 0 && !(w && s.total / own > Math.max(w * 1.6, w + 3))) return { n: own, guessed: false };
+  const w = s.total > 0 ? weeksSoFar(s.id) : null;
+  // the subject's own number, unless it cannot be right: 24 classes at 1/week would be 24 weeks in — longer than a
+  // semester, or far past what the other subjects say (a class day missing from the timetable, or an old number)
+  const impossible = own > 0 && s.total / own > semWeeks;
+  if (own > 0 && !impossible && !(w && s.total / own > Math.max(w * 1.6, w + 3))) return { n: own, guessed: false };
   if (!w) return own > 0 ? { n: own, guessed: false } : { n: 0, guessed: false };
   return { n: Math.max(0.5, Math.round(s.total / w * 2) / 2), guessed: true, mismatch: own > 0 };
 }
@@ -2500,8 +2502,15 @@ function statTiles(items) {
   return xs.length ? '<div class="mini-stats">' + xs.map(([cls, icon, label, value]) =>
     `<div class="chip mini ${cls}"><span class="chip-lbl">${ic(icon, 'ic-sm')} ${label}</span><span class="cv">${value}</span></div>`).join('') + '</div>' : '';
 }
-function needTile(o, label) {
-  return [o.lost ? 'pink' : 'indigo', 'target', label || 'In a row', isFinite(o.need) ? String(o.need) : '—'];
+function needTile(o, tgt, label) {
+  if (o.lost) return ['pink', 'target', `Reach ${tgt}%`, 'Not this sem'];
+  return ['indigo', 'target', label || 'In a row', String(o.need)];
+}
+// When the classes left can't be worked out at all: one small line with the way to fix it
+function noEstimateNote(s) {
+  return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Can\'t tell how many classes are left · '
+    + '<button class="link-btn" onclick="openSemesterDialog(\'end\')">set the last day of classes</button>'
+    + (weeklyCount(s) ? '' : ' or <button class="link-btn" onclick="openEditCard()">add its days</button>') + '</span></div>';
 }
 function leftTile(o) {
   return o.left === null ? null : ['amber', 'calendar', 'Classes left', o.ab + o.left];
@@ -2887,10 +2896,13 @@ function updateSim() {
   if (safe && plan <= bk_now) { icon = '✅'; color = 'var(--accent)'; status = 'still above ' + tgt + '%'; }
   else if (safe) { icon = '⚠️'; color = 'var(--warn)'; status = (plan - bk_now) + ' over your safe limit'; }
   else { icon = '🚨'; color = 'var(--danger)'; status = '<strong>' + (tgt - o.pct) + '%</strong> below ' + tgt + '%'; }
-  const step = semCopyStep('simStep', seed, plan, { tgt, safe, lost: o.lost, wasLost: now.lost });
+  // with no idea how many classes are left, never promise it's still recoverable
+  const step = !safe && o.left === null
+    ? stepPick(['Every skip makes the climb longer.', 'The climb back just got steeper.', 'More classes to make up now.'], COPY_SALT + '|unk|' + seed, plan)
+    : semCopyStep('simStep', seed, plan, { tgt, safe, lost: o.lost, wasLost: now.lost });
   const tiles = safe
     ? [weeks !== null ? ['indigo', 'clock', 'Weeks of classes', '≈' + weeks] : null, leftTile(o), bestTile(o, tgt, 'If you attend')]
-    : [needTile(o, 'To recover'), leftTile(o), bestTile(o, tgt, o.lost ? 'Best finish' : 'You finish')];
+    : [needTile(o, tgt, 'In a row to recover'), leftTile(o), bestTile(o, tgt, o.lost ? 'Best finish' : 'You finish')];
 
   const bw = Math.min(100, o.pct), cwid = Math.min(100, _sp);
   const tgtPos = Math.min(tgt, 97);
@@ -2907,7 +2919,7 @@ function updateSim() {
     <div class="adv-text">${icon} <strong style="color:${color}">${_sp}% → ${o.pct}%</strong> — ${status}. ${step}</div>
     ${statTiles(tiles)}
     <div class="sim-react">${reaction}</div>
-    ${remainingNote(now.ri, s)}`;
+    ${now.ri ? remainingNote(now.ri, s) : noEstimateNote(s)}`;
 }
 
 // ══════════════════════════════════════════════════════
