@@ -1090,11 +1090,6 @@ const SEM_COPY = {
     d => `Recovery mode: attend every class until you're over ${d.tgt}%.`,
     d => `Front row energy needed. Zero skips until ${d.tgt}% is back.`,
   ],
-  simStep: [
-    d => d.lost && !d.wasLost ? `This one takes ${d.tgt}% off the table for the semester.` : d.safe ? 'Still in the safe zone.' : d.lost ? 'Digging deeper.' : 'Still recoverable if you show up after.',
-    d => d.lost && !d.wasLost ? `That's the bunk that loses ${d.tgt}% for good.` : d.safe ? 'The register barely noticed.' : d.lost ? 'The hole gets deeper.' : 'Comeback still on — no more after this.',
-    d => d.lost && !d.wasLost ? `Point of no return: ${d.tgt}% is gone after this.` : d.safe ? 'You can get away with this one.' : d.lost ? 'Every extra skip lowers the ceiling.' : 'Ouch, but fixable.',
-  ],
   simSafe0: [
     d => `Bindaas — ${semB(d.bk)} bunk${d.bk !== 1 ? 's' : ''} in the bank. Tap + to plan one.`,
     d => `Room for ${semB(d.bk)} more skip${d.bk !== 1 ? 's' : ''}. Tap + and watch what each bunk does.`,
@@ -2071,17 +2066,18 @@ function renderSubject(id, preserveSim) {
   let pills = '', advText = '';
   const o = outlook(s, tgt);
   const seed = subjRoastSeed(s);
-  const cw = classesPerWeek(s).n;
   if (!hasClasses(s)) {
     pills = `<span class="pill">🆕 Fresh subject</span>`;
     advText = `No classes counted yet. Mark them on <strong>Daily Classes</strong> as they happen${editable ? ', or tap <strong>Total</strong> / <strong>Present</strong> above to enter your numbers' : ', or open <strong>Edit subject</strong> below'}.`;
   } else if (p >= tgt && bk > 0) {
     pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
     if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
+    // finish % if every safe bunk is used and every other class attended
+    const skipAll = o.left !== null && o.left >= bk ? attPct(s.present + o.left - bk, s.total + o.left) : null;
     advText = semCopy('advSafe', seed, { bk, tgt }) + statTiles([
-      cw > 0 ? ['indigo', 'clock', 'Weeks of skips', '≈' + (bk / cw).toFixed(1)] : null,
+      skipAll !== null ? [skipAll >= tgt ? 'green' : 'pink', 'coffee', `Skip all ${bk}`, o.ab + skipAll + '%'] : ['indigo', 'coffee', 'Bunks left', String(bk)],
       leftTile(o),
-      bestTile(o, tgt, 'If you attend'),
+      bestTile(o, tgt, 'Attend all'),
     ]) + remainingNote(o.ri, s);
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
@@ -2091,9 +2087,8 @@ function renderSubject(id, preserveSim) {
       const kind = o.lost ? 'advLost' : o.left === null ? 'advUnknown' : o.tight ? 'advTight' : 'advDoable';
       advText = semCopy(kind, seed, { tgt }) + statTiles([
         needTile(o, tgt),
-        o.left === null && cw > 0 && o.need / cw <= semWeeks ? ['indigo', 'clock', 'Weeks', '≈' + Math.ceil(o.need / cw)] : null,
         leftTile(o),
-        bestTile(o, tgt, o.lost ? 'Best finish' : 'You finish'),
+        bestTile(o, tgt, o.lost ? 'Best finish' : 'Finish at'),
       ]) + (o.ri ? remainingNote(o.ri, s) : noEstimateNote(s));
     }
   } else {
@@ -2101,7 +2096,7 @@ function renderSubject(id, preserveSim) {
     advText = (p === tgt
       ? `Literally one absence away from danger. Attend <strong>3–4 more</strong> to build a buffer before even thinking about bunking.`
       : `You're at ${p}%, but skipping even one class drops you below ${tgt}%. Attend <strong>3–4 more</strong> to build a buffer.`)
-      + statTiles([leftTile(o), bestTile(o, tgt, 'If you attend')]) + remainingNote(o.ri, s);
+      + statTiles([leftTile(o), bestTile(o, tgt, 'Attend all')]) + remainingNote(o.ri, s);
   }
   document.getElementById('adv-pills').innerHTML = pills;
   document.getElementById('adv-text').innerHTML = advText;
@@ -2263,7 +2258,7 @@ function classesPerWeek(s) {
   // the subject's own number, unless it cannot be right: 24 classes at 1/week would be 24 weeks in — longer than a
   // semester, or far past what the other subjects say (a class day missing from the timetable, or an old number)
   const impossible = own > 0 && s.total / own > semWeeks;
-  if (own > 0 && !impossible && !(w && s.total / own > Math.max(w * 1.6, w + 3))) return { n: own, guessed: false };
+  if (own > 0 && !impossible && !(w && s.total / own > Math.max(w * 2, w + 6))) return { n: own, guessed: false };
   if (!w) return own > 0 ? { n: own, guessed: false } : { n: 0, guessed: false };
   return { n: Math.max(0.5, Math.round(s.total / w * 2) / 2), guessed: true, mismatch: own > 0 };
 }
@@ -2508,8 +2503,8 @@ function needTile(o, tgt, label) {
 }
 // When the classes left can't be worked out at all: one small line with the way to fix it
 function noEstimateNote(s) {
-  return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Can\'t tell how many classes are left · '
-    + '<button class="link-btn" onclick="openSemesterDialog(\'end\')">set the last day of classes</button>'
+  return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Classes left unknown · '
+    + '<button class="link-btn" onclick="openSemesterDialog(\'end\')">set last day</button>'
     + (weeklyCount(s) ? '' : ' or <button class="link-btn" onclick="openEditCard()">add its days</button>') + '</span></div>';
 }
 function leftTile(o) {
@@ -2524,14 +2519,12 @@ function remainingNote(info, s) {
   if (!info?.est) return '';
   const link = (label, focus) => '<button class="link-btn" onclick="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
   const cpw = classesPerWeek(s), end = semEndInfo();
-  const perWeek = (cpw.guessed ? '~' : '') + cpw.n + '/week';
   let text;
-  if (!info.guess) text = 'classes end around ' + fmtShort(end.date) + ' (16 weeks after they began) · ' + link('set the last day', 'end');
-  else if (info.stale) text = semWeeks + '-week sem, ' + perWeek + '. Saved first day (' + fmtShort(semStart) + ') looks old · ' + link('update', 'start');
-  else text = semWeeks + '-week sem, ' + perWeek + ' · ' + link('add semester dates', 'start');
-  if (!info.guess) text = text.replace('16 weeks', semWeeks + ' weeks');
+  if (!info.guess) text = 'ends ~' + fmtShort(end.date) + ' · ' + link('set last day', 'end');
+  else if (info.stale) text = 'start date (' + fmtShort(semStart) + ') looks old · ' + link('update', 'start');
+  else text = semWeeks + '-week sem · ' + link('add dates', 'start');
   if (cpw.guessed) text += ' · <button class="link-btn" onclick="openEditCard()">' + (cpw.mismatch ? 'check its days' : 'add its days') + '</button>';
-  return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Estimated: ' + text + '</span></div>';
+  return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Estimated · ' + text + '</span></div>';
 }
 // ── Edit subject ──
 function readEditForm(s) {
@@ -2859,7 +2852,7 @@ if (sideBySide.addEventListener) sideBySide.addEventListener('change', () => { i
 
 function updateSim() {
   const s = _ss; if (!s) return;
-  const tgt = _st, pw = classesPerWeek(s).n;
+  const tgt = _st;
   const plan = Math.max(0, parseInt(document.getElementById('sim-input').value)||0);
   const seed = subjRoastSeed(s);
   const now = outlook(s, tgt), o = outlook(s, tgt, plan);
@@ -2887,22 +2880,18 @@ function updateSim() {
   }
 
   const safe = o.pct >= tgt;
-  const weeks = pw > 0 ? Math.round(plan / pw * 10) / 10 : null;
   const reaction = getSimReaction(plan, bk_now, safe, o.pct, tgt, seed);
   const tier = !safe ? 'cooked' : o.pct - tgt <= 2 ? 'warn' : plan > bk_now ? 'safe_over_limit' : 'safe_in_limit';
   const justLost = o.lost && !now.lost;
   advisorCat(o.lost ? 'lost' : tier, justLost ? stepPick(CAT_LINES.lost, COPY_SALT + '|cat|' + seed, plan)(tgt) : reaction);
   let icon, color, status;
-  if (safe && plan <= bk_now) { icon = '✅'; color = 'var(--accent)'; status = 'still above ' + tgt + '%'; }
-  else if (safe) { icon = '⚠️'; color = 'var(--warn)'; status = (plan - bk_now) + ' over your safe limit'; }
-  else { icon = '🚨'; color = 'var(--danger)'; status = '<strong>' + (tgt - o.pct) + '%</strong> below ' + tgt + '%'; }
-  // with no idea how many classes are left, never promise it's still recoverable
-  const step = !safe && o.left === null
-    ? stepPick(['Every skip makes the climb longer.', 'The climb back just got steeper.', 'More classes to make up now.'], COPY_SALT + '|unk|' + seed, plan)
-    : semCopyStep('simStep', seed, plan, { tgt, safe, lost: o.lost, wasLost: now.lost });
+  if (safe && plan <= bk_now) { icon = '✅'; color = 'var(--accent)'; status = 'still safe ✨'; }
+  else if (safe) { icon = '👀'; color = 'var(--warn)'; status = `${plan - bk_now} over the safe limit`; }
+  else if (o.lost && !now.lost) { icon = '🫠'; color = 'var(--danger)'; status = `${tgt}% gone for this sem`; }
+  else { icon = '💀'; color = 'var(--danger)'; status = `<strong>${tgt - o.pct}%</strong> under ${tgt}%`; }
   const tiles = safe
-    ? [weeks !== null ? ['indigo', 'clock', 'Weeks of classes', '≈' + weeks] : null, leftTile(o), bestTile(o, tgt, 'If you attend')]
-    : [needTile(o, tgt, 'In a row to recover'), leftTile(o), bestTile(o, tgt, o.lost ? 'Best finish' : 'You finish')];
+    ? [['indigo', 'coffee', 'Bunks left', String(Math.max(0, bk_now - plan))], leftTile(o), bestTile(o, tgt, 'Attend all')]
+    : [needTile(o, tgt, 'In a row'), leftTile(o), bestTile(o, tgt, o.lost ? 'Best finish' : 'Finish at')];
 
   const bw = Math.min(100, o.pct), cwid = Math.min(100, _sp);
   const tgtPos = Math.min(tgt, 97);
@@ -2916,7 +2905,7 @@ function updateSim() {
       </div>
       <div class="sim-tgt-lbl" style="left:${tgtPos}%">${tgt}% ▼</div>
     </div>
-    <div class="adv-text">${icon} <strong style="color:${color}">${_sp}% → ${o.pct}%</strong> — ${status}. ${step}</div>
+    <div class="adv-text sim-verdict"><span class="sim-icon">${icon}</span><strong style="color:${color}">${_sp}% → ${o.pct}%</strong><span class="sim-sep">·</span><span>${status}</span></div>
     ${statTiles(tiles)}
     <div class="sim-react">${reaction}</div>
     ${now.ri ? remainingNote(now.ri, s) : noEstimateNote(s)}`;
