@@ -781,13 +781,10 @@
   <div class="modal" style="max-width:460px">
     <div class="modal-hero">
       <div><h2 id="hol-title">Upcoming holidays 🗓️</h2>
-      <p class="sub">Got a circular? Add the days ahead of time — they won't count as absent, and BunkKro plans around them.</p></div>
+      <p class="sub">Got a circular? Tap the days (or drag across a few) — they won't count as absent, and BunkKro plans around them.</p></div>
       <img src="assets/cat-beach.svg" alt="">
     </div>
-    <div class="form-grid-2">
-      <div class="mf"><label for="hol-from">From</label><input type="date" id="hol-from"></div>
-      <div class="mf"><label for="hol-to">To <span class="field-hint">(for a stretch)</span></label><input type="date" id="hol-to"></div>
-    </div>
+    <div class="hol-cal" id="hol-cal" aria-label="Pick holiday days"></div>
     <div class="mf"><label for="hol-name">Name <span class="field-hint">(optional)</span></label><input type="text" id="hol-name" maxlength="40" placeholder="e.g. Diwali break, Sports day"></div>
     <div class="form-preview" id="hol-preview" aria-live="polite"></div>
     <div class="modal-btns"><button class="btn-pri" onclick="addPlannedHolidays()">Add holiday</button></div>

@@ -536,7 +536,7 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .subj-avatar.sm{width:36px;height:36px;font-size:.9rem}
 .subj-card-main{flex:1;min-width:0}
 .subj-card-name{display:block;font-size:1rem;font-weight:800;color:var(--primary-deep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.subj-card-roast{display:block;font-size:.85rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.subj-card-roast{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font-size:.85rem;line-height:1.35;color:var(--text2);overflow:hidden;overflow-wrap:anywhere}
 .subj-bar{display:block;position:relative;height:7px;background:var(--track);border-radius:999px;margin-top:8px;max-width:260px}
 .subj-bar-fill{display:block;height:100%;border-radius:999px;transition:width .6s ease}
 .subj-bar-target{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--primary-deep);opacity:.4;border-radius:2px}
@@ -1324,3 +1324,31 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 @media (prefers-reduced-motion:reduce){.ocr-cat{animation:none}}
 .hol-empty{display:flex;align-items:center;gap:10px}
 .hol-empty img{width:62px;flex-shrink:0}
+/* holiday planner calendar */
+.hol-cal{background:var(--surface2);border-radius:18px;padding:12px 12px 10px;margin:4px 0 12px;user-select:none;-webkit-user-select:none}
+.hc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.hc-title{font-weight:800;color:var(--primary-deep);font-size:.98rem}
+.hc-nav{width:32px;height:32px;border-radius:50%;border:1px solid var(--border-subtle);background:var(--surface);color:var(--primary-deep);display:inline-flex;align-items:center;justify-content:center}
+.hc-nav:hover:not(:disabled){background:var(--selected)}
+.hc-nav:disabled{opacity:.35;cursor:default}
+.hc-week,.hc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.hc-week span{text-align:center;font-size:.7rem;font-weight:800;color:var(--text2);letter-spacing:.04em;padding-bottom:2px}
+.hc-grid{touch-action:none}
+.hc-day{position:relative;aspect-ratio:1;max-height:44px;border:none;border-radius:12px;background:var(--surface);color:var(--text);font:inherit;font-size:.86rem;font-weight:700;font-variant-numeric:tabular-nums;cursor:pointer;transition:background .12s,transform .12s,color .12s}
+.hc-day:hover:not(:disabled){background:var(--selected);color:var(--primary-deep)}
+.hc-blank{background:transparent;pointer-events:none}
+.hc-day.hc-class::after{content:"";position:absolute;left:50%;bottom:5px;width:4px;height:4px;border-radius:50%;background:var(--primary-soft);transform:translateX(-50%)}
+.hc-day.hc-today{box-shadow:inset 0 0 0 2px var(--primary-soft)}
+.hc-day.hc-past{background:transparent;color:var(--muted);opacity:.45;cursor:default}
+.hc-day.hc-hol{background:var(--p-amber);color:var(--amber-text);cursor:default}
+.hc-day.hc-hol::before{content:"🏖";position:absolute;top:1px;right:3px;font-size:.55rem}
+.hc-day.hc-sel,.hc-day.hc-sel:hover:not(:disabled){background:var(--primary);color:#fff;transform:scale(1.04)}
+.hc-day.hc-sel::after{background:#fff}
+.hc-legend{display:flex;gap:14px;justify-content:center;margin-top:9px;font-size:.72rem;color:var(--text2)}
+.hc-legend span{display:inline-flex;align-items:center;gap:5px}
+.hc-dot{width:5px;height:5px;border-radius:50%;background:var(--primary-soft);display:inline-block}
+.hc-swatch{width:12px;height:12px;border-radius:4px;background:var(--p-amber);display:inline-block}
+#hol-preview .link-btn{padding:0;font-size:inherit}
+@media (prefers-reduced-motion:reduce){.hc-day{transition:none}}
+/* narrow phones: the subject line may take a third line rather than be cut off */
+@media (max-width:640px){.subj-card-roast{-webkit-line-clamp:3;line-clamp:3}}

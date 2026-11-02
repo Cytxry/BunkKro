@@ -992,7 +992,7 @@ const ROASTS = {
     'Time to become a morning person. Sorry.',
     'Plot armour not found.',
     'Aura: in the negatives.',
-    'Attendance became a side quest you skipped.',
+    'Attendance: a side quest you skipped.',
     'Roll call has you on mute.',
     'Comeback arc needed, like yesterday.',
     'Proxy friends can only do so much.',
@@ -1245,7 +1245,7 @@ function subjPctText(s) { return hasClasses(s) ? pct(s) + '%' : '—'; }
 function subjFill(s) { return hasClasses(s) ? pctColor(pct(s), getTarget(s)) : 'var(--border2)'; }
 function subjTextColor(s) { return hasClasses(s) ? pctTextColor(pct(s), getTarget(s)) : 'var(--muted)'; }
 function subjRoast(s) {
-  return hasClasses(s) ? getRoast(pct(s), getTarget(s), subjRoastSeed(s)) : 'Fresh start — no classes counted yet.';
+  return hasClasses(s) ? getRoast(pct(s), getTarget(s), subjRoastSeed(s)) : 'Fresh start — nothing counted yet.';
 }
 function pctStatus(p, tgt) {
   tgt = tgt ?? globalTarget;
@@ -5377,37 +5377,130 @@ function holidayRange(from, to) {
   }
   return out;
 }
+// The planner's calendar: tap a day to pick it (again to drop it), or press and drag across days to pick a stretch
+// (dragging from a picked day drops the stretch). Past days, and days already planned as holidays, can't be picked.
+let holSel = new Set();
+let holView = null;          // first day of the month on show: { y, m }
+let holDrag = null;          // { anchor, add, base }
 function openHolidayPlanner() {
   const today = getLocalDateString();
-  const from = document.getElementById('hol-from');
-  from.value = selectedTrackerDate > today ? selectedTrackerDate : today;
-  document.getElementById('hol-to').value = '';
+  const start = selectedTrackerDate > today ? selectedTrackerDate : today;
+  holView = { y: +start.slice(0, 4), m: +start.slice(5, 7) - 1 };
+  holSel = new Set();
   document.getElementById('hol-name').value = '';
   const ov = document.getElementById('hol-overlay');
-  if (!ov.dataset.wired) { ov.dataset.wired = '1'; ov.addEventListener('input', holidayPreview); }
+  if (!ov.dataset.wired) { ov.dataset.wired = '1'; wireHolidayCalendar(); }
+  renderHolidayCalendar();
   holidayPreview();
   renderHolidayList();
   ov.classList.add('show');
-  setTimeout(() => from.focus(), 60);
 }
-function closeHolidayPlanner() { document.getElementById('hol-overlay').classList.remove('show'); }
+function closeHolidayPlanner() { holDrag = null; document.getElementById('hol-overlay').classList.remove('show'); }
+function holShiftMonth(step) {
+  const d = new Date(holView.y, holView.m + step, 1);
+  holView = { y: d.getFullYear(), m: d.getMonth() };
+  renderHolidayCalendar();
+}
+function holPickable(ds) {
+  return ds >= getLocalDateString() && dateExceptions[ds]?.type !== 'holiday';
+}
+function renderHolidayCalendar() {
+  const box = document.getElementById('hol-cal');
+  const { y, m } = holView;
+  const today = getLocalDateString();
+  const first = new Date(y, m, 1);
+  const lead = (first.getDay() + 6) % 7;                  // Monday first
+  const n = new Date(y, m + 1, 0).getDate();
+  const thisMonth = y === +today.slice(0, 4) && m === +today.slice(5, 7) - 1;
+  const title = first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<span class="hc-day hc-blank" aria-hidden="true"></span>';
+  for (let d = 1; d <= n; d++) {
+    const ds = getLocalDateString(new Date(y, m, d));
+    const hol = dateExceptions[ds]?.type === 'holiday';
+    const past = ds < today;
+    const classes = past || hol ? 0 : getAllClassesForDate(ds).filter(c => !c.isBreak).length;
+    const cls = ['hc-day', past && 'hc-past', ds === today && 'hc-today', hol && 'hc-hol', holSel.has(ds) && 'hc-sel', classes && 'hc-class'].filter(Boolean).join(' ');
+    const note = hol ? (dateExceptions[ds].note && dateExceptions[ds].note !== 'College Holiday' ? dateExceptions[ds].note : 'Holiday') : '';
+    cells += `<button type="button" class="${cls}" data-date="${ds}" ${past || hol ? 'disabled' : ''} aria-pressed="${holSel.has(ds)}"
+      aria-label="${fmtDate(ds)}${hol ? ' — ' + escapeHTML(note) : classes ? ` — ${classes} class${classes !== 1 ? 'es' : ''}` : ''}"${hol ? ` title="${escapeHTML(note)}"` : ''}>${d}</button>`;
+  }
+  box.innerHTML = `
+    <div class="hc-head">
+      <button type="button" class="hc-nav" onclick="holShiftMonth(-1)" ${thisMonth ? 'disabled' : ''} aria-label="Previous month">${ic('chevron-left', 'ic-sm')}</button>
+      <span class="hc-title">${title}</span>
+      <button type="button" class="hc-nav" onclick="holShiftMonth(1)" aria-label="Next month">${ic('chevron-right', 'ic-sm')}</button>
+    </div>
+    <div class="hc-week" aria-hidden="true"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+    <div class="hc-grid">${cells}</div>
+    <div class="hc-legend"><span><i class="hc-dot"></i> has classes</span><span><i class="hc-swatch"></i> already a holiday</span></div>`;
+}
+function wireHolidayCalendar() {
+  const box = document.getElementById('hol-cal');
+  const dayAt = e => {
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.hc-day[data-date]');
+    return el && !el.disabled && box.contains(el) ? el.dataset.date : null;
+  };
+  const paint = to => {
+    const [a, b] = [holDrag.anchor, to].sort();
+    holSel = new Set(holDrag.base);
+    for (const ds of holidayRange(a, b)) if (holPickable(ds)) holDrag.add ? holSel.add(ds) : holSel.delete(ds);
+    box.querySelectorAll('.hc-day[data-date]').forEach(el => {
+      const on = holSel.has(el.dataset.date);
+      el.classList.toggle('hc-sel', on);
+      el.setAttribute('aria-pressed', String(on));
+    });
+    holidayPreview();
+  };
+  box.addEventListener('pointerdown', e => {
+    const ds = dayAt(e);
+    if (!ds) return;
+    e.preventDefault();
+    holDrag = { anchor: ds, add: !holSel.has(ds), base: new Set(holSel), last: ds };
+    paint(ds);
+  });
+  box.addEventListener('pointermove', e => {
+    if (!holDrag) return;
+    const ds = dayAt(e);
+    if (ds && ds !== holDrag.last) { holDrag.last = ds; paint(ds); }
+  });
+  const end = () => { holDrag = null; };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  // keyboard: Space / Enter on a day toggles it
+  box.addEventListener('keydown', e => {
+    const el = e.target.closest?.('.hc-day[data-date]');
+    if (!el || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    const ds = el.dataset.date;
+    holSel.has(ds) ? holSel.delete(ds) : holSel.add(ds);
+    el.classList.toggle('hc-sel', holSel.has(ds));
+    el.setAttribute('aria-pressed', String(holSel.has(ds)));
+    holidayPreview();
+  });
+}
 function holidayPreview() {
-  const from = document.getElementById('hol-from').value, to = document.getElementById('hol-to').value;
   const box = document.getElementById('hol-preview');
-  const days = holidayRange(from, to);
-  box.classList.toggle('is-error', !!(from && to && to < from) || (from && to && !days.includes(to)));
-  if (!from) { box.textContent = 'Pick the day the circular mentions.'; return; }
-  if (to && to < from) { box.textContent = 'The last day has to come after the first.'; return; }
-  if (to && !days.includes(to)) { box.textContent = 'That\'s more than two months — add it in parts.'; return; }
+  const days = [...holSel].sort();
+  box.classList.remove('is-error');
+  if (!days.length) { box.innerHTML = 'Tap a day, or press and drag across a few.'; return; }
   const classes = days.reduce((n, ds) => n + getAllClassesForDate(ds).filter(c => !c.isBreak).length, 0);
-  box.textContent = (days.length === 1 ? fmtDate(from) : `${days.length} days · ${fmtShort(from)} – ${fmtShort(days[days.length - 1])}`)
-    + (classes ? ` · ${classes} class${classes !== 1 ? 'es' : ''} won't count` : ' · no classes on the timetable then');
+  const stretch = holidayRange(days[0], days[days.length - 1]).length === days.length;
+  const when = days.length === 1 ? fmtDate(days[0])
+    : stretch ? `${days.length} days · ${fmtShort(days[0])} – ${fmtShort(days[days.length - 1])}` : `${days.length} days picked`;
+  box.innerHTML = escapeHTML(when + (classes ? ` · ${classes} class${classes !== 1 ? 'es' : ''} won't count` : ' · no classes on those days'))
+    + ' · <button type="button" class="link-btn" onclick="holClear()">clear</button>';
 }
+function holClear() { holSel = new Set(); renderHolidayCalendar(); holidayPreview(); }
 async function addPlannedHolidays() {
-  const from = document.getElementById('hol-from').value, to = document.getElementById('hol-to').value;
   const name = document.getElementById('hol-name').value.trim().slice(0, 40);
-  const days = holidayRange(from, to);
-  if (!days.length || (to && !days.includes(to))) { holidayPreview(); return; }
+  const days = [...holSel].sort();
+  if (!days.length) {
+    const box = document.getElementById('hol-preview');
+    box.classList.add('is-error');
+    box.textContent = 'Pick at least one day on the calendar first.';
+    return;
+  }
   let added = 0, skipped = 0;
   for (const ds of days) {
     // a day with marks or a timetable swap is changed on that day itself, so nothing gets silently undone
@@ -5416,8 +5509,9 @@ async function addPlannedHolidays() {
     saveDateExceptionToDB(ds, 'holiday', name || 'College Holiday');
     added++;
   }
-  document.getElementById('hol-to').value = '';
+  holSel = new Set();
   document.getElementById('hol-name').value = '';
+  renderHolidayCalendar();
   holidayPreview();
   renderHolidayList();
   renderTracker();
@@ -5453,6 +5547,7 @@ function removePlannedHoliday(i) {
   if (!g) return;
   for (const ds of g.dates) { delete dateExceptions[ds]; saveDateExceptionToDB(ds, null); }
   renderHolidayList();
+  renderHolidayCalendar();
   holidayPreview();
   renderTracker();
   if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
