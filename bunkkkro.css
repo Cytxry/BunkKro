@@ -1318,7 +1318,7 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 /* the blue cat around the site */
 .auth-art-cats{margin:auto 0 -6px auto;display:flex;align-items:flex-end}
 .auth-art-cats .auth-art-cat{margin:0}
-.auth-art-cat2{width:118px;margin:0 -18px 2px 0;position:relative;z-index:0}
+.auth-art-cat2{width:150px;margin:0 -34px 0 0;position:relative;z-index:0}
 .ocr-cat{display:block;width:104px;margin:0 auto 8px;animation:ocrBob 1.6s ease-in-out infinite}
 @keyframes ocrBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
 @media (prefers-reduced-motion:reduce){.ocr-cat{animation:none}}
