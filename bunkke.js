@@ -2745,6 +2745,54 @@ function adjSim(d) {
 }
 function resetSim() { document.getElementById('sim-input').value = 0; updateSim(); }
  
+// While you simulate, the Bunk Advisor's cat (beside the Simulator on wide screens, where its card would otherwise
+// stretch into empty space) watches and reacts: a cat for the mood, the reaction in a speech bubble.
+const CAT_MOODS = {
+  safe_in_limit: { cat: 'cat-happy', w: 126 },
+  safe_over_limit: { cat: 'cat-confused', w: 126 },
+  warn: { cat: 'cat-worried', w: 126 },
+  cooked: { cat: 'cat-worried', w: 126 },
+  lost: { cat: 'cat-sad', w: 116 },
+  tooMany: { cat: 'cat-confused', w: 126 },
+};
+// never the same cat as the one in the subject's header card just above
+const CAT_ALT = { 'cat-happy': 'cat-trophy', 'cat-worried': 'cat-confused', 'cat-sad': 'cat-worried', 'cat-confused': 'cat-detective' };
+const CAT_LINES = {
+  lost: [
+    t => `Noooo, there goes ${t}% for this sem 😿`,
+    t => `That was the one. ${t}% has left the building.`,
+    t => `I can't watch. ${t}% is gone now 🙈`,
+  ],
+  tooMany: [
+    () => 'That\'s more bunks than classes left 😹',
+    () => 'Bro is trying to bunk the future.',
+    () => 'Not even the timetable has that many.',
+  ],
+};
+const sideBySide = window.matchMedia ? window.matchMedia('(min-width: 1101px)') : { matches: true };
+function advisorCat(mood, text) {
+  const card = document.querySelector('.adv-advisor');
+  const img = document.getElementById('adv-cat');
+  const bubble = document.getElementById('adv-bubble');
+  if (!card || !img || !bubble) return;
+  const on = !!mood && sideBySide.matches;
+  card.classList.toggle('watching', on);
+  let want = on ? CAT_MOODS[mood] : { cat: 'cat-peek', w: 124 };
+  const hero = document.getElementById('sp-cat')?.src || '';
+  if (on && hero.endsWith(want.cat + '.svg') && CAT_ALT[want.cat]) want = { cat: CAT_ALT[want.cat], w: 126 };
+  if (!img.src.endsWith(want.cat + '.svg')) {
+    img.src = `assets/${want.cat}.svg`;
+    img.style.width = want.w + 'px';
+    img.classList.remove('cat-pop'); void img.offsetWidth; img.classList.add('cat-pop');
+  }
+  bubble.hidden = !on;
+  if (on && bubble.innerHTML !== text) {
+    bubble.innerHTML = text;
+    bubble.classList.remove('bubble-pop'); void bubble.offsetWidth; bubble.classList.add('bubble-pop');
+  }
+}
+if (sideBySide.addEventListener) sideBySide.addEventListener('change', () => { if (_ss) updateSim(); });
+
 function updateSim() {
   const s = _ss; if (!s) return;
   const tgt = _st, pw = classesPerWeek(s).n;
@@ -2757,6 +2805,7 @@ function updateSim() {
   out.closest('.adv-card')?.classList.toggle('simulating', plan > 0 && s.total > 0);
   const line = h => '<div class="adv-text sim-rest">' + h + '</div>';
 
+  if (s.total === 0 || plan === 0) advisorCat(null);
   if (s.total === 0) { out.innerHTML = line('No classes counted yet — nothing to simulate.'); return; }
   if (plan === 0) {
     // at rest: one short line; the numbers are in the Bunk Advisor beside it
@@ -2769,12 +2818,16 @@ function updateSim() {
 
   if (o.tooMany) {
     out.innerHTML = '<div class="adv-text">' + semCopyStep('overLeft', seed, plan, { plan, left: now.leftNow, ab: now.ab }) + '</div>' + remainingNote(now.ri, s);
+    advisorCat('tooMany', stepPick(CAT_LINES.tooMany, COPY_SALT + '|cat|' + seed, plan)());
     return;
   }
 
   const safe = o.pct >= tgt;
   const weeks = pw > 0 ? Math.round(plan / pw * 10) / 10 : null;
   const reaction = getSimReaction(plan, bk_now, safe, o.pct, tgt, seed);
+  const tier = !safe ? 'cooked' : o.pct - tgt <= 2 ? 'warn' : plan > bk_now ? 'safe_over_limit' : 'safe_in_limit';
+  const justLost = o.lost && !now.lost;
+  advisorCat(o.lost ? 'lost' : tier, justLost ? stepPick(CAT_LINES.lost, COPY_SALT + '|cat|' + seed, plan)(tgt) : reaction);
   let icon, color, status;
   if (safe && plan <= bk_now) { icon = '✅'; color = 'var(--accent)'; status = 'still above ' + tgt + '%'; }
   else if (safe) { icon = '⚠️'; color = 'var(--warn)'; status = (plan - bk_now) + ' over your safe limit'; }

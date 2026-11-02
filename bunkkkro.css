@@ -662,7 +662,8 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .subj-grid .adv-card{margin-bottom:0;display:flex;flex-direction:column}
 /* the cat sits on the card's bottom edge, filling the space beside the simulator */
 .subj-grid .adv-card.adv-advisor{overflow:hidden;padding-bottom:0;background:linear-gradient(180deg,var(--surface) 45%,var(--p-lav) 210%)}
-.adv-cat{display:block;width:124px;margin:auto 28px -5px auto;padding-top:16px;pointer-events:none}
+.adv-cat-wrap{margin-top:auto;padding-top:16px;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none}
+.adv-cat{display:block;width:124px;margin:0 28px -5px 0;pointer-events:none}
 .adv-card,.edit-card{background:var(--surface);border:1px solid var(--border-subtle);border-radius:22px;box-shadow:var(--shadow);padding:22px;margin-bottom:20px}
 .adv-card h4,.edit-card h4{font-size:1.15rem;font-weight:800;color:var(--primary-deep);margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;letter-spacing:-.015em}
 .adv-card h4 .h-sub{font-size:.85rem;font-weight:500;color:var(--text2)}
@@ -1303,3 +1304,14 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .hol-del{width:30px;height:30px;border-radius:50%;border:none;background:transparent;color:var(--text2);display:inline-flex;align-items:center;justify-content:center}
 .hol-del:hover{background:var(--surface);color:var(--danger)}
 .hol-empty{font-size:.85rem;color:var(--muted);padding:4px 2px 8px}
+/* the Advisor cat watches the Simulator: a mood cat and the reaction in a speech bubble (side-by-side only) */
+.cat-bubble{position:relative;max-width:min(300px,100%);margin:0 56px 12px 0;padding:11px 15px;border-radius:18px 18px 6px 18px;background:var(--surface);border:1px solid var(--border-subtle);box-shadow:var(--shadow-sm);font-size:.92rem;font-weight:600;line-height:1.45;color:var(--primary-deep);text-align:left}
+.cat-bubble::after{content:"";position:absolute;right:22px;bottom:-7px;width:13px;height:13px;background:var(--surface);border-right:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);transform:rotate(45deg);border-bottom-right-radius:3px}
+.cat-pop{animation:catPop .45s cubic-bezier(.34,1.56,.64,1)}
+.bubble-pop{animation:bubblePop .35s ease-out}
+@keyframes catPop{0%{transform:translateY(14px) scale(.92);opacity:.4}100%{transform:none;opacity:1}}
+@keyframes bubblePop{0%{transform:translateY(6px) scale(.96);opacity:0}100%{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.cat-pop,.bubble-pop{animation:none}}
+/* side by side the reaction is the cat's line; stacked, it stays in the Simulator */
+@media (min-width:1101px){.sim-react{display:none}}
+@media (max-width:1100px){.cat-bubble{display:none}}
