@@ -1278,15 +1278,28 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .mf.sem-asked label{color:var(--primary-deep);font-weight:700}
 .mf.sem-asked input{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint)}
 
-/* Bunk Advisor & Simulator: the numbers as little pastel facts, one small estimate note */
-.fact-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.fact{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:12px;font-size:.84rem;font-weight:600;line-height:1.2;background:var(--surface2);color:var(--text-soft)}
-.fact b{font-weight:800;font-variant-numeric:tabular-nums}
-.fact.lav{background:var(--p-lav);color:var(--primary-deep)}
-.fact.blue{background:var(--p-blue);color:var(--primary-deep)}
-.fact.good{background:var(--p-green);color:var(--good)}
-.fact.bad{background:var(--p-pink);color:var(--danger)}
+/* Bunk Advisor & Simulator: the numbers as mini stat tiles (same family as the Total / Present chips) */
+.mini-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:10px;margin-top:14px}
+.chip.mini{padding:9px 12px;border-radius:14px}
+.chip.mini .chip-lbl{font-size:.72rem;margin-bottom:2px;white-space:nowrap}
+.chip.mini .cv{font-size:1.25rem}
 .sim-react{margin-top:10px;font-size:.88rem;font-style:italic;color:var(--text2)}
-.sem-note{display:flex;align-items:flex-start;gap:7px;margin-top:12px;font-size:.78rem;line-height:1.5;color:var(--muted)}
+.sem-note{display:flex;align-items:flex-start;gap:6px;margin-top:12px;font-size:.78rem;line-height:1.5;color:var(--muted)}
+.sem-note .ic{flex-shrink:0;margin-top:2px;opacity:.75}
 .sem-note .link-btn{padding:0;font-size:inherit}
-.sem-dot{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:var(--surface2);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:.75rem}
+/* the Simulator cat naps at the bottom until you start simulating */
+.subj-grid .adv-card.adv-sim{position:relative;overflow:hidden;background:linear-gradient(180deg,var(--surface) 50%,var(--p-amber) 230%)}
+.sim-cat{position:absolute;right:24px;bottom:-4px;width:118px;pointer-events:none;transition:opacity .35s ease,transform .45s ease}
+.adv-sim.simulating .sim-cat{opacity:0;transform:translateY(28px)}
+.adv-sim:not(.simulating) #sim-result{padding-bottom:96px}
+@media (prefers-reduced-motion:reduce){.sim-cat{transition:none}}
+/* Upcoming holidays */
+.hol-list-title{font-size:.78rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);margin:18px 0 8px}
+.hol-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:14px;background:var(--p-amber);margin-bottom:8px}
+.hol-ic{width:30px;height:30px;border-radius:50%;background:var(--surface);display:inline-flex;align-items:center;justify-content:center;color:var(--amber-text);flex-shrink:0}
+.hol-meta{display:flex;flex-direction:column;min-width:0;flex:1;font-size:.85rem;line-height:1.35}
+.hol-meta strong{color:var(--primary-deep);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hol-meta span{color:var(--text2);font-size:.78rem}
+.hol-del{width:30px;height:30px;border-radius:50%;border:none;background:transparent;color:var(--text2);display:inline-flex;align-items:center;justify-content:center}
+.hol-del:hover{background:var(--surface);color:var(--danger)}
+.hol-empty{font-size:.85rem;color:var(--muted);padding:4px 2px 8px}

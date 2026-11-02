@@ -998,12 +998,15 @@ const TOAST_MSGS = {
 function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 // Stable pick: the same seed (e.g. the same attendance numbers) always gives
 // the same line, so roasts only change when the numbers do — not on refresh.
-function stablePick(arr, seed) {
+function seedHash(seed) {
   const str = String(seed);
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return arr[(h >>> 0) % arr.length];
+  return h >>> 0;
 }
+function stablePick(arr, seed) { return arr[seedHash(seed) % arr.length]; }
+// Next line on every step (each + / − in the Simulator): consecutive steps never repeat a line
+function stepPick(arr, seed, step) { return arr[(seedHash(seed) + step) % arr.length]; }
 function randToast(type) { return randFrom(TOAST_MSGS[type] || ['Done.']); }
 
 // End-of-semester lines for the Bunk Advisor and Simulator. Each situation has several ways to say the same
@@ -1040,6 +1043,11 @@ const SEM_COPY = {
     d => `Recovery mode: attend every class until you're over ${d.tgt}%.`,
     d => `Front row energy needed. Zero skips until ${d.tgt}% is back.`,
   ],
+  simStep: [
+    d => d.lost && !d.wasLost ? `This one takes ${d.tgt}% off the table for the semester.` : d.safe ? 'Still in the safe zone.' : d.lost ? 'Digging deeper.' : 'Still recoverable if you show up after.',
+    d => d.lost && !d.wasLost ? `That's the bunk that loses ${d.tgt}% for good.` : d.safe ? 'The register barely noticed.' : d.lost ? 'The hole gets deeper.' : 'Comeback still on — no more after this.',
+    d => d.lost && !d.wasLost ? `Point of no return: ${d.tgt}% is gone after this.` : d.safe ? 'You can get away with this one.' : d.lost ? 'Every extra skip lowers the ceiling.' : 'Ouch, but fixable.',
+  ],
   simSafe0: [
     d => `Room for ${semB(d.bk)} more skip${d.bk !== 1 ? 's' : ''}. Tap + and watch what each bunk does.`,
     d => `You're above ${d.tgt}% with ${semB(d.bk)} to spare. Go on, simulate one.`,
@@ -1062,6 +1070,7 @@ const SEM_COPY = {
   ],
 };
 function semCopy(kind, seed, d) { return stablePick(SEM_COPY[kind], `${COPY_SALT}|${kind}|${seed}`)(d); }
+function semCopyStep(kind, seed, step, d) { return stepPick(SEM_COPY[kind], `${COPY_SALT}|${kind}|${seed}`, step)(d); }
  
 // ══════════════════════════════════════════════════════
 //  STATE
@@ -1260,11 +1269,9 @@ function getRoast(p, tgt, seed = '') {
 }
 function subjRoastSeed(s) { return `${s.id}|${s.present}/${s.total}`; }
 function getSimReaction(planBunks, bunkableNow, safe, projPct, tgt, seed = '') {
-  const key = `${seed}|${planBunks}|${projPct}|${tgt}`;
-  if (!safe) return stablePick(SIM_REACTIONS.cooked, key);
-  if (projPct - tgt <= 2) return stablePick(SIM_REACTIONS.warn, key);
-  if (planBunks > bunkableNow) return stablePick(SIM_REACTIONS.safe_over_limit, key);
-  return stablePick(SIM_REACTIONS.safe_in_limit, key);
+  const key = `${COPY_SALT}|${seed}|${tgt}`;
+  const tier = !safe ? 'cooked' : projPct - tgt <= 2 ? 'warn' : planBunks > bunkableNow ? 'safe_over_limit' : 'safe_in_limit';
+  return stepPick(SIM_REACTIONS[tier], key + '|' + tier, planBunks);
 }
 // Seed for overall verdicts: changes only when any subject's numbers change.
 function overallSeed() { return subjects.map(s => `${s.present}/${s.total}/${getTarget(s)}`).join(','); }
@@ -2006,7 +2013,7 @@ function renderSubject(id, preserveSim) {
     chip('pink', 'x', 'Absent', s.total - s.present, null) +
     chip('amber', 'target', 'Target', tgt + '%', 'target');
  
-  // Advice: one short line in the site's voice, then the numbers as little facts
+  // Advice: one short line in the site's voice, then the numbers as mini stat tiles
   let pills = '', advText = '';
   const o = outlook(s, tgt);
   const seed = subjRoastSeed(s);
@@ -2017,10 +2024,10 @@ function renderSubject(id, preserveSim) {
   } else if (p >= tgt && bk > 0) {
     pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
     if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
-    advText = semCopy('advSafe', seed, { bk, tgt }) + factChips([
-      cw > 0 ? ['lav', '🗓️', `≈ <b>${(bk / cw).toFixed(1)}</b> weeks of skips`] : null,
-      leftFact(o),
-      bestFact(o, tgt, 'attend the rest →'),
+    advText = semCopy('advSafe', seed, { bk, tgt }) + statTiles([
+      cw > 0 ? ['indigo', 'clock', 'Weeks of skips', '≈' + (bk / cw).toFixed(1)] : null,
+      leftTile(o),
+      bestTile(o, tgt, 'If you attend'),
     ]) + remainingNote(o.ri, s);
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
@@ -2028,11 +2035,11 @@ function renderSubject(id, preserveSim) {
       advText = `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`;
     } else {
       const kind = o.lost ? 'advLost' : o.left === null ? 'advUnknown' : o.tight ? 'advTight' : 'advDoable';
-      advText = semCopy(kind, seed, { tgt }) + factChips([
-        [o.lost ? 'bad' : 'lav', '🎯', `need <b>${o.need}</b> in a row`],
-        o.left === null && cw > 0 ? ['lav', '🗓️', `≈ <b>${Math.ceil(o.need / cw)}</b> weeks of showing up`] : null,
-        leftFact(o),
-        bestFact(o, tgt, o.lost ? 'best finish' : 'finish'),
+      advText = semCopy(kind, seed, { tgt }) + statTiles([
+        needTile(o),
+        o.left === null && cw > 0 ? ['indigo', 'clock', 'Weeks', '≈' + Math.ceil(o.need / cw)] : null,
+        leftTile(o),
+        bestTile(o, tgt, o.lost ? 'Best finish' : 'You finish'),
       ]) + remainingNote(o.ri, s);
     }
   } else {
@@ -2040,7 +2047,7 @@ function renderSubject(id, preserveSim) {
     advText = (p === tgt
       ? `Literally one absence away from danger. Attend <strong>3–4 more</strong> to build a buffer before even thinking about bunking.`
       : `You're at ${p}%, but skipping even one class drops you below ${tgt}%. Attend <strong>3–4 more</strong> to build a buffer.`)
-      + factChips([leftFact(o), bestFact(o, tgt, 'attend the rest →')]) + remainingNote(o.ri, s);
+      + statTiles([leftTile(o), bestTile(o, tgt, 'If you attend')]) + remainingNote(o.ri, s);
   }
   document.getElementById('adv-pills').innerHTML = pills;
   document.getElementById('adv-text').innerHTML = advText;
@@ -2391,11 +2398,26 @@ function remainingInfo(s) {
   // subject's classes, minus the ones already held
   const cpw = classesPerWeek(s), pw = cpw.n;
   const stale = !!end && end.estimated && end.date < today;
-  if ((!end || stale) && pw > 0 && Math.round(semWeeks * pw) > s.total)
-    return { n: Math.round(semWeeks * pw) - s.total, est: true, guess: true, stale, pwGuessed: cpw.guessed };
+  if ((!end || stale) && pw > 0 && Math.round(semWeeks * pw) > s.total) {
+    const n = Math.round(semWeeks * pw) - s.total;
+    const until = new Date(); until.setDate(until.getDate() + Math.ceil(n / pw * 7));
+    return { n: Math.max(0, n - holidayClassesAhead(s, getLocalDateString(until))), est: true, guess: true, stale, pwGuessed: cpw.guessed };
+  }
   return null;
 }
 function remainingClasses(s) { return remainingInfo(s)?.n ?? null; }
+// Timetable classes of a subject that fall on holidays planned from today up to `until`
+function holidayClassesAhead(s, until) {
+  const today = getLocalDateString();
+  let n = 0;
+  for (const [ds, ex] of Object.entries(dateExceptions)) {
+    if (ex?.type !== 'holiday' || ds < today || ds > until) continue;
+    const [y, m, d] = ds.split('-').map(Number);
+    const wd = new Date(y, m - 1, d).getDay() || 7;
+    n += timetable.filter(t => t.subjectId === s.id && !t.isBreak && t.day === wd).length;
+  }
+  return n;
+}
 function openEditCard() {
   const card = document.getElementById('edit-card');
   if (!card) return;
@@ -2418,17 +2440,21 @@ function outlook(s, tgt, skip = 0) {
            lost: need > 0 && (!isFinite(need) || (left !== null && need > left)),
            tight: isFinite(need) && left !== null && need > 0 && need <= left && need > 0.8 * left };
 }
-// Little pastel facts under a line: [cls, icon, html]
-function factChips(items) {
+// The numbers as mini stat tiles, the same family as the Total / Present / Target chips: [color, icon, label, value]
+function statTiles(items) {
   const xs = items.filter(Boolean);
-  return xs.length ? '<div class="fact-row">' + xs.map(([cls, icon, html]) => `<span class="fact ${cls}">${icon} ${html}</span>`).join('') + '</div>' : '';
+  return xs.length ? '<div class="mini-stats">' + xs.map(([cls, icon, label, value]) =>
+    `<div class="chip mini ${cls}"><span class="chip-lbl">${ic(icon, 'ic-sm')} ${label}</span><span class="cv">${value}</span></div>`).join('') + '</div>' : '';
 }
-function bestFact(o, tgt, label) {
+function needTile(o, label) {
+  return [o.lost ? 'pink' : 'indigo', 'target', label || 'In a row', isFinite(o.need) ? String(o.need) : '—'];
+}
+function leftTile(o) {
+  return o.left === null ? null : ['amber', 'calendar', 'Classes left', o.ab + o.left];
+}
+function bestTile(o, tgt, label) {
   if (o.best === null) return null;
-  return [o.best >= tgt ? 'good' : 'bad', '🏁', `${label} <b>${o.ab}${o.best}%</b>`];
-}
-function leftFact(o) {
-  return o.left === null ? null : ['blue', '📅', `<b>${o.ab}${o.left}</b> class${o.left !== 1 ? 'es' : ''} left`];
+  return [o.best >= tgt ? 'green' : 'pink', 'trend', label, o.ab + o.best + '%'];
 }
 // One small line saying how the classes left were estimated, with the fix
 function remainingNote(info, s) {
@@ -2442,7 +2468,7 @@ function remainingNote(info, s) {
   else text = semWeeks + '-week sem, ' + perWeek + ' · ' + link('add semester dates', 'start');
   if (!info.guess) text = text.replace('16 weeks', semWeeks + ' weeks');
   if (cpw.guessed) text += ' · <button class="link-btn" onclick="openEditCard()">' + (cpw.mismatch ? 'check its days' : 'add its days') + '</button>';
-  return '<div class="sem-note"><span class="sem-dot">≈</span><span>Estimated: ' + text + '</span></div>';
+  return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Estimated: ' + text + '</span></div>';
 }
 // ── Edit subject ──
 function readEditForm(s) {
@@ -2723,40 +2749,40 @@ function updateSim() {
   const s = _ss; if (!s) return;
   const tgt = _st, pw = classesPerWeek(s).n;
   const plan = Math.max(0, parseInt(document.getElementById('sim-input').value)||0);
-  const seed = subjRoastSeed(s) + '|' + plan;
+  const seed = subjRoastSeed(s);
   const now = outlook(s, tgt), o = outlook(s, tgt, plan);
   const bk_now = Math.max(0, Math.floor(s.present*100/tgt) - s.total);
   const out = document.getElementById('sim-result');
-  const card = (line, facts) => '<div class="adv-text">' + line + '</div>' + factChips(facts) + remainingNote(now.ri, s);
+  // the cat naps at the bottom of the card until you start simulating
+  out.closest('.adv-card')?.classList.toggle('simulating', plan > 0 && s.total > 0);
+  const line = h => '<div class="adv-text sim-rest">' + h + '</div>';
 
-  if (s.total === 0) { out.innerHTML = '<div class="adv-text">No classes counted yet — nothing to simulate.</div>'; return; }
+  if (s.total === 0) { out.innerHTML = line('No classes counted yet — nothing to simulate.'); return; }
   if (plan === 0) {
-    if (bk_now > 0) out.innerHTML = card(semCopy('simSafe0', seed, { bk: bk_now, tgt }), [leftFact(now), bestFact(now, tgt, 'attend the rest →')]);
-    else if (_sp < tgt && now.lost) out.innerHTML = card(semCopy('simLost0', seed, { tgt }), [['bad', '🎯', `need <b>${isFinite(now.need) ? now.need : '∞'}</b> in a row`], leftFact(now), bestFact(now, tgt, 'best finish')]);
-    else if (_sp < tgt) out.innerHTML = card(semCopy('simBelow0', seed, { tgt }), [['lav', '🎯', `need <b>${now.need}</b> in a row`], leftFact(now), bestFact(now, tgt, 'finish')]);
-    else out.innerHTML = card('Zero safe bunks — right at the limit. Tap + to see what one skip would cost.', [leftFact(now), bestFact(now, tgt, 'attend the rest →')]);
+    // at rest: one short line; the numbers are in the Bunk Advisor beside it
+    out.innerHTML = line(bk_now > 0 ? semCopy('simSafe0', seed, { bk: bk_now, tgt })
+      : _sp < tgt && now.lost ? semCopy('simLost0', seed, { tgt })
+      : _sp < tgt ? semCopy('simBelow0', seed, { tgt })
+      : 'Zero safe bunks — right at the limit. Tap + to see what one skip would cost.');
     return;
   }
 
   if (o.tooMany) {
-    out.innerHTML = card(semCopy('overLeft', seed, { plan, left: now.leftNow, ab: now.ab }), []);
+    out.innerHTML = '<div class="adv-text">' + semCopyStep('overLeft', seed, plan, { plan, left: now.leftNow, ab: now.ab }) + '</div>' + remainingNote(now.ri, s);
     return;
   }
 
   const safe = o.pct >= tgt;
   const weeks = pw > 0 ? Math.round(plan / pw * 10) / 10 : null;
-  const reaction = getSimReaction(plan, bk_now, safe, o.pct, tgt, subjRoastSeed(s));
+  const reaction = getSimReaction(plan, bk_now, safe, o.pct, tgt, seed);
   let icon, color, status;
   if (safe && plan <= bk_now) { icon = '✅'; color = 'var(--accent)'; status = 'still above ' + tgt + '%'; }
   else if (safe) { icon = '⚠️'; color = 'var(--warn)'; status = (plan - bk_now) + ' over your safe limit'; }
   else { icon = '🚨'; color = 'var(--danger)'; status = '<strong>' + (tgt - o.pct) + '%</strong> below ' + tgt + '%'; }
-  const facts = safe
-    ? [weeks !== null ? ['lav', '🗓️', `≈ <b>${weeks}</b> week${weeks !== 1 ? 's' : ''} of classes`] : null, leftFact(o), bestFact(o, tgt, 'attend the rest →')]
-    : [[o.lost ? 'bad' : 'lav', '🎯', isFinite(o.need) ? `<b>${o.need}</b> in a row to recover` : 'can\'t recover'],
-       leftFact(o), bestFact(o, tgt, o.lost ? 'best finish' : 'finish')];
-  const verdict = o.lost && !now.lost
-    ? ' This one takes ' + tgt + '% off the table for the semester.'
-    : !safe && !o.lost && o.left !== null ? ' Still recoverable if you show up after.' : '';
+  const step = semCopyStep('simStep', seed, plan, { tgt, safe, lost: o.lost, wasLost: now.lost });
+  const tiles = safe
+    ? [weeks !== null ? ['indigo', 'clock', 'Weeks of classes', '≈' + weeks] : null, leftTile(o), bestTile(o, tgt, 'If you attend')]
+    : [needTile(o, 'To recover'), leftTile(o), bestTile(o, tgt, o.lost ? 'Best finish' : 'You finish')];
 
   const bw = Math.min(100, o.pct), cwid = Math.min(100, _sp);
   const tgtPos = Math.min(tgt, 97);
@@ -2770,8 +2796,8 @@ function updateSim() {
       </div>
       <div class="sim-tgt-lbl" style="left:${tgtPos}%">${tgt}% ▼</div>
     </div>
-    <div class="adv-text">${icon} <strong style="color:${color}">${_sp}% → ${o.pct}%</strong> — ${status}.${verdict}</div>
-    ${factChips(facts)}
+    <div class="adv-text">${icon} <strong style="color:${color}">${_sp}% → ${o.pct}%</strong> — ${status}. ${step}</div>
+    ${statTiles(tiles)}
     <div class="sim-react">${reaction}</div>
     ${remainingNote(now.ri, s)}`;
 }
@@ -5231,6 +5257,105 @@ async function toggleDateHoliday() {
   renderNav();
 }
 
+// ══════════════════════════════════════════════════════
+//  UPCOMING HOLIDAYS — a circular says the college is shut on a day (or a
+//  stretch): add it ahead of time instead of visiting each day on the day.
+// ══════════════════════════════════════════════════════
+function holidayRange(from, to) {
+  if (!from || !DATE_RE.test(from)) return [];
+  const end = to && DATE_RE.test(to) ? to : from;
+  if (end < from) return [];
+  const out = [];
+  const [y, m, d] = from.split('-').map(Number);
+  for (let i = 0; i < 62; i++) {
+    const ds = getLocalDateString(new Date(y, m - 1, d + i));
+    if (ds > end) break;
+    out.push(ds);
+  }
+  return out;
+}
+function openHolidayPlanner() {
+  const today = getLocalDateString();
+  const from = document.getElementById('hol-from');
+  from.value = selectedTrackerDate > today ? selectedTrackerDate : today;
+  document.getElementById('hol-to').value = '';
+  document.getElementById('hol-name').value = '';
+  const ov = document.getElementById('hol-overlay');
+  if (!ov.dataset.wired) { ov.dataset.wired = '1'; ov.addEventListener('input', holidayPreview); }
+  holidayPreview();
+  renderHolidayList();
+  ov.classList.add('show');
+  setTimeout(() => from.focus(), 60);
+}
+function closeHolidayPlanner() { document.getElementById('hol-overlay').classList.remove('show'); }
+function holidayPreview() {
+  const from = document.getElementById('hol-from').value, to = document.getElementById('hol-to').value;
+  const box = document.getElementById('hol-preview');
+  const days = holidayRange(from, to);
+  box.classList.toggle('is-error', !!(from && to && to < from) || (from && to && !days.includes(to)));
+  if (!from) { box.textContent = 'Pick the day the circular mentions.'; return; }
+  if (to && to < from) { box.textContent = 'The last day has to come after the first.'; return; }
+  if (to && !days.includes(to)) { box.textContent = 'That\'s more than two months — add it in parts.'; return; }
+  const classes = days.reduce((n, ds) => n + getAllClassesForDate(ds).filter(c => !c.isBreak).length, 0);
+  box.textContent = (days.length === 1 ? fmtDate(from) : `${days.length} days · ${fmtShort(from)} – ${fmtShort(days[days.length - 1])}`)
+    + (classes ? ` · ${classes} class${classes !== 1 ? 'es' : ''} won't count` : ' · no classes on the timetable then');
+}
+async function addPlannedHolidays() {
+  const from = document.getElementById('hol-from').value, to = document.getElementById('hol-to').value;
+  const name = document.getElementById('hol-name').value.trim().slice(0, 40);
+  const days = holidayRange(from, to);
+  if (!days.length || (to && !days.includes(to))) { holidayPreview(); return; }
+  let added = 0, skipped = 0;
+  for (const ds of days) {
+    // a day with marks or a timetable swap is changed on that day itself, so nothing gets silently undone
+    if (Object.keys(dailyPeriodLogs[ds] || {}).length || dateExceptions[ds]?.type === 'custom_day') { skipped++; continue; }
+    dateExceptions[ds] = { type: 'holiday', note: name || 'College Holiday' };
+    saveDateExceptionToDB(ds, 'holiday', name || 'College Holiday');
+    added++;
+  }
+  document.getElementById('hol-to').value = '';
+  document.getElementById('hol-name').value = '';
+  holidayPreview();
+  renderHolidayList();
+  renderTracker();
+  renderNav();
+  if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
+  toast(added ? `Added ${added} holiday day${added !== 1 ? 's' : ''} 🏖️${skipped ? ` · ${skipped} skipped (already marked — change those on the day)` : ''}`
+    : 'Those days already have marks — open the day itself to make it a holiday', added ? 'ok' : 'err');
+}
+// Upcoming holidays, consecutive days with the same name shown as one stretch
+function renderHolidayList() {
+  const box = document.getElementById('hol-list');
+  const today = getLocalDateString();
+  const days = Object.entries(dateExceptions).filter(([ds, ex]) => ex?.type === 'holiday' && ds >= today).sort(([a], [b]) => a.localeCompare(b));
+  if (!days.length) { box.innerHTML = '<div class="hol-empty">Nothing planned yet.</div>'; return; }
+  const groups = [];
+  for (const [ds, ex] of days) {
+    const g = groups[groups.length - 1];
+    const next = g ? (() => { const [y, m, d] = g.end.split('-').map(Number); return getLocalDateString(new Date(y, m - 1, d + 1)); })() : null;
+    if (g && next === ds && g.note === (ex.note || '')) g.end = ds, g.dates.push(ds);
+    else groups.push({ start: ds, end: ds, note: ex.note || '', dates: [ds] });
+  }
+  box.innerHTML = groups.map((g, i) => `
+    <div class="hol-item">
+      <span class="hol-ic">${ic('umbrella', 'ic-sm')}</span>
+      <div class="hol-meta"><strong>${g.note && g.note !== 'College Holiday' ? escapeHTML(g.note) : 'Holiday'}</strong>
+        <span>${g.start === g.end ? fmtDate(g.start) : `${fmtShort(g.start)} – ${fmtShort(g.end)} · ${g.dates.length} days`}</span></div>
+      <button class="hol-del" onclick="removePlannedHoliday(${i})" aria-label="Remove this holiday">${ic('x', 'ic-sm')}</button>
+    </div>`).join('');
+  box._groups = groups;
+}
+function removePlannedHoliday(i) {
+  const g = document.getElementById('hol-list')._groups?.[i];
+  if (!g) return;
+  for (const ds of g.dates) { delete dateExceptions[ds]; saveDateExceptionToDB(ds, null); }
+  renderHolidayList();
+  holidayPreview();
+  renderTracker();
+  if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
+  toast('Holiday removed');
+}
+
 // Remove every mark on a date and take it back out of the subject totals.
 async function clearMarksForDate(date) {
   return removeMarks(date, Object.keys(dailyPeriodLogs[date] || {}));
@@ -5549,7 +5674,8 @@ function renderTracker() {
   if (banner) {
     if (isHoliday) {
       banner.className = 'date-status-banner holiday';
-      banner.innerHTML = `${ic('umbrella')} <span><strong>College holiday</strong> — no classes are counted as absent today.</span>`;
+      const hn = dateExceptions[selectedTrackerDate]?.note;
+      banner.innerHTML = `${ic('umbrella')} <span><strong>${hn && hn !== 'College Holiday' ? escapeHTML(hn) : 'College holiday'}</strong> — no classes are counted as absent ${isToday ? 'today' : 'this day'}.</span>`;
       banner.style.display = 'flex';
     } else if (dayPlan.follows) {
       banner.className = 'date-status-banner today';
@@ -6070,7 +6196,7 @@ async function syncTimetableToDB() {
   }
 }
 
-async function saveDateExceptionToDB(date, type) {
+async function saveDateExceptionToDB(date, type, note = 'College Holiday') {
   if (currentUser) {
     localStorage.setItem('bk_date_exceptions_' + currentUser.id, JSON.stringify(dateExceptions));
   }
@@ -6090,7 +6216,7 @@ async function saveDateExceptionToDB(date, type) {
           user_id: currentUser.id,
           date: date,
           type: type,
-          note: 'College Holiday'
+          note: note || 'College Holiday'
         }, {
           onConflict: 'user_id,date'
         });

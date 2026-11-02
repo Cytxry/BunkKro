@@ -231,7 +231,7 @@
         <div class="adv-text" id="adv-text"></div>
         <img class="adv-cat" src="assets/cat-peek.svg" alt="">
       </div>
-      <div class="adv-card">
+      <div class="adv-card adv-sim">
         <h4><span class="h-orb peach">🔮</span> Bunk Simulator <span class="h-sub">how bad can it get?</span></h4>
         <div class="sim-ctrl">
           <span class="sim-lbl">Skip</span>
@@ -244,6 +244,7 @@
           <button class="sim-reset" onclick="resetSim()">↺ Reset</button>
         </div>
         <div id="sim-result"></div>
+        <img class="sim-cat" src="assets/cat-chill.svg" alt="">
       </div>
     </div>
 
@@ -326,6 +327,7 @@
 
     <div class="tracker-actions-row">
       <button class="act-chip peach" id="btn-toggle-holiday" onclick="toggleDateHoliday()">🏖️ Mark Day as Holiday</button>
+      <button class="act-chip peach" onclick="openHolidayPlanner()" title="Got a circular? Add holidays ahead of time">🗓️ Upcoming holidays</button>
       <button class="act-chip lavender" onclick="openExtraClassModal()">⚡ Add Extra Class</button>
       <button class="act-chip green" onclick="openDaySwap()" title="For days like “Saturday follows Monday's timetable”">🔁 Follows another day</button>
       <button class="act-chip blue" onclick="goPage('timetable')">📅 Manage Timetable</button>
@@ -768,6 +770,27 @@
       <button class="btn-sec" onclick="closeExtraClassModal()">Cancel</button>
       <button class="btn-pri" onclick="confirmAddExtraClass()">Add to this day</button>
     </div>
+  </div>
+</div>
+
+<!-- ══════ UPCOMING HOLIDAYS (from a circular, ahead of time) ══════ -->
+<div class="overlay" id="hol-overlay" role="dialog" aria-modal="true" aria-labelledby="hol-title">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-hero">
+      <div><h2 id="hol-title">Upcoming holidays 🗓️</h2>
+      <p class="sub">Got a circular? Add the days ahead of time — they won't count as absent, and BunkKro plans around them.</p></div>
+      <img src="assets/cat-beach.svg" alt="">
+    </div>
+    <div class="form-grid-2">
+      <div class="mf"><label for="hol-from">From</label><input type="date" id="hol-from"></div>
+      <div class="mf"><label for="hol-to">To <span class="field-hint">(for a stretch)</span></label><input type="date" id="hol-to"></div>
+    </div>
+    <div class="mf"><label for="hol-name">Name <span class="field-hint">(optional)</span></label><input type="text" id="hol-name" maxlength="40" placeholder="e.g. Diwali break, Sports day"></div>
+    <div class="form-preview" id="hol-preview" aria-live="polite"></div>
+    <div class="modal-btns"><button class="btn-pri" onclick="addPlannedHolidays()">Add holiday</button></div>
+    <div class="hol-list-title">Coming up</div>
+    <div id="hol-list"></div>
+    <div class="modal-btns"><button class="btn-sec" onclick="closeHolidayPlanner()">Done</button></div>
   </div>
 </div>
 
