@@ -883,6 +883,16 @@ const WISDOM = [
   "Your attendance today is a gift to your hall ticket.",
   "Attendance can't buy marks, but low attendance can cost them.",
   "Show up. Sit down. Take notes. Repeat. That's the whole secret.",
+  "Attendance is aura you can actually measure.",
+  "Lock in early; coast later.",
+  "Your bunk budget resets every semester. Your reputation doesn't.",
+  "Side quests are fun. The main quest is 75%.",
+  "Delulu bunking: \"one more won't hurt\", for the fifth time.",
+  "Proxy works until the one day it doesn't.",
+  "Sit where the professor can see you on the days you do attend.",
+  "Holiday circular out? Add it to BunkKro the day it comes.",
+  "Bunk with a plan, not with a vibe.",
+  "Every class you attend now is one you can skip before exams."
 ];
 
 // One line per day, walking through the whole list before any line repeats
@@ -898,9 +908,13 @@ function dailyPick(list, offset = 0) {
   return list[(((day + offset) * stride) % n + n) % n];
 }
 
+const FREE_DAY_LINES = ['Nap mode: unlocked. 😴', 'Zero classes, zero guilt.', 'The register is closed — touch some grass.', 'Perfect day for a side quest.', 'Bindaas day. Enjoy it.'];
+const WISDOM_CATS = ['cat-books', 'cat-blue-coffee', 'cat-coffee', 'cat-blue-books', 'cat-moon', 'cat-blue-moon'];
 function renderWisdom() {
   const el = document.getElementById('wisdom-text');
   if (el) el.textContent = `"${dailyPick(WISDOM)}"`;
+  const cat = document.getElementById('wisdom-cat');
+  if (cat) cat.src = `assets/${dailyPick(WISDOM_CATS, 3)}.svg`;
 }
  
 const ROASTS = {
@@ -917,6 +931,12 @@ const ROASTS = {
     'Your attendance has attendance.',
     'Main character of the register. 👑',
     'Bench is basically your second home.',
+    'Aura points: maxed out. ✨',
+    'Locked in since day one.',
+    'The register\'s favourite child.',
+    'Even the projector knows your face.',
+    'Standing on business. Every. Single. Day.',
+    'Proxy? Never heard of needing one.'
   ],
   safe: [
     'Solid. Bunk approved. 😎',
@@ -931,6 +951,12 @@ const ROASTS = {
     'Vibing above the line. ✨',
     'Safe, but the canteen is calling.',
     'You\'ve earned a guilt-free nap.',
+    'Lowkey thriving.',
+    'Bindaas mode: on. 😌',
+    'Safe enough for one canteen side quest.',
+    'W attendance, W vibes.',
+    'Not delulu — the numbers back you up.',
+    'You can afford a nap. Just the one.'
   ],
   medium: [
     'Walking on thin ice rn.',
@@ -945,6 +971,12 @@ const ROASTS = {
     'Just a few classes from safety.',
     'The comeback starts tomorrow, 8 AM sharp.',
     'Bunking now would be a plot twist.',
+    'Lowkey sweating rn.',
+    'One more bunk is a cortisol spike.',
+    'Aura dropping. Show up and farm it back.',
+    'Delulu if you think this is safe.',
+    'Attendance is giving "please come back".',
+    'Set the alarm. Then set another one. ⏰'
   ],
   low: [
     'Attendance on life support. 💀',
@@ -959,6 +991,12 @@ const ROASTS = {
     'Bunk privileges: revoked. 🚫',
     'Time to become a morning person. Sorry.',
     'Plot armour not found.',
+    'Aura: in the negatives.',
+    'Attendance became a side quest you skipped.',
+    'Roll call has you on mute.',
+    'Comeback arc needed, like yesterday.',
+    'Proxy friends can only do so much.',
+    'The backbench is asking about you.'
   ],
   cooked: [
     'Hall ticket in danger. Not joking.',
@@ -973,26 +1011,32 @@ const ROASTS = {
     'Attendance? Never heard of her.',
     'Speedrunning detention any%.',
     'The HOD wants a word. Several.',
+    'Khel khatam? Almost. 🫠',
+    'Fully cooked, extra crispy.',
+    'Delulu is not the solulu here.',
+    'Attendance said "it\'s not me, it\'s you".',
+    'Condonation speedrun unlocked. 🏁',
+    'Even the backbench misses you.'
   ]
 };
  
 const SIM_REACTIONS = {
-  safe_in_limit: ['Still chilling 😎', 'Green light, bestie.', 'Locked in.', 'W move actually.', 'Bunk responsibly.', 'Calculated. Respect.', 'Enjoy the nap, you earned it.'],
-  safe_over_limit: ['Greedy ahh', 'Playing dangerous games.', 'Bold of you.', 'You sure about this?', 'Spending bunks like pocket money.', 'Future you is side-eyeing this.'],
-  warn: ['Risky ahh move 💀', 'One more and you\'re cooked.', 'Sir is watching.', 'This is a warning.', 'Cutting it way too close.', 'Your safety net is a thread.'],
-  cooked: ['Academic terrorism detected.', 'Bro loves consequences.', 'Hall ticket crying rn.', 'Cooked. Done. Finished. 💀', 'Absolutely not. Close the tab.', 'The register will remember this.']
+  safe_in_limit: ['Still chilling 😎', 'Green light, bestie.', 'Locked in.', 'W move actually.', 'Bunk responsibly.', 'Calculated. Respect.', 'Enjoy the nap, you earned it.', 'Aura intact. ✨', 'Bindaas, it\'s fine.', 'Side quest approved.', 'Lowkey a good call.', 'Nap unlocked. 😴'],
+  safe_over_limit: ['Greedy ahh', 'Playing dangerous games.', 'Bold of you.', 'You sure about this?', 'Spending bunks like pocket money.', 'Future you is side-eyeing this.', 'Lowkey greedy.', 'Delulu math detected.', 'That\'s your emergency bunk, bestie.', 'Spending tomorrow\'s bunks today.'],
+  warn: ['Risky ahh move 💀', 'One more and you\'re cooked.', 'Sir is watching.', 'This is a warning.', 'Cutting it way too close.', 'Your safety net is a thread.', 'Cortisol spike incoming.', 'Aura dropping fast.', 'One step from cooked.', 'Your future self just flinched.'],
+  cooked: ['Academic terrorism detected.', 'Bro loves consequences.', 'Hall ticket crying rn.', 'Cooked. Done. Finished. 💀', 'Absolutely not. Close the tab.', 'The register will remember this.', 'Khel khatam. 🫠', 'Golden brown. Crispy. Cooked.', 'Main character of the defaulter list.', 'That\'s an L. A big one.']
 };
 
 const VERDICT_SUBS = {
-  safe: ['Massive W.', 'Solid.', 'Attendance merchant vibes.', 'Go touch some grass.', 'Peak academic weapon.', 'Sleep in once, you\'ve earned it.'],
-  warn: ['Walking on thin ice.', 'Don\'t get greedy.', 'One wrong move and you\'re cooked.', 'Spend them wisely.', 'Save them for emergencies.', 'Choose your bunks carefully.'],
-  cooked: ['Respawn recommended.', 'Academic terrorism.', 'Hall ticket trembling.', 'Time for a comeback arc.', 'Alarms on. No excuses.', 'Front row, every day, starting now.']
+  safe: ['Massive W.', 'Solid.', 'Attendance merchant vibes.', 'Go touch some grass.', 'Peak academic weapon.', 'Sleep in once, you\'ve earned it.', 'Aura farming, successfully.', 'Locked in and thriving.', 'Bindaas energy only.', 'Main character attendance.'],
+  warn: ['Walking on thin ice.', 'Don\'t get greedy.', 'One wrong move and you\'re cooked.', 'Spend them wisely.', 'Save them for emergencies.', 'Choose your bunks carefully.', 'Lowkey stressful.', 'Don\'t let the aura drop.', 'Bunk like it\'s limited edition.', 'Stay locked in a little longer.'],
+  cooked: ['Respawn recommended.', 'Academic terrorism.', 'Hall ticket trembling.', 'Time for a comeback arc.', 'Alarms on. No excuses.', 'Front row, every day, starting now.', 'Comeback arc loading...', 'Front row is your new personality.', 'It\'s not over till the last class.', 'Delulu won\'t fix this — attendance will.']
 };
  
 const TOAST_MSGS = {
-  save: ['Numbers updated.', 'Damage updated.', 'Data secured.', 'Numbers don\'t lie.'],
-  delete: ['Subject yeeted.', 'Gone. Forgotten.'],
-  add: ['Subject added.', 'New victim added.']
+  save: ['Numbers updated.', 'Damage updated.', 'Data secured.', 'Numbers don\'t lie.', 'Saved. Aura recalculated.', 'Locked in. ✓', 'Noted by the register.'],
+  delete: ['Subject yeeted.', 'Gone. Forgotten.', 'Sent to the shadow realm.', 'Deleted. No take-backs.', 'Poof. 💨'],
+  add: ['Subject added.', 'New victim added.', 'Subject added. Let\'s get it.', 'New subject unlocked.', 'Added — may your attendance stay high.']
 };
  
 function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -1022,12 +1066,14 @@ const SEM_COPY = {
     d => `You've got room for ${semB(d.bk)} more skip${d.bk !== 1 ? 's' : ''}. Nap responsibly.`,
   ],
   advLost: [
+    d => `Khel khatam for ${d.tgt}% this semester — but every class still lifts your final number. Show up and talk condonation early.`,
     d => `Real talk: ${d.tgt}% has left the chat this semester. Every class still pulls you up — show up to all of them and start the condonation talk early.`,
     d => `Even a perfect streak won't reach ${d.tgt}% now. Damage-control mode: attend everything and have a word with your department.`,
     d => `Bad news: ${d.tgt}% is out of reach. Good news: every class still counts. Front row till the last day.`,
     d => `The math says no to ${d.tgt}% this sem — but yes to climbing. Attend everything, then talk condonation.`,
   ],
   advDoable: [
+    d => `Lock in: a no-bunk streak and ${d.tgt}% comes right back.`,
     d => `Comeback arc unlocked ✨ A clean streak gets you back above ${d.tgt}%.`,
     d => `It's recoverable. No bunks till you're back over ${d.tgt}%, then breathe.`,
     d => `Totally doable — stack up the streak and ${d.tgt}% is yours again.`,
@@ -1039,6 +1085,7 @@ const SEM_COPY = {
     d => `Cutting it close: miss more than a couple and ${d.tgt}% is gone for this sem.`,
   ],
   advUnknown: [
+    d => `Lock in until you're back over ${d.tgt}% — no side quests till then.`,
     d => `No bunks till you're back above ${d.tgt}%. Show up, every time.`,
     d => `Recovery mode: attend every class until you're over ${d.tgt}%.`,
     d => `Front row energy needed. Zero skips until ${d.tgt}% is back.`,
@@ -1049,11 +1096,13 @@ const SEM_COPY = {
     d => d.lost && !d.wasLost ? `Point of no return: ${d.tgt}% is gone after this.` : d.safe ? 'You can get away with this one.' : d.lost ? 'Every extra skip lowers the ceiling.' : 'Ouch, but fixable.',
   ],
   simSafe0: [
+    d => `Bindaas — ${semB(d.bk)} bunk${d.bk !== 1 ? 's' : ''} in the bank. Tap + to plan one.`,
     d => `Room for ${semB(d.bk)} more skip${d.bk !== 1 ? 's' : ''}. Tap + and watch what each bunk does.`,
     d => `You're above ${d.tgt}% with ${semB(d.bk)} to spare. Go on, simulate one.`,
     d => `${semB(d.bk)} safe bunk${d.bk !== 1 ? 's' : ''} left. Press + to plan them.`,
   ],
   simBelow0: [
+    d => `Under ${d.tgt}% right now. Press + to see how much aura a bunk costs.`,
     d => `Below ${d.tgt}% right now. Tap + to see how deep a bunk digs.`,
     d => `Already under ${d.tgt}% — every skip makes the climb longer. Try it with +.`,
     d => `Not safe to bunk yet. Press + to see what one more would cost.`,
@@ -2747,18 +2796,19 @@ function resetSim() { document.getElementById('sim-input').value = 0; updateSim(
  
 // While you simulate, the Bunk Advisor's cat (beside the Simulator on wide screens, where its card would otherwise
 // stretch into empty space) watches and reacts: a cat for the mood, the reaction in a speech bubble.
+// the peeking blue cat herself, in her moods (blue poses: assets/cat-blue-*.svg)
 const CAT_MOODS = {
-  safe_in_limit: { cat: 'cat-happy', w: 126 },
-  safe_over_limit: { cat: 'cat-confused', w: 126 },
-  warn: { cat: 'cat-worried', w: 126 },
-  cooked: { cat: 'cat-worried', w: 126 },
-  lost: { cat: 'cat-sad', w: 116 },
-  tooMany: { cat: 'cat-confused', w: 126 },
+  safe_in_limit: { cat: 'cat-blue-happy', w: 126 },
+  safe_over_limit: { cat: 'cat-blue-confused', w: 126 },
+  warn: { cat: 'cat-blue-worried', w: 126 },
+  cooked: { cat: 'cat-blue-detective', w: 126 },
+  lost: { cat: 'cat-blue-sad', w: 116 },
+  tooMany: { cat: 'cat-blue-confused', w: 126 },
 };
-// never the same cat as the one in the subject's header card just above
-const CAT_ALT = { 'cat-happy': 'cat-trophy', 'cat-worried': 'cat-confused', 'cat-sad': 'cat-worried', 'cat-confused': 'cat-detective' };
 const CAT_LINES = {
   lost: [
+    t => `Khel khatam for ${t}% this sem 🫠`,
+    t => `Okay, that one hurt. ${t}% is out of reach now.`,
     t => `Noooo, there goes ${t}% for this sem 😿`,
     t => `That was the one. ${t}% has left the building.`,
     t => `I can't watch. ${t}% is gone now 🙈`,
@@ -2767,6 +2817,8 @@ const CAT_LINES = {
     () => 'That\'s more bunks than classes left 😹',
     () => 'Bro is trying to bunk the future.',
     () => 'Not even the timetable has that many.',
+    () => 'You can\'t bunk classes that don\'t exist 🙀',
+    () => 'Delulu math detected 😹',
   ],
 };
 const sideBySide = window.matchMedia ? window.matchMedia('(min-width: 1101px)') : { matches: true };
@@ -2777,9 +2829,7 @@ function advisorCat(mood, text) {
   if (!card || !img || !bubble) return;
   const on = !!mood && sideBySide.matches;
   card.classList.toggle('watching', on);
-  let want = on ? CAT_MOODS[mood] : { cat: 'cat-peek', w: 124 };
-  const hero = document.getElementById('sp-cat')?.src || '';
-  if (on && hero.endsWith(want.cat + '.svg') && CAT_ALT[want.cat]) want = { cat: CAT_ALT[want.cat], w: 126 };
+  const want = on ? CAT_MOODS[mood] : { cat: 'cat-peek', w: 124 };
   if (!img.src.endsWith(want.cat + '.svg')) {
     img.src = `assets/${want.cat}.svg`;
     img.style.width = want.w + 'px';
@@ -5381,7 +5431,7 @@ function renderHolidayList() {
   const box = document.getElementById('hol-list');
   const today = getLocalDateString();
   const days = Object.entries(dateExceptions).filter(([ds, ex]) => ex?.type === 'holiday' && ds >= today).sort(([a], [b]) => a.localeCompare(b));
-  if (!days.length) { box.innerHTML = '<div class="hol-empty">Nothing planned yet.</div>'; return; }
+  if (!days.length) { box.innerHTML = '<div class="hol-empty"><img src="assets/cat-blue-yarn.svg" alt="">Nothing planned yet — add one when the circular drops.</div>'; return; }
   const groups = [];
   for (const [ds, ex] of days) {
     const g = groups[groups.length - 1];
@@ -5814,9 +5864,9 @@ function renderTracker() {
   if (!allClasses.length) {
     content.innerHTML = `
       <div class="card empty">
-        <img class="empty-illus" src="assets/${timetable.length ? 'cat-books' : 'cat-peek'}.svg" alt="">
+        <img class="empty-illus" src="assets/${timetable.length ? 'cat-blue-moon' : 'cat-peek'}.svg" alt="">
         <h3>No classes scheduled for ${dateObj.toLocaleDateString('en-IN', { weekday: 'long' })}</h3>
-        <p>${timetable.length ? 'You have no timetable classes on this day.' : 'Set up your weekly timetable to see your daily classes automatically.'}</p>
+        <p>${timetable.length ? 'You have no timetable classes on this day. ' + stablePick(FREE_DAY_LINES, selectedTrackerDate) : 'Set up your weekly timetable to see your daily classes automatically.'}</p>
         <div class="empty-actions">
           <button class="btn-pri" onclick="goPage('timetable')">${ic('grid','ic-sm')} Configure Timetable</button>
           <button class="btn-sec" onclick="openExtraClassModal()">${ic('plus','ic-sm')} Add Extra Class</button>
