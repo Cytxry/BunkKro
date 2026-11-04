@@ -29,6 +29,13 @@ schedule. If the AI is not running, photos still go through the built-in in-brow
    tab says why for each one.
 6. **Inspector:** the uploaded page itself, with every period boxed where it was read. Double-click a box to see the
    crop, fix the subject, or split the cell.
+7. **"Needs review" periods:** where the reader found nothing but couldn't confirm a free period (part of the page
+   wasn't read, or a long class may cover it), the period stays on the timetable as **"Needs review · Class or free?"**.
+   It counts as a class until the student opens it and picks the subject, or deletes it if it is free. These periods
+   are never offered as a new subject, and they stay flagged after a reload.
+8. **Refused pages:** when the reader judges a page not understood, nothing is imported. The student sees why, and
+   can try a clearer photo, the PDF, or enter the classes by hand. For a photo, the built-in scanner runs only if the
+   student chooses it.
 
 ## How it fits together
 

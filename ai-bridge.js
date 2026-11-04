@@ -170,6 +170,7 @@
   function matchSubjects(slots, subjects) {
     return slots.map(s => {
       if (s.isBreak) return { ...s, matchConfidence: 'break' };
+      if (s.isUnknown) return { ...s, aiName: s.subjectName, matchConfidence: 'none' };   // nothing read: no subject to match
       const name = (s.subjectName || '').toLowerCase();
       const exact = subjects.find(x => x.name.toLowerCase() === name);
       const fuzzy = exact || subjects.find(x => name && x.name.length > 2 &&
@@ -201,15 +202,27 @@
     split_cell: 'the cell holds more than one class',
     ink_without_text: 'something is printed there that could not be read',
     low_confidence: 'the text was hard to read',
+    unverified_empty: 'nothing was read here, but the page was not fully read, so it may not be free',
+    page_not_understood: 'the reader did not understand this page',
+    schema_invalid: 'the reading was malformed',
   };
 
-  function issues(slots) {
+  // review: the server's page verdict {status: complete|partial|failed, reasons, missingDays, unknownCells}
+  function issues(slots, review) {
     const warnings = [];
+    if (review && review.status === 'partial') {
+      warnings.push({ message: `Part of this page could not be read (${(review.reasons || []).join('; ') || 'incomplete'}). ` +
+        'Periods there are marked "Needs review" instead of free.' });
+    }
     for (const s of slots) {
       if (s.isBreak) continue;
       const when = s.startTime ? `${s.startTime}${s.endTime ? '-' + s.endTime : ''}` : `period ${s.period}`;
       const base = { cellId: s.cellId || undefined, details: escapeHtml(s.rawText || s.subjectName) };
-      if (s.overlapsAnotherClass) {
+      if (s.isUnknown) {            // never shown as free: the student decides
+        const why = (s.doubts || []).filter(d => d !== 'unverified_empty').map(d => DOUBT_TEXT[d]).filter(Boolean);
+        warnings.push({ ...base, message: `${DAY_SHORT[s.day]} ${when}: class or free period? Nothing was read here${why[0] ? ' (' + why[0] + ')' : ''}. ` +
+          'Pick its subject, or delete it if it is free' });
+      } else if (s.overlapsAnotherClass) {
         warnings.push({ ...base, message: `${DAY_SHORT[s.day]} ${when}: two classes at the same time — keep yours` });
       } else if (!s.startTime) {
         warnings.push({ ...base, message: `${DAY_SHORT[s.day]} period ${s.period}: no time printed for this class` });
@@ -243,20 +256,27 @@
       if (track === null) throw cancelled('No class row chosen');
       res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}&track=${encodeURIComponent(track)}`);
     }
-    if (!res.ok) throw new Error(res.error || 'The AI could not read this timetable');
+    if (!res.ok) {
+      const err = new Error(res.error || 'The AI could not read this timetable');
+      // a page the reader judged not understood is refused on purpose: importing it would invent free periods
+      if (res.review && res.review.status === 'failed') Object.assign(err, { refused: true, reasons: res.review.reasons || [] });
+      throw err;
+    }
     onPhase && onPhase('valid', 90, 'Loading the page and matching your subjects...');
     const slots = matchSubjects(res.slots, subjects || []);
     const canvas = res.image ? await loadImage(res.image) : null;
     const cells = canvas ? studioCells(slots) : [];
-    return { slots, validation: issues(slots), studio: canvas && cells.length ? { canvas, cells } : null, source: res.file };
+    return { slots, review: res.review || null, validation: issues(slots, res.review),
+      studio: canvas && cells.length ? { canvas, cells } : null, source: res.file };
   }
 
   // ── subjects step ──────────────────────────────────────────────────────────────────────────────────────────
   // groups the classes by name; resolves to [{name, slots, action: 'create'|'link'|'drop'|'keep', subjectId}] or null
   function reviewSubjects(slots, subjects) {
     const groups = new Map();
+    const unknown = slots.filter(s => s.isUnknown).length;
     for (const s of slots) {
-      if (s.isBreak) continue;
+      if (s.isBreak || s.isUnknown) continue;    // "Needs review" periods stay on the timetable, not as a subject
       // 'MA102', 'MA 102' and 'ma 102' are one subject
       const key = (s.aiName || s.subjectName || '').toUpperCase().replace(/[s.]+/g, '');
       if (!groups.has(key)) groups.set(key, []);
@@ -274,6 +294,8 @@
         <h2>Your subjects</h2>
         <p class="sub">BunkKro AI found these classes. Tidy the names once (e.g. drop teacher or room
           text), link them to subjects you already track, or remove classes that are not yours.</p>
+        ${unknown ? `<p class="sub" style="color:var(--warn)">⚠️ ${unknown} period${unknown > 1 ? 's' : ''} could not be confirmed as free.
+          ${unknown > 1 ? 'They stay' : 'It stays'} on your timetable as "Needs review": open each one to pick its subject, or delete it if it is a free period.</p>` : ''}
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;text-align:left">
           ${rows.map(([name, list], i) => {
             const linked = list[0].subjectId;

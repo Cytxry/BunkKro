@@ -222,7 +222,9 @@ async function loadTimetable() {
         subjectId: e.subject_id,
         subjectName: e.subject_name,
         isBreak: e.is_break || false,
-        isUncertain: false
+        // the DB has no review column: a "Needs review" period (BunkKro AI could not confirm it free) stays one
+        isUncertain: !e.subject_id && e.subject_name === 'Needs review',
+        isUnknown: !e.subject_id && e.subject_name === 'Needs review'
       }));
       localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
     } else {
@@ -3509,7 +3511,7 @@ async function processTimetableImage(file) {
       scannerState.preprocessed = res.studio ? { canvas: res.studio.canvas } : null;
       scannerState.cells = res.studio ? res.studio.cells : [];
       scannerState.fusedSlots = slots;
-      scannerState.validation = BunkKroAI.issues ? BunkKroAI.issues(slots) : res.validation;
+      scannerState.validation = BunkKroAI.issues ? BunkKroAI.issues(slots, res.review) : res.validation;
       scannerState.history = [JSON.parse(JSON.stringify(slots))];
       scannerState.historyIndex = 0;
       updateStudioHistoryButtons();
@@ -3529,9 +3531,11 @@ async function processTimetableImage(file) {
         if (loadedBar) loadedBar.style.display = 'flex';
         if (loadedLabel && file && file.name) loadedLabel.textContent = file.name;
       }, 1200);
-      const unsure = slots.filter(s => s.isUncertain && !s.isBreak).length;
-      const classes = slots.filter(s => !s.isBreak).length;
-      toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}`);
+      const unknown = slots.filter(s => s.isUnknown).length;
+      const unsure = slots.filter(s => s.isUncertain && !s.isBreak && !s.isUnknown).length;
+      const classes = slots.filter(s => !s.isBreak && !s.isUnknown).length;
+      toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}` +
+        (unknown ? `; ${unknown} period${unknown > 1 ? 's' : ''} could not be confirmed free (Needs review)` : ''));
       return;
     } catch (aiErr) {
       console.warn('BunkKro AI:', aiErr.message);
@@ -3540,12 +3544,25 @@ async function processTimetableImage(file) {
         toast('Upload cancelled');
         return;
       }
-      if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      const isImage = ['image/png', 'image/jpeg', 'image/jpg'].includes(file.type);
+      if (aiErr.refused) {                   // judged not understood: importing it would invent free periods
+        if (progressBox) progressBox.style.display = 'none';
+        const why = (aiErr.reasons || []).slice(0, 3).join('; ');
+        const retry = await askDialog({
+          title: "This timetable couldn't be read reliably",
+          message: `Nothing was imported, so no free periods were invented.${why ? ' Why: ' + why + '.' : ''} ` +
+            'Try a clearer photo or the PDF, or add the classes by hand.' +
+            (isImage ? ' The built-in scanner can also try, but check every free period it leaves.' : ''),
+          ok: isImage ? 'Try the built-in scanner' : 'OK', cancel: 'Close', cat: 'cat-worried' });
+        if (!isImage || !retry) return;
+        if (progressBox) progressBox.style.display = 'block';
+      } else if (!isImage) {
         if (progressBox) progressBox.style.display = 'none';
         toast('BunkKro AI: ' + aiErr.message, 'err');
         return;
+      } else {
+        toast('BunkKro AI: ' + aiErr.message + ' — trying the built-in scanner', 'err');
       }
-      toast('BunkKro AI: ' + aiErr.message + ' — trying the built-in scanner', 'err');
     }
   }
 
@@ -4293,6 +4310,7 @@ async function saveCellInspectorChanges() {
     slot.subjectId = subjId || null;
     slot.subjectName = customName || (subjects.find(s => s.id === subjId)?.name || 'Unassigned');
     slot.isUncertain = false;
+    slot.isUnknown = false;
   }
 
   pushScannerHistory('Edit Cell Properties');
@@ -4499,7 +4517,8 @@ function renderTimetable() {
                     <span class="tt-slot-time">${escapeHTML(timeDisplay)}</span>
                   </span>
                   <span class="tt-slot-name"><span class="tt-slot-ic" style="color:${matchedSubj && !slot.isUncertain ? th.c : 'var(--muted)'}">${ic(subjIcon(displayName),'ic-sm')}</span>${escapeHTML(displayName)}</span>
-                  ${slot.isUncertain ? '<span class="tt-slot-warn" style="display:block">⚠️ Review subject</span>' : ''}
+                  ${slot.isUnknown ? '<span class="tt-slot-warn" style="display:block">⚠️ Class or free? Tap to check</span>'
+                    : slot.isUncertain ? '<span class="tt-slot-warn" style="display:block">⚠️ Review subject</span>' : ''}
                   ${matchedSubj ? `<span class="tt-slot-subjtag" style="display:block">✓ Linked to ${escapeHTML(matchedSubj.name)}</span>` : ''}
                 </button>
               `;
@@ -5146,7 +5165,9 @@ function openEditSlotModal(slotId) {
 
   currentEditingSlot = slot;
   slotError('');
-  document.getElementById('slot-modal-title').textContent = 'Edit Class Slot 🕒';
+  document.getElementById('slot-modal-title').textContent = slot.isUnknown ? 'Class or free period? 🤔' : 'Edit Class Slot 🕒';
+  const unknownNote = document.getElementById('slot-unknown-note');
+  if (unknownNote) unknownNote.hidden = !slot.isUnknown;
   document.getElementById('slot-edit-id').value = slot.id;
   document.getElementById('slot-day').value = slot.day;
   document.getElementById('slot-period').value = slot.period;
@@ -5240,7 +5261,8 @@ async function saveSlotModal() {
         subjectId,
         subjectName,
         isBreak,
-        isUncertain: false
+        isUncertain: false,
+        isUnknown: false
       };
     }
   } else {
