@@ -3401,36 +3401,62 @@ function openReplaceDialog(step) {
   const ov = document.getElementById('tt-confirm-overlay');
   const box = ov.querySelector('.modal');
   const list = currentUser ? subjects : [];
-  const counted = sb => sb.total > 0 ? `${sb.present}/${sb.total} classes counted` : 'nothing counted yet';
-  const what = timetable.length ? 'Your weekly schedule will be replaced' : 'Your new timetable will be set up';
+  const had = timetable.length > 0;
+  const safe = '<div class="rp-safe"><span aria-hidden="true">🛡️</span> Nothing is removed until your new timetable has been read.</div>';
+  const row = (sb, toggle) => {
+    const i = subjects.indexOf(sb);
+    const counted = sb.total > 0 ? `${sb.present}/${sb.total} classes` : 'nothing counted yet';
+    const inner = `<span class="nav-dot" style="background:${subjTheme(i).c}"></span>
+      <span class="rp-name"><strong>${escapeHTML(sb.name)}</strong><small>${counted}</small></span>
+      <span class="nav-pct ${subjStatus(sb).cls}">${subjPctText(sb)}</span>`;
+    return toggle
+      ? `<label class="rp-row rp-toggle"><input type="checkbox" value="${escapeHTML(sb.id)}" checked>${inner}<span class="rp-switch" aria-hidden="true"></span></label>`
+      : `<div class="rp-row">${inner}</div>`;
+  };
+  box.classList.add('rp');
   if (!list.length) {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-worried.svg" alt="">
       <h2 id="tt-confirm-title">Replace your timetable?</h2>
-      <p class="sub">${what} by the new one.</p>
-      <div class="modal-btns center">
-        <button class="btn-sec" onclick="closeTtConfirmModal()">Cancel</button>
-        <button class="btn-pri" onclick="confirmProceedScan('all')">Replace</button>
+      <p class="sub">Your weekly schedule will be swapped for the new one.</p>
+      <div class="rp-btns">
+        <button class="btn-pri rp-wide" onclick="confirmProceedScan('all')">Replace timetable</button>
+        <button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button>
       </div>`;
   } else if (step === 'pick') {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-blue-happy.svg" alt="">
-      <h2 id="tt-confirm-title">Which subjects should stay?</h2>
-      <p class="sub">Ticked ones stay, with their attendance. The rest are removed once your new timetable is read.</p>
-      <div class="clean-list">${list.map(sb => `<label class="clean-row keep"><input type="checkbox" value="${escapeHTML(sb.id)}" checked>
-        <span><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span></label>`).join('')}</div>
-      <div class="modal-btns center">
-        <button class="btn-sec" onclick="openReplaceDialog('ask')">Back</button>
-        <button class="btn-pri" onclick="confirmProceedScan('pick')">Replace timetable</button>
+      <h2 id="tt-confirm-title">Which subjects stay?</h2>
+      <p class="sub">Switch off the ones you don't need. Kept subjects keep their attendance.</p>
+      <div class="rp-card">
+        <div class="rp-card-head"><span>Your subjects</span><span class="rp-tally" id="rp-tally"></span></div>
+        <div class="rp-list">${list.map(sb => row(sb, true)).join('')}</div>
+      </div>
+      ${safe}
+      <div class="rp-btns">
+        <button class="btn-pri rp-wide" id="rp-go" onclick="confirmProceedScan('pick')">Replace timetable</button>
+        <button class="aic-link" onclick="openReplaceDialog('ask')">Back</button>
       </div>`;
+    const tally = () => {
+      const kept = box.querySelectorAll('.rp-toggle input:checked').length;
+      const gone = list.length - kept;
+      box.querySelector('#rp-tally').textContent = `${kept} stay · ${gone} go`;
+      box.querySelector('#rp-go').textContent = kept === list.length ? 'Replace timetable, keep all subjects'
+        : kept ? `Replace timetable, keep ${kept}` : 'Replace timetable, remove all';
+    };
+    box.querySelectorAll('.rp-toggle input').forEach(inp => inp.addEventListener('change', tally));
+    tally();
   } else {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-worried.svg" alt="">
-      <h2 id="tt-confirm-title">Replace your timetable?</h2>
-      <p class="sub">${timetable.length ? 'Your weekly schedule will be replaced, and ' : 'With the new timetable, '}${list.length === 1 ? 'this subject is' : 'these subjects are'} removed too, attendance included:</p>
-      <div class="keep-pills">${list.map(sb => `<span class="keep-pill"><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span>`).join('')}</div>
-      <p class="aic-fine" style="text-align:center">Nothing changes until your new timetable is read.</p>
-      <div class="modal-btns center">
-        <button class="btn-sec" onclick="closeTtConfirmModal()">Cancel</button>
-        <button class="btn-sec" onclick="openReplaceDialog('pick')">Keep some</button>
-        <button class="btn-pri danger" onclick="confirmProceedScan('all')">Replace all</button>
+      <h2 id="tt-confirm-title">Start fresh?</h2>
+      <p class="sub">${had ? 'Your weekly schedule will be replaced. ' : ''}These subjects belong to your old timetable, so they'd be removed, attendance included.</p>
+      <div class="rp-card">
+        <div class="rp-card-head"><span>Your subjects</span><span class="rp-tally">${list.length}</span></div>
+        <div class="rp-list">${list.map(sb => row(sb, false)).join('')}</div>
+      </div>
+      ${safe}
+      <div class="rp-btns">
+        <button class="btn-pri danger rp-wide" onclick="confirmProceedScan('all')">Start fresh, remove ${list.length === 1 ? 'it' : 'all ' + list.length}</button>
+        <button class="btn-sec rp-wide" onclick="openReplaceDialog('pick')">Keep some subjects</button>
+        <button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button>
       </div>`;
   }
   ov.classList.add('show');
@@ -5360,7 +5386,7 @@ async function confirmClearTimetable() {
 //  FEATURE 3: AUTOMATICALLY CALCULATE CLASSES PER WEEK
 // ══════════════════════════════════════════════════════
 
-function calculateWeeklyFrequencies() {
+function calculateWeeklyFrequencies(linkedOnly = false) {
   const freqMap = {}; // subjectId/subjectName -> count
 
   subjects.forEach(s => {
@@ -5371,7 +5397,7 @@ function calculateWeeklyFrequencies() {
     if (slot.isBreak) return;
     if (slot.subjectId && freqMap[slot.subjectId] !== undefined) {
       freqMap[slot.subjectId]++;
-    } else if (slot.subjectName) {
+    } else if (slot.subjectName && !linkedOnly) {
       const match = subjects.find(s => s.name.toLowerCase() === slot.subjectName.toLowerCase());
       if (match && freqMap[match.id] !== undefined) {
         freqMap[match.id]++;
@@ -5380,6 +5406,27 @@ function calculateWeeklyFrequencies() {
   });
 
   return freqMap;
+}
+
+// Each subject's classes per week follows the timetable by itself (counted from the classes linked to it), a moment
+// after the timetable changes. A subject that isn't on the timetable keeps the number the student gave it.
+let weeklyCountsTimer = null;
+function scheduleWeeklyCounts() {
+  clearTimeout(weeklyCountsTimer);
+  weeklyCountsTimer = setTimeout(syncWeeklyCounts, 1500);
+}
+async function syncWeeklyCounts() {
+  if (!currentUser || !isOnline()) return;
+  const counts = calculateWeeklyFrequencies(true);
+  let changed = 0;
+  for (const s of subjects) {
+    const n = counts[s.id];
+    if (!n || n === s.perWeek) continue;
+    s.perWeek = n;
+    if (await updateSubject(s.id, { name: s.name, code: s.code, total: s.total, present: s.present, perWeek: n,
+                                    target: s.target, semTotal: s.semTotal, mode: s.mode })) changed++;
+  }
+  if (changed) { renderNav(); if (currPage === 'home') renderHome(); }
 }
 
 function openSyncFrequenciesModal() {
@@ -6458,6 +6505,7 @@ function saveTimetableToStorageAndDB() {
   ensureTimetableIds();
   if (currentUser) {
     localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
+    scheduleWeeklyCounts();
   }
   if (!currentUser) return Promise.resolve();
   if (ttSyncWaiting) return ttSyncWaiting;

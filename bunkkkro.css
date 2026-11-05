@@ -1438,3 +1438,32 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .clean-row.keep:has(input:checked)::after{content:'Stays';background:var(--surface);color:var(--good)}
 .clean-row.keep:hover{border-color:var(--good-line)}
 #tab-pane-schedule{margin-top:18px}
+/* "Replace your timetable?" (openReplaceDialog) */
+.modal.rp{max-width:440px;text-align:center;max-height:calc(100vh - 32px);overflow:auto}
+.rp .modal-cat{width:92px;margin-bottom:2px}
+.rp .sub{max-width:360px;margin-left:auto;margin-right:auto}
+.rp-card{margin:16px 0 10px;border:1px solid var(--border);border-radius:18px;background:var(--surface);text-align:left;overflow:hidden}
+.rp-card-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2)}
+.rp-tally{font-size:.75rem;letter-spacing:0;text-transform:none;font-weight:700;color:var(--primary-deep);background:var(--primary-tint);border-radius:999px;padding:2px 9px}
+.rp-list{max-height:min(32vh,260px);overflow:auto;padding:6px}
+.rp-row{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:12px}
+.rp-row + .rp-row{margin-top:2px}
+.rp-row .nav-dot{flex-shrink:0}
+.rp-name{display:flex;flex-direction:column;min-width:0;flex:1}
+.rp-name strong{font-size:.9rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-name small{font-size:.74rem;color:var(--muted)}
+.rp-toggle{cursor:pointer;border:1.5px solid transparent;transition:background .18s,border-color .18s,opacity .18s}
+.rp-toggle input{position:absolute;opacity:0;pointer-events:none}
+.rp-toggle:has(input:checked){background:var(--good-bg);border-color:var(--good-line)}
+.rp-toggle:not(:has(input:checked)){opacity:.6}
+.rp-toggle:not(:has(input:checked)) .rp-name strong{text-decoration:line-through;text-decoration-color:var(--muted)}
+.rp-toggle:has(input:focus-visible){outline:2px solid var(--primary-soft);outline-offset:2px}
+.rp-switch{position:relative;width:38px;height:22px;border-radius:999px;background:var(--surface3);flex-shrink:0;transition:background .18s}
+.rp-switch::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .18s}
+.rp-toggle:has(input:checked) .rp-switch{background:var(--good)}
+.rp-toggle:has(input:checked) .rp-switch::after{transform:translateX(16px)}
+.rp-safe{font-size:.8rem;color:var(--text2);background:var(--info-bg);border-radius:12px;padding:8px 12px;display:flex;gap:8px;align-items:center;justify-content:center}
+.rp-btns{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-top:16px}
+.rp-wide{width:100%;padding:12px 18px}
+.rp-btns .aic-link{align-self:center;margin-top:2px}
+@media (prefers-reduced-motion:reduce){.rp-toggle,.rp-switch,.rp-switch::after{transition:none}}
