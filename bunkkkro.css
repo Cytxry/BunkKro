@@ -1387,3 +1387,37 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .sim-verdict .sim-sep{color:var(--muted)}
 .sem-note{align-items:center}
 .sem-note .ic{margin-top:0}
+
+/* ══════════════════════════════════════════
+   BUNKKRO AI: "Does it look right?" confirm bar (ai-confirm.js)
+══════════════════════════════════════════ */
+.aic-bar{display:flex;align-items:center;gap:16px;margin:14px 0 6px;padding:14px 18px;border-radius:18px;border:1px solid var(--border);background:linear-gradient(100deg,var(--primary-tint),var(--surface) 72%);box-shadow:var(--shadow-sm);position:relative;overflow:hidden;animation:aicIn .35s ease}
+.aic-bar[hidden]{display:none}
+.aic-bar.thanks{background:linear-gradient(100deg,var(--p-green),var(--surface) 72%);border-color:var(--good-line)}
+.aic-cat{width:64px;flex-shrink:0;margin:-6px 0 -12px}
+.aic-body{flex:1;min-width:0}
+.aic-title{font-weight:800;color:var(--primary-deep);font-size:1rem;letter-spacing:-.01em}
+.aic-bar.thanks .aic-title{color:var(--good)}
+.aic-sub{font-size:.85rem;color:var(--text2);margin-top:3px;max-width:560px;line-height:1.45}
+.aic-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.aic-chip{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--surface);color:var(--primary-deep);border:1px solid var(--border)}
+.aic-chip.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
+.aic-chip.ok{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}
+.aic-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.aic-link{background:none;border:none;padding:2px 0;color:var(--text2);font-size:.8rem;font-weight:600;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.aic-link:hover{color:var(--primary)}
+.aic-note-ok{color:var(--good);font-weight:700}
+@keyframes aicIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.aic-bar{animation:none}}
+@media (max-width:640px){
+  .aic-bar{flex-wrap:wrap;padding:14px;gap:12px}
+  .aic-cat{width:48px;margin:0}
+  .aic-actions{width:100%;align-items:stretch}
+  .aic-actions .btn-pri{width:100%}
+  .aic-link{align-self:center}
+}
+.slot-unknown-pick{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:14px;padding:10px 12px;margin:4px 0 12px}
+.slot-unknown-pick p{margin:0 0 8px;font-size:.85rem;color:var(--warn);line-height:1.45}
+.slot-unknown-pick[hidden]{display:none}
+.slot-unknown-btns{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.slot-unknown-btns span{font-size:.78rem;color:var(--text2)}

@@ -13,6 +13,7 @@
   const DAY_SHORT = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   let available = null;          // null = not checked yet
   let checkedAt = 0;
+  let engineVersion = null;      // the local engine's version (server /health), recorded with each import
 
   function escapeHtml(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -41,7 +42,9 @@
       const timer = setTimeout(() => ctl.abort(), 1200);
       const r = await fetch(BASE + '/health', { signal: ctl.signal });
       clearTimeout(timer);
-      available = r.ok && (await r.json()).ok === true;
+      const h = r.ok ? await r.json() : {};
+      available = h.ok === true;
+      if (available) engineVersion = h.version || null;
     } catch (e) {
       available = false;
     }
@@ -267,7 +270,7 @@
     const canvas = res.image ? await loadImage(res.image) : null;
     const cells = canvas ? studioCells(slots) : [];
     return { slots, review: res.review || null, validation: issues(slots, res.review),
-      studio: canvas && cells.length ? { canvas, cells } : null, source: res.file };
+      studio: canvas && cells.length ? { canvas, cells } : null, source: res.file, engineVersion };
   }
 
   // ── subjects step ──────────────────────────────────────────────────────────────────────────────────────────

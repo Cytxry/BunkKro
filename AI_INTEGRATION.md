@@ -72,3 +72,15 @@ A cloud server costs money. Until then, other students get the built-in scanner.
 - **Speed:** scanned PDFs with many pages take about a minute per page; only the first 40 pages are read.
 - **Subject names:** still contain extra text on some timetables, which is why the subjects step lets the student
   tidy them once.
+
+## Confirming an import (M8, ai-confirm.js)
+
+After BunkKro AI reads a timetable, a "Does it look right?" bar sits above the Schedule tab:
+- **Looks right · Confirm** when every period is decided;
+- **Check them** / **Confirm with N unchecked** while "Needs review" periods remain (they're never dropped).
+
+The "Class or free?" popup has a one-tap **It's a free period** button.
+
+Sharing fixes for AI improvement is a separate opt-in, asked once after a confirmation that changed something, and
+can be stopped (which deletes what was shared). Cloud tables: `migrations/2026-11-06-ai-confirmation.sql`. Until it
+is run, everything stays on the device.

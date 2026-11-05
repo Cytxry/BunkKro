@@ -372,7 +372,7 @@
         <img class="tt-loaded-illus" src="assets/cat-trophy.svg" alt=""><div class="tt-loaded-check">✓</div>
         <div class="tt-loaded-meta">
           <span class="tt-loaded-label" id="tt-loaded-label">Schedule loaded</span>
-          <span class="tt-loaded-sub"><button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Upload a new one</button></span>
+          <span class="tt-loaded-sub"><button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Upload a new one</button><span id="tt-ai-note"></span></span>
         </div>
       </div>
 
@@ -397,6 +397,9 @@
         </div>
       </div>
     </div>
+
+    <!-- BunkKro AI: confirm the imported timetable (ai-confirm.js) -->
+    <div class="aic-bar" id="tt-confirm-bar" role="region" aria-label="Confirm your timetable" aria-live="polite" hidden></div>
 
     <!-- Tab Bar -->
     <div class="tt-view-tabs" role="tablist">
@@ -546,7 +549,13 @@
   <div class="modal" style="max-width:460px">
     <h2 id="slot-modal-title">Edit Class Slot 🕒</h2>
     <p class="sub">Set the day, period timing and subject.</p>
-    <p class="sub" id="slot-unknown-note" hidden style="color:var(--warn)">BunkKro AI read nothing here, but couldn't confirm it's a free period. If you have a class then, pick its subject. If it's free, press Delete.</p>
+    <div class="slot-unknown-pick" id="slot-unknown-note" hidden>
+      <p>BunkKro AI read nothing here, but couldn't be sure it's free. Which is it?</p>
+      <div class="slot-unknown-btns">
+        <button type="button" class="btn-sec btn-sm" onclick="markSlotFree()">🌿 It's a free period</button>
+        <span>or pick the class below</span>
+      </div>
+    </div>
 
     <input type="hidden" id="slot-edit-id">
 
@@ -997,5 +1006,6 @@
 <script src="timetable-scanner.js"></script>
 <script src="ai-bridge.js"></script>
 <script src="bunkke.js"></script>
+<script src="ai-confirm.js"></script>
 </body>
 </html>

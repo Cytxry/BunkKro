@@ -3502,6 +3502,7 @@ async function processTimetableImage(file) {
       setScannerPhase('prep', 10, 'Sending the timetable to BunkKro AI on this computer...');
       const res = await BunkKroAI.read(file, subjects, setScannerPhase);
       setScannerPhase('valid', 95, 'Review your subjects...');
+      const predicted = JSON.parse(JSON.stringify(res.slots));   // what the AI read, before the student's fixes
       const plan = await BunkKroAI.reviewSubjects(res.slots, subjects);
       const slots = plan ? await applyAiSubjectPlan(res.slots, plan) : res.slots;
       // the page itself in the Studio: every period boxed where it was read (double-click a box to inspect it)
@@ -3515,8 +3516,10 @@ async function processTimetableImage(file) {
       scannerState.history = [JSON.parse(JSON.stringify(slots))];
       scannerState.historyIndex = 0;
       updateStudioHistoryButtons();
+      slots.forEach(s => { s.aiRef = s.id; });                  // survives the id change on save (confirmation)
       timetable = slots;
       saveTimetableToStorageAndDB();
+      if (window.BunkKroImport) BunkKroImport.start(predicted, timetable, { engineVersion: res.engineVersion, file });
       renderTimetable();
       renderValidationReport();
       renderStudioCanvas();
@@ -4435,6 +4438,7 @@ function renderTimetable() {
   if (!container) return;
 
   updateUploadCardState();
+  if (window.BunkKroImport) BunkKroImport.render();   // the "Does it look right?" bar follows every edit
 
   const activeDays = DAYS_MAP.filter(d => d.num <= 6 || timetableMeta.showSunday);
 
@@ -5174,7 +5178,8 @@ function openEditSlotModal(slotId) {
   document.getElementById('slot-type').value = slot.isBreak ? 'break' : 'subject';
   document.getElementById('slot-start-time').value = slot.startTime || '';
   document.getElementById('slot-end-time').value = slot.endTime || '';
-  document.getElementById('slot-subject-name').value = slot.subjectName || '';
+  // a "Needs review" period starts empty, so saving it means the student really named the class
+  document.getElementById('slot-subject-name').value = slot.isUnknown ? '' : (slot.subjectName || '');
   document.getElementById('btn-delete-slot').style.display = 'inline-block';
 
   populateSubjectDropdown(slot.subjectId);
@@ -5287,7 +5292,7 @@ async function saveSlotModal() {
   if (synced !== false) toast('Schedule updated ✓');
 }
 
-async function deleteCurrentSlot() {
+async function deleteCurrentSlot(message = 'Slot removed') {
   const slotId = document.getElementById('slot-edit-id').value;
   if (!slotId) return;
 
@@ -5296,7 +5301,12 @@ async function deleteCurrentSlot() {
   closeSlotEditModal();
   renderTimetable();
   if (currPage === 'tracker') renderTracker();
-  if (synced !== false) toast('Slot removed');
+  if (synced !== false) toast(message);
+}
+
+// a "Needs review" period the student says is free: it leaves the timetable, so the app counts it as free
+function markSlotFree() {
+  return deleteCurrentSlot('Marked as a free period 🌿');
 }
 
 async function confirmClearTimetable() {
