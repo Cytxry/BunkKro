@@ -1470,3 +1470,15 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .rp-wide{width:100%;padding:12px 18px}
 .rp-btns .aic-link{align-self:center;margin-top:2px}
 @media (prefers-reduced-motion:reduce){.rp-toggle{transition:none}}
+.rp-toggle{position:relative}
+.rp-spark{position:absolute;right:96px;top:8px;font-size:1rem;pointer-events:none}
+.rp-choices{display:flex;flex-direction:column;gap:10px;margin:18px 0 4px}
+.rp-choice{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 16px;border-radius:18px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:transform .15s,border-color .15s,background .15s}
+.rp-choice:hover{transform:translateY(-1px);border-color:var(--primary-soft);background:var(--primary-tint)}
+.rp-choice.add:hover{border-color:var(--good-line);background:var(--good-bg)}
+.rp-choice:focus-visible{outline:2px solid var(--primary-soft);outline-offset:2px}
+.rp-choice-ic{width:42px;height:42px;border-radius:14px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:1.25rem;flex-shrink:0;box-shadow:var(--shadow-sm)}
+.rp-choice-txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.rp-choice-txt strong{font-size:.98rem;color:var(--primary-deep)}
+.rp-choice-txt small{font-size:.8rem;color:var(--text2)}
+@media (prefers-reduced-motion:reduce){.rp-choice{transition:none}.rp-choice:hover{transform:none}}

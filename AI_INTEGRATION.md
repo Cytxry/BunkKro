@@ -91,3 +91,12 @@ help improve BunkKro AI. The bar says so before confirming; **Turn off** stops i
 A new timetable first asks about the student's existing subjects (**Start fresh?** → remove all, or pick which to
 keep). New classes are matched by name only to subjects the student kept. Cloud tables: `migrations/2026-11-06-ai-confirmation.sql`. Until it
 is run, everything stays on the device.
+
+## Uploading when a timetable is already there
+
+The upload first asks **Replace it** or **Add to it**.
+- **Replace it** leads to "Start fresh?": remove all subjects, or keep some (tap a subject to switch it; one being
+  removed pops red and drops to the end of the list).
+- **Add to it** keeps every class and subject already there and adds the new file's classes. An exact copy of a
+  class already there is skipped. A class at the same time as an existing one is kept but marked to check ("another
+  class is at the same time"). Periods are renumbered by time within each day.

@@ -52,6 +52,7 @@
       engineVersion: (meta && meta.engineVersion) || null, sourceHash: null,
       predicted: predicted.map(s => ({ aiRef: s.id, ...pick(s) })),
       ids: Object.fromEntries(slots.filter(s => s.aiRef).map(s => [s.aiRef, s.id])),
+      baseIds: (meta && meta.baseIds) || [],         // "Add to it": classes that were there before, not the AI's
       fixes: 0
     };
     try { imp.sourceHash = await sha256(meta && meta.file); } catch (e) { /* hashing is only for spotting re-uploads */ }
@@ -100,8 +101,9 @@
       }
       out.push({ type, entryId: cur ? cur.id : null, predicted: p, confirmed: cur ? pick(cur) : null });
     }
+    const before = new Set(imp.baseIds || []);
     for (const s of timetable) {
-      if (!s.isBreak && !used.has(s.id)) out.push({ type: 'class_added', entryId: s.id, predicted: null, confirmed: pick(s) });
+      if (!s.isBreak && !used.has(s.id) && !before.has(s.id)) out.push({ type: 'class_added', entryId: s.id, predicted: null, confirmed: pick(s) });
     }
     return out;
   }

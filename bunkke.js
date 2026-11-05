@@ -3330,7 +3330,7 @@ async function handleTimetableFileUpload(file) {
   // A timetable or subjects already there: one dialog decides both, before anything is read
   if (timetable.length > 0 || (currentUser && subjects.length)) {
     pendingOCRFile = file;
-    openReplaceDialog('ask');
+    openReplaceDialog(timetable.length ? 'mode' : 'ask');
     return;
   }
 
@@ -3402,26 +3402,44 @@ function openReplaceDialog(step) {
   const box = ov.querySelector('.modal');
   const list = currentUser ? subjects : [];
   const had = timetable.length > 0;
-  const row = (sb, toggle) => {
+  const row = (sb, toggle, k) => {
     const i = subjects.indexOf(sb);
     const counted = sb.total > 0 ? `${sb.present}/${sb.total} classes` : 'nothing counted yet';
     const inner = `<span class="nav-dot" style="background:${subjTheme(i).c}"></span>
       <span class="rp-name"><strong>${escapeHTML(sb.name)}</strong><small>${counted}</small></span>
       <span class="nav-pct ${subjStatus(sb).cls}">${subjPctText(sb)}</span>`;
     return toggle   // the whole block is the toggle: green "Stays", faded "Removes"
-      ? `<label class="rp-row rp-toggle"><input type="checkbox" value="${escapeHTML(sb.id)}" checked><span class="nav-dot" style="background:${subjTheme(i).c}"></span>
+      ? `<label class="rp-row rp-toggle" data-order="${k}"><input type="checkbox" value="${escapeHTML(sb.id)}" checked><span class="nav-dot" style="background:${subjTheme(i).c}"></span>
           <span class="rp-name"><strong>${escapeHTML(sb.name)}</strong><small>${counted} · ${subjPctText(sb)}</small></span>
           <span class="rp-tag" aria-hidden="true"></span></label>`
       : `<div class="rp-row">${inner}</div>`;
   };
   box.classList.add('rp');
-  if (!list.length) {
+  const back = had ? `<button class="aic-link" onclick="openReplaceDialog('mode')">Back</button>`
+    : `<button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button>`;
+  if (step === 'mode' && had) {
+    const n = timetable.filter(s => !s.isBreak).length;
+    box.innerHTML = `<img class="modal-cat" src="assets/cat-blue-confused.svg" alt="">
+      <h2 id="tt-confirm-title">You already have a timetable</h2>
+      <p class="sub">${n} class${n === 1 ? '' : 'es'} a week right now. What should the new one do?</p>
+      <div class="rp-choices">
+        <button class="rp-choice" onclick="openReplaceDialog('ask')">
+          <span class="rp-choice-ic" aria-hidden="true">🔄</span>
+          <span class="rp-choice-txt"><strong>Replace it</strong><small>The new timetable takes its place</small></span>
+        </button>
+        <button class="rp-choice add" onclick="confirmProceedScan('add')">
+          <span class="rp-choice-ic" aria-hidden="true">➕</span>
+          <span class="rp-choice-txt"><strong>Add to it</strong><small>Keep your classes and subjects, and add the new ones</small></span>
+        </button>
+      </div>
+      <div class="rp-btns"><button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button></div>`;
+  } else if (!list.length) {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-worried.svg" alt="">
       <h2 id="tt-confirm-title">Replace your timetable?</h2>
       <p class="sub">Your weekly schedule will be swapped for the new one.</p>
       <div class="rp-btns">
         <button class="btn-pri rp-wide" onclick="confirmProceedScan('all')">Replace timetable</button>
-        <button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button>
+        ${back}
       </div>`;
   } else if (step === 'pick') {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-blue-happy.svg" alt="">
@@ -3429,7 +3447,7 @@ function openReplaceDialog(step) {
       <p class="sub">Tap the ones you don't need. Kept subjects keep their attendance.</p>
       <div class="rp-card">
         <div class="rp-card-head"><span>Your subjects</span><span class="rp-tally" id="rp-tally"></span></div>
-        <div class="rp-list">${list.map(sb => row(sb, true)).join('')}</div>
+        <div class="rp-list">${list.map((sb, k) => row(sb, true, k)).join('')}</div>
       </div>
       <div class="rp-btns">
         <button class="btn-pri rp-wide" id="rp-go" onclick="confirmProceedScan('pick')">Replace timetable</button>
@@ -3442,7 +3460,10 @@ function openReplaceDialog(step) {
       box.querySelector('#rp-go').textContent = kept === list.length ? 'Replace timetable, keep all subjects'
         : kept ? `Replace timetable, keep ${kept}` : 'Replace timetable, remove all';
     };
-    box.querySelectorAll('.rp-toggle input').forEach(inp => inp.addEventListener('change', tally));
+    box.querySelectorAll('.rp-toggle input').forEach(inp => inp.addEventListener('change', () => {
+      tally();
+      rpAnimateToggle(box.querySelector('.rp-list'), inp.closest('.rp-toggle'), !inp.checked);
+    }));
     tally();
   } else {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-worried.svg" alt="">
@@ -3455,10 +3476,61 @@ function openReplaceDialog(step) {
       <div class="rp-btns">
         <button class="btn-pri danger rp-wide" onclick="confirmProceedScan('all')">Start fresh, remove ${list.length === 1 ? 'it' : 'all ' + list.length}</button>
         <button class="btn-sec rp-wide" onclick="openReplaceDialog('pick')">Keep some subjects</button>
-        <button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button>
+        ${back}
       </div>`;
   }
   ov.classList.add('show');
+}
+
+// "Which subjects stay?" motion: a subject switched off pops up red and drops to the end of the list; switched back
+// on, it slides home, bounces, and a little sparkle floats up. The other rows glide into place (FLIP).
+let rpGoneSeq = 0;
+function rpAnimateToggle(listEl, row, removed) {
+  if (removed) row.dataset.gone = ++rpGoneSeq; else delete row.dataset.gone;   // order of removal, whatever the timing
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const reorder = () => {
+    const rows = [...listEl.children];
+    rows.forEach(r => r.getAnimations().forEach(a => a.cancel()));
+    const first = new Map(rows.map(r => [r, r.getBoundingClientRect().top]));
+    const isOn = r => r.querySelector('input').checked;
+    const kept = rows.filter(isOn).sort((a, b) => a.dataset.order - b.dataset.order);
+    const gone = rows.filter(r => !isOn(r)).sort((a, b) => a.dataset.gone - b.dataset.gone);
+    [...kept, ...gone].forEach(r => listEl.appendChild(r));
+    if (still) return Promise.resolve();
+    const moves = rows.map(r => {
+      const dy = first.get(r) - r.getBoundingClientRect().top;
+      return dy ? r.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+                            { duration: 420, easing: 'cubic-bezier(.2,.85,.25,1)' }).finished.catch(() => {}) : null;
+    }).filter(Boolean);
+    if (removed) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return Promise.all(moves);
+  };
+  if (still) { reorder(); return; }
+  if (removed) {
+    row.animate([
+      { transform: 'none' },
+      { transform: 'translateY(-7px) scale(1.04)', background: css('--danger-bg'), borderColor: css('--danger-line'), offset: 0.45 },
+      { transform: 'none' }
+    ], { duration: 280, easing: 'ease-out' });
+    setTimeout(reorder, 280);
+  } else {
+    reorder().then(() => {
+      row.animate([
+        { transform: 'scale(1)' }, { transform: 'scale(1.05)', offset: 0.35 }, { transform: 'scale(.98)', offset: 0.7 },
+        { transform: 'scale(1)' }
+      ], { duration: 360, easing: 'ease-out' });
+      const spark = document.createElement('span');
+      spark.className = 'rp-spark';
+      spark.textContent = '✨';
+      row.appendChild(spark);
+      spark.animate([
+        { transform: 'translate(0, 0) scale(.6)', opacity: 0 },
+        { transform: 'translate(-4px, -14px) scale(1.15)', opacity: 1, offset: 0.4 },
+        { transform: 'translate(-8px, -26px) scale(.9)', opacity: 0 }
+      ], { duration: 700, easing: 'ease-out' }).finished.then(() => spark.remove()).catch(() => spark.remove());
+    });
+  }
 }
 
 function confirmProceedScan(mode) {
@@ -3468,7 +3540,44 @@ function confirmProceedScan(mode) {
   const keep = mode === 'pick' ? new Set([...box.querySelectorAll('input:checked')].map(i => i.value)) : new Set();
   const drop = currentUser ? subjects.filter(sb => !keep.has(sb.id)).map(sb => sb.id) : [];
   closeTtConfirmModal();
-  if (file) processTimetableImage(file, drop);
+  if (file) processTimetableImage(file, mode === 'add' ? [] : drop, { merge: mode === 'add' });
+}
+
+// "Add to it": the new classes join the timetable already there. An exact copy of a class already there is skipped;
+// a class at the same time as one already there is kept but marked for a quick check (never silently overwritten).
+// Periods are renumbered by time within each day.
+let lastMerge = { added: 0, skipped: 0, clashes: 0 };
+function mergeSlots(base, added) {
+  const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const overlaps = (a, b) => a.day === b.day && a.startTime && b.startTime &&
+    a.startTime < (b.endTime || b.startTime) && b.startTime < (a.endTime || a.startTime);
+  const out = base.slice();
+  lastMerge = { added: 0, skipped: 0, clashes: 0 };
+  for (const s of added) {
+    const same = base.some(o => o.day === s.day && (o.startTime || '') === (s.startTime || '') &&
+      (o.endTime || '') === (s.endTime || '') && !!o.isBreak === !!s.isBreak &&
+      (s.isBreak || norm(o.subjectName) === norm(s.subjectName)));
+    if (same || (s.isBreak && base.some(o => overlaps(o, s)))) { lastMerge.skipped++; continue; }
+    if (!s.isBreak && base.some(o => !o.isBreak && overlaps(o, s))) {
+      s.isUncertain = true;
+      s.overlapsAnotherClass = true;
+      lastMerge.clashes++;
+    }
+    out.push(s);
+    lastMerge.added++;
+  }
+  for (let d = 1; d <= 7; d++) {
+    out.filter(s => s.day === d)
+      .sort((a, b) => (a.startTime || '99:99').localeCompare(b.startTime || '99:99') || a.period - b.period)
+      .forEach((s, i) => { s.period = i + 1; });
+  }
+  return out;
+}
+function mergeToast() {
+  const { added, skipped, clashes } = lastMerge;
+  toast(`Added ${added} class${added === 1 ? '' : 'es'} to your timetable` +
+    (skipped ? ` (${skipped} you already had)` : '') +
+    (clashes ? ` · ${clashes} at the same time as one of yours, marked to check` : ''));
 }
 
 function setScannerPhase(phaseName, pct, detailText) {
@@ -3533,7 +3642,7 @@ async function removeSubjectCompletely(subjId) {
   return ok;
 }
 
-async function processTimetableImage(file, dropIds = []) {
+async function processTimetableImage(file, dropIds = [], opts = {}) {
   currentScannedImageBlob = file;
   const progressBox = document.getElementById('ocr-progress-box');
   if (progressBox) progressBox.style.display = 'block';
@@ -3564,9 +3673,11 @@ async function processTimetableImage(file, dropIds = []) {
       scannerState.historyIndex = 0;
       updateStudioHistoryButtons();
       slots.forEach(s => { s.aiRef = s.id; });                  // survives the id change on save (confirmation)
-      timetable = slots;
+      const base = opts.merge ? timetable.slice() : null;    // "Add to it": the classes already there stay
+      timetable = base ? mergeSlots(base, slots) : slots;
       saveTimetableToStorageAndDB();
-      if (window.BunkKroImport) BunkKroImport.start(predicted, timetable, { engineVersion: res.engineVersion, file });
+      if (window.BunkKroImport) BunkKroImport.start(predicted, timetable,
+        { engineVersion: res.engineVersion, file, baseIds: base ? base.map(s => s.id) : [] });
       renderAll();                                   // the sidebar too: old subjects may be gone
       setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
       setTimeout(() => {
@@ -3580,7 +3691,8 @@ async function processTimetableImage(file, dropIds = []) {
       const unknown = slots.filter(s => s.isUnknown).length;
       const unsure = slots.filter(s => s.isUncertain && !s.isBreak && !s.isUnknown).length;
       const classes = slots.filter(s => !s.isBreak && !s.isUnknown).length;
-      toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}` +
+      if (base) mergeToast();
+      else toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}` +
         (unknown ? `; ${unknown} period${unknown > 1 ? 's' : ''} could not be confirmed free (Needs review)` : ''));
       return;
     } catch (aiErr) {
@@ -3700,10 +3812,11 @@ async function processTimetableImage(file, dropIds = []) {
     updateStudioHistoryButtons();
 
     // Persist and render
-    timetable = fusedSlots;
+    timetable = opts.merge ? mergeSlots(timetable.slice(), fusedSlots) : fusedSlots;
     await dropOldSubjects(dropIds);                 // the student's choice in the Replace dialog
     saveTimetableToStorageAndDB();
     renderAll();
+    if (opts.merge) mergeToast();
 
     // Finish
     setScannerPhase('valid', 100, '✓ Multi-engine scan complete!');
