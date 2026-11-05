@@ -3402,7 +3402,6 @@ function openReplaceDialog(step) {
   const box = ov.querySelector('.modal');
   const list = currentUser ? subjects : [];
   const had = timetable.length > 0;
-  const safe = '<div class="rp-safe"><span aria-hidden="true">🛡️</span> Nothing is removed until your new timetable has been read.</div>';
   const row = (sb, toggle) => {
     const i = subjects.indexOf(sb);
     const counted = sb.total > 0 ? `${sb.present}/${sb.total} classes` : 'nothing counted yet';
@@ -3430,7 +3429,6 @@ function openReplaceDialog(step) {
         <div class="rp-card-head"><span>Your subjects</span><span class="rp-tally" id="rp-tally"></span></div>
         <div class="rp-list">${list.map(sb => row(sb, true)).join('')}</div>
       </div>
-      ${safe}
       <div class="rp-btns">
         <button class="btn-pri rp-wide" id="rp-go" onclick="confirmProceedScan('pick')">Replace timetable</button>
         <button class="aic-link" onclick="openReplaceDialog('ask')">Back</button>
@@ -3452,7 +3450,6 @@ function openReplaceDialog(step) {
         <div class="rp-card-head"><span>Your subjects</span><span class="rp-tally">${list.length}</span></div>
         <div class="rp-list">${list.map(sb => row(sb, false)).join('')}</div>
       </div>
-      ${safe}
       <div class="rp-btns">
         <button class="btn-pri danger rp-wide" onclick="confirmProceedScan('all')">Start fresh, remove ${list.length === 1 ? 'it' : 'all ' + list.length}</button>
         <button class="btn-sec rp-wide" onclick="openReplaceDialog('pick')">Keep some subjects</button>
