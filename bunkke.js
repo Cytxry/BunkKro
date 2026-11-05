@@ -112,7 +112,7 @@ async function initAuth() {
     // ⚠️ OPTIONAL: just check once, but DO NOT DELETE STORAGE
     const { data: { session } } = await supabaseClient.auth.getSession();
 
-    console.log("Initial session:", session);
+    // (the session is not logged: it holds the access token)
 
     if (session) {
       currentUser = session.user;
@@ -552,39 +552,18 @@ async function handleAuth(event) {
 
 if (result.error) throw result.error;
 
-console.log("LOGIN RESPONSE:", result.data);
-
-// 🔥 USE THIS (NOT getSession)
+// (never log the session: it holds the access token)
 const session = result.data.session;
-
 if (!session) {
-  console.error("❌ No session returned from login");
+  showAuthError('Login worked, but no session came back. Please try again.');
   return;
 }
-
-// ✅ STORE IT IMMEDIATELY
 localStorage.setItem('sb-session', JSON.stringify(session));
-
-console.log("✅ Session saved:", session);
-
-// optional UI stuff
 currentUser = result.data.user;
 showAuthSuccess('Login successful!');
+// tell the browser extension before the page reloads into the signed-in app
+window.dispatchEvent(new CustomEvent('session-updated', { detail: { session } }));
 window.location.reload();
-
-      // ✅ Dispatch custom event for content script
-      window.dispatchEvent(new CustomEvent('session-updated', { 
-        detail: { session } 
-      }));
-
-      currentUser = result.data.user;
-
-      showAuthSuccess('Login successful!');
-
-      // ✅ Load app
-      setTimeout(async () => {
-        await showApp();
-      }, 800);
     }
 
   } catch (error) {
@@ -1074,6 +1053,8 @@ function randToast(type) { return randFrom(TOAST_MSGS[type] || ['Done.']); }
 // does not flicker while you look at it but reads fresh next time, and the Simulator line moves as you skip more.
 const COPY_SALT = Math.random().toString(36).slice(2, 8);
 const semB = x => '<strong>' + x + '</strong>';
+// "1 class", "2 classes": a count with the right word
+const nWord = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const SEM_COPY = {
   advSafe: [
     d => `You can skip ${semB(d.bk + ' more')} and still stay above ${d.tgt}%. Space them out — never two in a row.`,
@@ -1125,8 +1106,8 @@ const SEM_COPY = {
   ],
   overLeft: [
     d => `Bro, the semester only has ${semB(d.ab + d.left)} class${d.left !== 1 ? 'es' : ''} left. You can't bunk ${d.plan}.`,
-    d => `${d.plan} bunks? There are only ${semB(d.ab + d.left)} classes left. Even full-time bunking can't get you there.`,
-    d => `Ambitious. But only ${semB(d.ab + d.left)} classes remain — skipping ${d.plan} isn't on the menu.`,
+    d => `${d.plan} bunks? There ${d.ab + d.left === 1 ? 'is' : 'are'} only ${semB(d.ab + d.left)} class${d.ab + d.left === 1 ? '' : 'es'} left. Even full-time bunking can't get you there.`,
+    d => `Ambitious. But only ${semB(d.ab + d.left)} class${d.ab + d.left === 1 ? '' : 'es'} remain${d.ab + d.left === 1 ? 's' : ''} — skipping ${d.plan} isn't on the menu.`,
   ],
 };
 function semCopy(kind, seed, d) { return stablePick(SEM_COPY[kind], `${COPY_SALT}|${kind}|${seed}`)(d); }
@@ -1518,7 +1499,7 @@ function renderHome() {
   const safeSubs = subjects.filter(x => bunkable(x) > 0);
   const safeSub = safeBunks <= 0 ? 'you are cooked. attend.'
     : safeSubs.length === 1 ? `only in ${escapeHTML(safeSubs[0].name)}`
-    : atRisk.length ? `across ${safeSubs.length} subjects — not the risky ones` : 'go ahead, skip something';
+    : atRisk.length ? `across ${nWord(safeSubs.length, 'subject')} — not the risky ones` : 'go ahead, skip something';
   document.getElementById('stats-grid').innerHTML = `
     <div class="sc tone-${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">
       <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl">Overall attendance</span></div>
@@ -2001,7 +1982,7 @@ function openCooked() {
   const seed = 'cooked|' + overallSeed();
   if (atRisk.length === 0 && ov >= globalTarget + 10 && safeBunks > 5) {
     emoji='😎'; verdict='Nah you\'re chilling.'; cls='color:var(--accent)';
-    msg = `${ov}% overall. ${safeBunks} bunks available. ${stablePick(ROASTS.god, seed)} ${stablePick(ROASTS.safe, seed + '+')}`;
+    msg = `${ov}% overall. ${nWord(safeBunks, 'bunk')} available. ${stablePick(ROASTS.god, seed)} ${stablePick(ROASTS.safe, seed + '+')}`;
   } else if (atRisk.length === 0 && safeBunks > 0) {
     emoji='🤏'; verdict='Safe. But don\'t get greedy.'; cls='color:var(--warn)';
     msg = `${ov}% overall. Only ${safeBunks} safe bunks left. ${stablePick(ROASTS.medium, seed)}`;
@@ -2013,7 +1994,7 @@ function openCooked() {
     msg = `${atRisk.length} subject${atRisk.length>1?'s':''} below target. ${stablePick(ROASTS.low, seed)}`;
   } else {
     emoji='🔥'; verdict='Cooked beyond recognition.'; cls='color:var(--danger)';
-    msg = `${atRisk.length} subjects in the danger zone. ${stablePick(ROASTS.cooked, seed)}`;
+    msg = `${nWord(atRisk.length, 'subject')} in the danger zone. ${stablePick(ROASTS.cooked, seed)}`;
   }
  
   document.getElementById('ck-emoji').textContent = emoji;
@@ -3787,7 +3768,7 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       setTimeout(() => window.BunkGuide && BunkGuide.afterImport(subjects.filter(s => !hadSubjects.has(s.id)),
                                                                { first: firstTimetable }), 1400);
       if (base) mergeToast();
-      else toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}` +
+      else toast(`BunkKro AI read ${nWord(classes, 'class', 'classes')}${unsure ? ` — please check the ${unsure} marked ${unsure === 1 ? 'one' : 'ones'}` : ''}` +
         (unknown ? `; ${unknown} period${unknown > 1 ? 's' : ''} could not be confirmed free (Needs review)` : ''));
       return;
     } catch (aiErr) {
@@ -4699,8 +4680,9 @@ function renderTimetable() {
   }
 
   const validSubjectSlots = timetable.filter(s => !s.isBreak);
-  if (badge) {
-    badge.textContent = `${validSubjectSlots.length} class${validSubjectSlots.length !== 1 ? 'es' : ''} scheduled`;
+  if (badge) {   // the same count as "N classes loaded": a "Class or free?" period isn't a class yet
+    const classes = validSubjectSlots.filter(s => !s.isUnknown).length, toCheck = validSubjectSlots.length - classes;
+    badge.textContent = `${nWord(classes, 'class', 'classes')} scheduled${toCheck ? ` · ${toCheck} to check` : ''}`;
   }
 
   if (!timetable.length) {
@@ -4742,7 +4724,7 @@ function renderTimetable() {
         <td class="tt-day-cell">
           <div class="tt-day-chip d${dayInfo.num}">${dayInfo.short}</div>
           <div class="tt-day-name">${dayInfo.name}</div>
-          <div class="tt-day-count">${daySlots.filter(s=>!s.isBreak).length} classes</div>
+          <div class="tt-day-count">${nWord(daySlots.filter(s => !s.isBreak).length, 'class', 'classes')}</div>
         </td>
         <td>
           <div class="tt-slots-col" data-day="${dayInfo.num}">
@@ -4772,10 +4754,10 @@ function renderTimetable() {
                     <span class="tt-slot-pnum">Period ${slot.period}</span>
                     <span class="tt-slot-time">${escapeHTML(timeDisplay)}</span>
                   </span>
-                  <span class="tt-slot-name"><span class="tt-slot-ic" style="color:${matchedSubj && !slot.isUncertain ? th.c : 'var(--muted)'}">${ic(subjIcon(displayName),'ic-sm')}</span>${escapeHTML(displayName)}</span>
+                  <span class="tt-slot-name"><span class="tt-slot-ic" style="color:${matchedSubj && !slot.isUncertain ? th.c : 'var(--muted)'}">${ic(subjIcon(displayName),'ic-sm')}</span><span class="tt-slot-label">${escapeHTML(displayName)}</span></span>
                   ${slot.isUnknown ? '<span class="tt-slot-warn" style="display:block">⚠️ Class or free? Tap to check</span>'
                     : slot.isUncertain ? '<span class="tt-slot-warn" style="display:block">⚠️ Review subject</span>' : ''}
-                  ${matchedSubj ? `<span class="tt-slot-subjtag" style="display:block">✓ Linked to ${escapeHTML(matchedSubj.name)}</span>` : ''}
+                  ${matchedSubj ? `<span class="tt-slot-subjtag" style="display:block" title="Linked to ${escapeHTML(matchedSubj.name)}">${matchedSubj.name === displayName ? '✓ Linked' : `✓ Linked to ${escapeHTML(matchedSubj.name)}`}</span>` : ''}
                 </button>
               `;
             }).join('')}
@@ -5411,6 +5393,7 @@ function openAddSlotModal(day = 1, period = 1) {
   document.getElementById('btn-delete-slot').style.display = 'none';
 
   populateSubjectDropdown();
+  onSlotSubjectSelect('');
   onSlotTypeChange('subject');
   document.getElementById('slot-edit-overlay').classList.add('show');
 }
@@ -5444,6 +5427,7 @@ function openEditSlotModal(slotId) {
   document.getElementById('btn-delete-slot').style.display = 'inline-block';
 
   populateSubjectDropdown(slot.subjectId);
+  onSlotSubjectSelect(document.getElementById('slot-subject-select').value);
   onSlotTypeChange(slot.isBreak ? 'break' : 'subject');
   document.getElementById('slot-edit-overlay').classList.add('show');
 }
@@ -5457,7 +5441,7 @@ function populateSubjectDropdown(selectedId = null) {
   const select = document.getElementById('slot-subject-select');
   if (!select) return;
 
-  select.innerHTML = '<option value="">-- Choose Existing Subject --</option>' + 
+  select.innerHTML = `<option value="">${subjects.length ? '✏️ A new subject (type it below)' : '— No subjects yet, type one below —'}</option>` + 
     subjects.map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${escapeHTML(s.name)} (${pct(s)}%)</option>`).join('');
 }
 
@@ -5468,12 +5452,14 @@ function onSlotTypeChange(type) {
   }
 }
 
+// a chosen subject decides the name (typing one too would be ignored), so the name box only shows without one
 function onSlotSubjectSelect(subjId) {
-  if (!subjId) return;
-  const s = subjects.find(x => x.id === subjId);
-  if (s) {
-    document.getElementById('slot-subject-name').value = s.name;
-  }
+  const s = subjId ? subjects.find(x => x.id === subjId) : null;
+  const wrap = document.getElementById('slot-name-wrap');
+  const name = document.getElementById('slot-subject-name');
+  if (wrap) wrap.hidden = !!s;
+  if (s) name.value = s.name;
+  else if (subjects.some(x => x.name === name.value)) name.value = '';   // was the linked subject's name
 }
 
 function slotError(msg, inputId) {
@@ -5500,7 +5486,8 @@ async function saveSlotModal() {
   if (clash && !(await askDialog({ title: 'That period is taken', message: `${DAYS_MAP.find(d => d.num === day).name} period ${period} already has ${ttSlotLabel(clash)}. Keep both classes in that period?`, ok: 'Keep both', cancel: 'Go back', cat: 'cat-peek' }))) return;
   slotError('');
 
-  let subjectName = isBreak ? 'Break' : (subjNameInput || 'Unassigned');
+  const chosen = !isBreak && subjSelect ? subjects.find(x => x.id === subjSelect) : null;
+  let subjectName = isBreak ? 'Break' : (chosen ? chosen.name : (subjNameInput || 'Unassigned'));   // a chosen subject's own name
   let subjectId = isBreak ? null : (subjSelect || null);
 
   // If user typed a subject name that isn't mapped, check if matches existing
@@ -6342,7 +6329,7 @@ function renderTracker() {
         </div>
         <div class="daily-summary-main">
           <div class="daily-summary-head">${headline}</div>
-          <div class="daily-completion-text"><span>${markedCount} of ${totalCount} classes marked</span></div>
+          <div class="daily-completion-text"><span>${markedCount} of ${totalCount} class${totalCount === 1 ? '' : 'es'} marked</span></div>
           <div class="daily-summary-stats">
             <div class="daily-stat-box indigo"><span class="ds-icon">${ic('calendar','ic-sm')}</span><div><div class="daily-stat-val">${totalCount}</div><div class="daily-stat-lbl">Scheduled</div></div></div>
             <div class="daily-stat-box green"><span class="ds-icon">${ic('check','ic-sm')}</span><div><div class="daily-stat-val">${presentCount}</div><div class="daily-stat-lbl">Present</div></div></div>

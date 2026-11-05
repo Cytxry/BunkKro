@@ -526,11 +526,11 @@
     <div class="form-grid-2">
       <div class="mf">
         <label for="slot-start-time">Start time <span class="field-hint">(optional)</span></label>
-        <input type="time" id="slot-start-time">
+        <input type="time" id="slot-start-time" data-clock>
       </div>
       <div class="mf">
         <label for="slot-end-time">End time <span class="field-hint">(optional)</span></label>
-        <input type="time" id="slot-end-time">
+        <input type="time" id="slot-end-time" data-clock>
       </div>
     </div>
 
@@ -539,7 +539,7 @@
       <select id="slot-subject-select" onchange="onSlotSubjectSelect(this.value)">
         <option value="">-- Choose Existing Subject --</option>
       </select>
-      <div style="margin-top:10px">
+      <div style="margin-top:10px" id="slot-name-wrap">
         <label for="slot-subject-name">Or type a subject name <span class="field-hint">(a new name is added to your subjects)</span></label>
         <input type="text" id="slot-subject-name" placeholder="e.g. Mathematics or CS101">
       </div>
@@ -651,7 +651,7 @@
     <div id="resched-pick" hidden>
       <div class="form-grid-2" style="text-align:left">
         <div class="mf"><label for="resched-date">Makeup day</label><input type="date" id="resched-date"></div>
-        <div class="mf"><label for="resched-time">Time <span class="field-hint">(optional)</span></label><input type="time" id="resched-time"></div>
+        <div class="mf"><label for="resched-time">Time <span class="field-hint">(optional)</span></label><input type="time" data-clock id="resched-time"></div>
       </div>
       <p class="field-tip" style="text-align:left">It'll show up on that day in Daily Classes, ready to mark.</p>
       <p class="form-err" id="resched-error" role="alert" hidden></p>
@@ -943,6 +943,7 @@
 <script src="timetable-scanner.js"></script>
 <script src="fx.js"></script>
 <script src="guide.js"></script>
+<script src="clock.js"></script>
 <script src="ai-bridge.js"></script>
 <script src="bunkke.js"></script>
 <script src="ai-confirm.js"></script>
