@@ -113,9 +113,9 @@
       const total = st.pages_total || 0;
       const done = st.pages_done || 0;
       const pct = st.state === 'queued' ? 12 : 15 + Math.round(65 * (total ? done / total : 0));
-      const msg = st.state === 'queued' ? 'Waiting for the AI (another timetable is being read)...'
-        : total > 1 ? `Reading page ${Math.min(done + 1, total)} of ${total} (scanned pages take about a minute each)...`
-          : 'Reading the timetable (a photo or scan takes a minute or two)...';
+      const msg = st.state === 'queued' ? 'In the queue, another timetable is being read ⏳'
+        : total > 1 ? `Page ${Math.min(done + 1, total)} of ${total} · scans take about a minute each, worth it 🫡`
+          : 'A photo or scan takes a minute or two, hang tight 🫶';
       if (onPhase && msg + pct !== last) onPhase('ocr', pct, msg);
       last = msg + pct;
       await sleep(1500);
@@ -239,7 +239,7 @@
 
   // file -> {slots, validation, studio: {canvas, cells} | null, source} or throws Error(reason)
   async function read(file, subjects, onPhase) {
-    onPhase && onPhase('prep', 8, 'Sending the timetable to BunkKro AI on this computer...');
+    onPhase && onPhase('prep', 8, 'Handing it to BunkKro AI on this computer 🤝');
     const started = await call('POST', '/scan?filename=' + encodeURIComponent(file.name || 'upload.png'), file);
     if (!started.ok) throw new Error(started.error || 'the AI did not accept this file');
     await waitForJob(started.job, onPhase);
@@ -265,7 +265,7 @@
       if (res.review && res.review.status === 'failed') Object.assign(err, { refused: true, reasons: res.review.reasons || [] });
       throw err;
     }
-    onPhase && onPhase('valid', 90, 'Loading the page and matching your subjects...');
+    onPhase && onPhase('valid', 90, 'Matching your subjects 🧩');
     const slots = matchSubjects(res.slots, subjects || []);
     const canvas = res.image ? await loadImage(res.image) : null;
     const cells = canvas ? studioCells(slots) : [];

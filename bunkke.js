@@ -703,6 +703,7 @@ function showApp() {
     await loadDateExceptions();
     await loadTracker();
     renderAll();
+    setTimeout(() => window.BunkGuide && BunkGuide.nudge(), 1500);
   })().finally(() => { appLoading = null; });
   return appLoading;
 }
@@ -745,6 +746,19 @@ function hideAuthMessages() {
 
 const SUBJ_THEMES = Array.from({ length: 8 }, (_, i) => ({ c: `var(--st${i + 1})`, bg: `var(--st${i + 1}-bg)` }));
 function subjTheme(i) { return SUBJ_THEMES[((i % SUBJ_THEMES.length) + SUBJ_THEMES.length) % SUBJ_THEMES.length]; }
+// The cats come in coats (assets/make_cats.py): each spot shows one coat a day, so it never flickers between renders
+const CAT_COATS = { happy: ['black', 'white', 'grey'], wave: ['black', 'white', 'grey'], peek: ['black', 'white', 'grey'],
+  confused: ['black', 'white', 'grey'], sad: ['black', 'white'], moon: ['black', 'white'], laptop: ['black', 'white', 'grey'],
+  coffee: ['black', 'grey'], books: ['black', 'white'], detective: ['black', 'white'], trophy: ['black', 'white'] };
+function coat(name) {
+  const m = /^cat-([a-z]+)$/.exec(name || '');
+  if (!m || !CAT_COATS[m[1]]) return name;
+  const opts = [null, ...CAT_COATS[m[1]]];               // null: the original orange cat
+  let h = Math.floor(Date.now() / 864e5);
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  const c = opts[Math.abs(h) % opts.length];
+  return c ? `cat-${c}-${m[1]}` : name;
+}
 
 // Decorative icon chosen from the subject name only.
 function subjIcon(name) {
@@ -1466,7 +1480,7 @@ function renderHome() {
   const name = userFirstName();
   document.getElementById('home-head').innerHTML = `${greetings[gi]}${name ? ', ' + escapeHTML(name) : ''}! <span class="wave" aria-hidden="true">${waves[gi]}</span>`;
   const greetCat = document.getElementById('greet-cat');
-  if (greetCat) greetCat.src = `assets/${['cat-moon', 'cat-coffee', 'cat-laptop', hr < 21 ? 'cat-yarn' : 'cat-moon'][gi]}.svg`;
+  if (greetCat) greetCat.src = `assets/${coat(['cat-moon', 'cat-coffee', 'cat-laptop', hr < 21 ? 'cat-yarn' : 'cat-moon'][gi])}.svg`;
   document.getElementById('home-sub').textContent = now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
   closeAllPopovers();
@@ -1890,7 +1904,7 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
         <span class="verdict-title">${escapeHTML(title)}</span>
         <span class="verdict-sub">${escapeHTML(sub)}</span>
       </span>
-      <img class="verdict-illus" src="assets/${cls === 'cooked' ? (atRisk.length > subjects.length / 2 ? 'cat-sad' : 'cat-worried') : cls === 'safe' ? 'cat-chill' : 'cat-laptop'}.svg" alt="">
+      <img class="verdict-illus" src="assets/${coat(cls === 'cooked' ? (atRisk.length > subjects.length / 2 ? 'cat-sad' : 'cat-worried') : cls === 'safe' ? 'cat-chill' : 'cat-laptop')}.svg" alt="">
       <span class="verdict-tap">Am I Cooked? ${ic('arrow-right','ic-sm')}</span>
     </button>`;
 }
@@ -2004,7 +2018,7 @@ function openCooked() {
  
   document.getElementById('ck-emoji').textContent = emoji;
   const ckCat = document.getElementById('ck-cat');
-  if (ckCat) ckCat.src = `assets/${atRisk.length > subjects.length / 2 ? 'cat-sad' : atRisk.length > 0 ? 'cat-worried' : (safeBunks > 5 ? 'cat-chill' : 'cat-laptop')}.svg`;
+  if (ckCat) ckCat.src = `assets/${coat(atRisk.length > subjects.length / 2 ? 'cat-sad' : atRisk.length > 0 ? 'cat-worried' : (safeBunks > 5 ? 'cat-chill' : 'cat-laptop'))}.svg`;
   document.getElementById('ck-verdict').innerHTML = `<span style="${cls}">${verdict}</span>`;
   document.getElementById('ck-msg').textContent = msg;
   document.getElementById('ck-breakdown').innerHTML = subjects.map((s,i) => {
@@ -2053,7 +2067,7 @@ function renderSubject(id, preserveSim) {
   const spIcon = document.getElementById('sp-icon');
   if (spIcon) { spIcon.innerHTML = ic(subjIcon(s.name)); spIcon.style.background = th.bg; spIcon.style.color = th.c; }
   const spCat = document.getElementById('sp-cat');
-  if (spCat) spCat.src = `assets/${!hasClasses(s) ? 'cat-box' : p >= tgt ? (p >= tgt + 15 ? 'cat-trophy' : bk > 3 ? 'cat-happy' : 'cat-laptop') : (p < tgt - 15 || !isFinite(nd) ? 'cat-sad' : 'cat-worried')}.svg`;
+  if (spCat) spCat.src = `assets/${coat(!hasClasses(s) ? 'cat-box' : p >= tgt ? (p >= tgt + 15 ? 'cat-trophy' : bk > 3 ? 'cat-happy' : 'cat-laptop') : (p < tgt - 15 || !isFinite(nd) ? 'cat-sad' : 'cat-worried'))}.svg`;
   const hero = document.getElementById('sp-hero');
   if (hero) hero.style.setProperty('--hero-tint', th.bg);
 
@@ -3552,19 +3566,31 @@ function confirmProceedScan(mode) {
 // Every real class name on the timetable becomes a subject: attendance only counts for subjects, and a class without
 // one can't be marked. A name matching a subject the student kept is linked to it; anything else is created.
 const NOT_A_SUBJECT = /^(period\s*\d+|unassigned|needs review|break|lunch|recess|free( period)?|no class)$/i;
-async function ensureSubjectsForTimetable(slots) {
+// strict (the built-in scanner, whose reading can be rough): a name must look like a word, not a scrap of OCR
+function looksLikeSubject(name, count, strict) {
+  const letters = (name.match(/\p{L}/gu) || []).length;
+  if (letters < 2) return false;
+  if (!strict) return true;
+  const latin = name.replace(/[^A-Za-z]/g, '');
+  const vowel = /[aeiouy]/i.test(latin) || /^[A-Z]{3,}$/.test(latin) || /[^\x00-\x7F]/.test(name);
+  const code = /^[A-Z]{3,}$/.test(latin), titled = /^\p{Lu}/u.test(name);
+  return letters >= 3 && vowel && letters / name.replace(/\s/g, '').length >= 0.6 &&
+    (count >= 2 || letters >= 5 || code || titled);   // OCR scraps are short, lower-case and appear once
+}
+async function ensureSubjectsForTimetable(slots, strict = false) {
   if (!currentUser || !isOnline()) return [];
   const groups = new Map();
   for (const s of slots) {
     if (s.isBreak || s.isUnknown || s.subjectId) continue;
     const name = String(s.subjectName || '').trim().replace(/\s+/g, ' ');
-    if ((name.match(/\p{L}/gu) || []).length < 2 || NOT_A_SUBJECT.test(name) || name.length > 60) continue;
+    if (NOT_A_SUBJECT.test(name) || name.length > 60) continue;
     const k = name.toLowerCase();
     if (!groups.has(k)) groups.set(k, { name, slots: [] });
     groups.get(k).slots.push(s);
   }
   const created = [];
   for (const g of groups.values()) {
+    if (!looksLikeSubject(g.name, g.slots.length, strict)) continue;
     let sub = subjects.find(x => x.name.toLowerCase() === g.name.toLowerCase());
     if (!sub && await addSubject({ name: g.name, code: g.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() + '101',
                                    perWeek: g.slots.length, total: 0, present: 0 })) {
@@ -3574,70 +3600,6 @@ async function ensureSubjectsForTimetable(slots) {
     if (sub) g.slots.forEach(s => { s.subjectId = sub.id; s.subjectName = sub.name; s.matchConfidence = 'confirmed'; });
   }
   return created;
-}
-
-// New subjects start at 0 / 0. If the semester has already started, the student can add what they've attended so
-// far, all at once (counted up to yesterday, so marking today's classes doesn't count anything twice). Skippable.
-function offerAttendanceSoFar(list) {
-  if (!list.length) return;
-  if (window.BunkFx) setTimeout(() => BunkFx.stagger(list.map(s => document.getElementById('nav-s-' + s.id))), 50);
-  const ov = document.createElement('div');
-  ov.className = 'overlay show';
-  ov.dataset.escape = 'skip';
-  ov.setAttribute('role', 'dialog');
-  ov.setAttribute('aria-modal', 'true');
-  ov.innerHTML = `<div class="modal modal-center rp" style="max-width:440px">
-    <img class="modal-cat" src="assets/cat-books.svg" alt="">
-    <h2>${list.length === 1 ? 'A new subject' : list.length + ' new subjects'} 🎉</h2>
-    <p class="sub">Made from your timetable. Already had some classes this semester? Add them here, or just skip.</p>
-    <div class="rp-card"><div class="rp-card-head"><span>Attended so far</span><span class="rp-tally">optional</span></div>
-      <div class="rp-list">${list.map(sb => `<div class="rp-row so-far" data-id="${escapeHTML(sb.id)}">
-        <span class="nav-dot" style="background:${subjTheme(subjects.indexOf(sb)).c}"></span>
-        <span class="rp-name"><strong>${escapeHTML(sb.name)}</strong><small>${sb.perWeek || 0} a week</small></span>
-        <span class="so-far-in"><input type="number" min="0" inputmode="numeric" aria-label="${escapeHTML(sb.name)}: classes attended" placeholder="0" data-k="present">
-          <span>of</span><input type="number" min="0" inputmode="numeric" aria-label="${escapeHTML(sb.name)}: classes held" placeholder="0" data-k="total"></span>
-      </div>`).join('')}</div></div>
-    <p class="so-far-err" hidden></p>
-    <div class="rp-btns">
-      <button class="btn-pri rp-wide" data-act="save">Save</button>
-      <button class="aic-link" data-act="skip">Skip, I'm starting fresh</button>
-    </div></div>`;
-  ov.addEventListener('click', async e => {
-    const act = e.target.closest?.('[data-act]')?.dataset.act;
-    if (act === 'skip') return ov.remove();
-    if (act !== 'save') return;
-    const rows = [...ov.querySelectorAll('.so-far')].map(r => ({
-      row: r, sub: subjects.find(s => s.id === r.dataset.id),
-      present: parseInt(r.querySelector('[data-k="present"]').value || '0', 10),
-      total: parseInt(r.querySelector('[data-k="total"]').value || '0', 10)
-    }));
-    const bad = rows.find(x => x.present < 0 || x.total < 0 || x.present > x.total);
-    const err = ov.querySelector('.so-far-err');
-    if (bad) {
-      err.hidden = false;
-      err.textContent = `${bad.sub ? bad.sub.name : 'A subject'}: attended can't be more than the classes held.`;
-      bad.row.classList.add('shake');
-      setTimeout(() => bad.row.classList.remove('shake'), 400);
-      return;
-    }
-    let saved = 0;
-    for (const x of rows) {
-      if (!x.sub || !x.total) continue;
-      x.sub.total = x.total;
-      x.sub.present = x.present;
-      if (await updateSubject(x.sub.id, { name: x.sub.name, code: x.sub.code, total: x.total, present: x.present,
-                                         perWeek: x.sub.perWeek, target: x.sub.target, semTotal: x.sub.semTotal,
-                                         mode: x.sub.mode })) {
-        setCountedUpTo(x.sub.id, dayOffset(-1));
-        saved++;
-      }
-    }
-    ov.remove();
-    renderAll();
-    if (saved) toast(`Attendance added for ${saved} subject${saved === 1 ? '' : 's'} ✓`);
-  });
-  document.body.appendChild(ov);
-  setTimeout(() => ov.querySelector('input')?.focus(), 60);
 }
 
 // "Add to it": the new classes join the timetable already there. An exact copy of a class already there is skipped;
@@ -3677,6 +3639,22 @@ function mergeToast() {
     (clashes ? ` · ${clashes} at the same time as one of yours, marked to check` : ''));
 }
 
+// what the reading box says while it works: a new line every few seconds, the percentage kept
+const READING_QUIPS = [
+  "Decoding your prof's handwriting ✍️", 'Vibe-checking every period 🔍', 'Hunting down your 8 AMs (sorry) ⏰',
+  "Counting how many bunks you've got 👀", 'No cap, reading the tiny text 🧐', 'Asking the timetable nicely 🙏',
+  'Finding the labs before they find you 🧪', 'Lowkey judging this font 💅', 'Separating lunch from lectures 🍱',
+  'Main character schedule loading ✨', 'Teaching the cats to read tables 🐱', 'Free periods? Let me cook 🍳'
+];
+let quipTimer = null, quipIndex = Math.floor(Math.random() * READING_QUIPS.length), quipPct = 0;
+function showQuip() {
+  const el = document.getElementById('ocr-status-text');
+  if (!el) return;
+  const cat = document.querySelector('.ocr-cat');
+  if (cat && !quipTimer) cat.src = `assets/${['cat-blue-laptop', 'cat-laptop', 'cat-black-laptop', 'cat-white-laptop', 'cat-grey-laptop'][quipIndex % 5]}.svg`;
+  el.textContent = `${READING_QUIPS[quipIndex % READING_QUIPS.length]} · ${quipPct}%`;
+  if (window.BunkFx) BunkFx.pop(el, 1.03);
+}
 function setScannerPhase(phaseName, pct, detailText) {
   const progressBox = document.getElementById('ocr-progress-box');
   const progressBar = document.getElementById('ocr-bar-fill');
@@ -3685,7 +3663,22 @@ function setScannerPhase(phaseName, pct, detailText) {
 
   if (progressBox) progressBox.style.display = 'block';
   if (progressBar) progressBar.style.width = pct + '%';
-  if (statusText) statusText.textContent = `Scanning Timetable... ${pct}%`;
+  quipPct = pct;
+  if (pct >= 100) {
+    clearInterval(quipTimer); quipTimer = null;
+    if (statusText) statusText.textContent = 'Done! Your week is ready 🎉';
+  } else {
+    if (statusText && !quipTimer) {
+      showQuip();
+      quipTimer = setInterval(() => {
+        const box = document.getElementById('ocr-progress-box');
+        if (!box || box.style.display === 'none') { clearInterval(quipTimer); quipTimer = null; return; }
+        quipIndex++; showQuip();
+      }, 2600);
+    } else if (statusText) {
+      statusText.textContent = `${READING_QUIPS[quipIndex % READING_QUIPS.length]} · ${pct}%`;
+    }
+  }
   if (details && detailText) details.textContent = detailText;
 
   const phases = ['prep', 'geom', 'ocr', 'fusion', 'valid'];
@@ -3741,15 +3734,16 @@ async function removeSubjectCompletely(subjId) {
 
 async function processTimetableImage(file, dropIds = [], opts = {}) {
   currentScannedImageBlob = file;
+  const firstTimetable = !timetable.length;        // the guide's first-timetable tour
   const progressBox = document.getElementById('ocr-progress-box');
   if (progressBox) progressBox.style.display = 'block';
 
   // BunkKro AI (local server) first; the in-browser scanner below stays the fallback for images
   if (window.BunkKroAI && await BunkKroAI.isAvailable()) {
     try {
-      setScannerPhase('prep', 10, 'Sending the timetable to BunkKro AI on this computer...');
+      setScannerPhase('prep', 10, 'Handing it to BunkKro AI 🤝');
       const res = await BunkKroAI.read(file, [], setScannerPhase);   // subjects are matched below, to kept ones only
-      setScannerPhase('valid', 95, 'Review your subjects...');
+      setScannerPhase('valid', 95, 'Almost there, check your subjects 📝');
       const predicted = JSON.parse(JSON.stringify(res.slots));   // what the AI read, before the student's fixes
       // only the subjects the student kept (Replace dialog) can be matched: a same name may be another class
       const kept = subjects.filter(sb => !dropIds.includes(sb.id));
@@ -3790,7 +3784,8 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       const unknown = slots.filter(s => s.isUnknown).length;
       const unsure = slots.filter(s => s.isUncertain && !s.isBreak && !s.isUnknown).length;
       const classes = slots.filter(s => !s.isBreak && !s.isUnknown).length;
-      setTimeout(() => offerAttendanceSoFar(subjects.filter(s => !hadSubjects.has(s.id))), 1500);
+      setTimeout(() => window.BunkGuide && BunkGuide.afterImport(subjects.filter(s => !hadSubjects.has(s.id)),
+                                                               { first: firstTimetable }), 1400);
       if (base) mergeToast();
       else toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}` +
         (unknown ? `; ${unknown} period${unknown > 1 ? 's' : ''} could not be confirmed free (Needs review)` : ''));
@@ -3830,7 +3825,7 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     }
 
     // 0. Load Image
-    setScannerPhase('prep', 10, 'Loading image file and analyzing dimensions...');
+    setScannerPhase('prep', 10, 'Unboxing your timetable 📦');
     const imgDataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = e => resolve(e.target.result);
@@ -3850,14 +3845,14 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     scannerState.originalHeight = img.naturalHeight || img.height;
 
     // 1. Engine A: Preprocessing & Deskew
-    setScannerPhase('prep', 20, 'Deskewing, grayscaling, and computing integral maps...');
+    setScannerPhase('prep', 20, 'Straightening it out, like your sleep schedule should 😌');
     const preprocessed = await TimetableScanner.Preprocessor.deskewAndEnhance(img, {
       maxWorkingSide: 2000
     });
     scannerState.preprocessed = preprocessed;
 
     // 2. Engine B: OpenCV Geometry & Line Morphometry
-    setScannerPhase('geom', 40, 'Extracting morphological lines, intersections, and cells...');
+    setScannerPhase('geom', 40, 'Finding the grid lines (giving structure) 📐');
     let grid = null;
     let cells = [];
     try {
@@ -3871,18 +3866,18 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     }
 
     // 3. Engine C: Whole-Image + Targeted OCR
-    setScannerPhase('ocr', 60, 'Recognizing subject codes, timings, and day tokens via Tesseract...');
+    setScannerPhase('ocr', 60, 'Reading every cell, no skipping 👀');
     const ocrResult = await TimetableScanner.OCREngine.recognizeWholeImage(
       preprocessed.canvas,
       (p) => {
         const ocrPct = 40 + Math.round(p * 25);
-        setScannerPhase('ocr', ocrPct, `Recognizing text blocks (${Math.round(p * 100)}%)...`);
+        setScannerPhase('ocr', ocrPct, `Reading every cell, no skipping 👀 (${Math.round(p * 100)}%)`);
       }
     );
     scannerState.ocrResult = ocrResult;
 
     // 4. Engine D & Fusion: Structural Layout Analysis & Multimodal Merging
-    setScannerPhase('fusion', 80, 'Fusing geometric cells with OCR tokens, labs, and breaks...');
+    setScannerPhase('fusion', 80, 'Matching classes to their time slots 🧩');
     const layout = TimetableScanner.LayoutEngine.analyzeTextLayout(
       ocrResult,
       { width: preprocessed.canvas.width, height: preprocessed.canvas.height }
@@ -3898,7 +3893,7 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     scannerState.fusedSlots = fusedSlots;
 
     // 5. Validation Engine: Cross-Engine Disagreements & Consistency
-    setScannerPhase('valid', 95, 'Validating period assignments and cross-engine disagreements...');
+    setScannerPhase('valid', 95, 'Double-checking, so you never bunk by accident 🕵️');
     const validation = TimetableScanner.ValidationEngine.validate(
       fusedSlots,
       scannerState.grid ? scannerState.grid.disagreements : [],
@@ -3915,14 +3910,15 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     timetable = opts.merge ? mergeSlots(timetable.slice(), fusedSlots) : fusedSlots;
     await dropOldSubjects(dropIds);                 // the student's choice in the Replace dialog
     const hadSubjects = new Set(subjects.map(s => s.id));
-    await ensureSubjectsForTimetable(timetable);    // every class gets a subject, so it can be marked
+    await ensureSubjectsForTimetable(timetable, true);   // every class gets a subject (strict: the reading can be rough)
     saveTimetableToStorageAndDB();
     renderAll();
-    setTimeout(() => offerAttendanceSoFar(subjects.filter(s => !hadSubjects.has(s.id))), 1500);
+    setTimeout(() => window.BunkGuide && BunkGuide.afterImport(subjects.filter(s => !hadSubjects.has(s.id)),
+                                                             { first: firstTimetable }), 1400);
     if (opts.merge) mergeToast();
 
     // Finish
-    setScannerPhase('valid', 100, '✓ Multi-engine scan complete!');
+    setScannerPhase('valid', 100, '✓ All read!');
     setTimeout(() => {
       if (progressBox) progressBox.style.display = 'none';
       // Collapse dropzone, show compact loaded bar
@@ -4711,8 +4707,8 @@ function renderTimetable() {
     container.innerHTML = `
       <div class="empty">
         <img class="empty-illus" src="assets/cat-peek.svg" alt="">
-        <h3>No weekly schedule yet</h3>
-        <p>Upload your timetable screenshot above, add class periods by hand, or import a classmate's setup.</p>
+        <h3>No weekly schedule yet 👀</h3>
+        <p>It's giving empty. Upload your timetable above, add classes by hand, or import a classmate's setup.</p>
         <div class="empty-actions">
           <button class="btn-pri" onclick="openAddSlotModal(1, 1)">${ic('plus','ic-sm')} Add first class</button>
           <button class="btn-sec" onclick="openSharePack('in')">${ic('users','ic-sm')} Import from a classmate</button>
@@ -6354,7 +6350,7 @@ function renderTracker() {
             <div class="daily-stat-box ${pendingCount === 0 ? 'green' : 'amber'}"><span class="ds-icon">${ic(pendingCount === 0 ? 'check' : 'clock','ic-sm')}</span><div><div class="daily-stat-val">${pendingCount}</div><div class="daily-stat-lbl">${pendingCount === 0 ? 'All done ✓' : 'Pending'}</div></div></div>
           </div>
         </div>
-        <img class="daily-summary-illus" src="assets/${isHoliday ? 'cat-beach' : allDone ? 'cat-trophy' : totalCount === 0 ? 'cat-books' : markedCount === 0 ? (isToday ? 'cat-clock' : 'cat-peek') : 'cat-laptop'}.svg" alt="">
+        <img class="daily-summary-illus" src="assets/${coat(isHoliday ? 'cat-beach' : allDone ? 'cat-trophy' : totalCount === 0 ? 'cat-books' : markedCount === 0 ? (isToday ? 'cat-clock' : 'cat-peek') : 'cat-laptop')}.svg" alt="">
       </div>
     `;
   }
@@ -6376,7 +6372,7 @@ function renderTracker() {
   if (!allClasses.length) {
     content.innerHTML = `
       <div class="card empty">
-        <img class="empty-illus" src="assets/${timetable.length ? 'cat-blue-moon' : 'cat-peek'}.svg" alt="">
+        <img class="empty-illus" src="assets/${coat(timetable.length ? 'cat-blue-moon' : 'cat-peek')}.svg" alt="">
         <h3>No classes scheduled for ${dateObj.toLocaleDateString('en-IN', { weekday: 'long' })}</h3>
         <p>${timetable.length ? 'You have no timetable classes on this day. ' + stablePick(FREE_DAY_LINES, selectedTrackerDate) : 'Set up your weekly timetable to see your daily classes automatically.'}</p>
         <div class="empty-actions">
@@ -6551,9 +6547,10 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
       BunkFx.float(btn, finalStatus === 'p' ? '✨' : finalStatus === 'a' ? '💤' : '☕');
     }
 
-    if (finalStatus === 'p') toast(`${s ? s.name : 'Class'}: ✓ Present`);
-    else if (finalStatus === 'a') toast(`${s ? s.name : 'Class'}: ✗ Absent`, 'err');
-    else if (finalStatus === 'cancelled') toast(`${s ? s.name : 'Class'}: Cancelled (No penalty)`);
+    const quip = list => list[Math.floor(Math.random() * list.length)];
+    if (finalStatus === 'p') toast(`${s ? s.name : 'Class'}: ✓ Present · ${quip(['showed up, slay ✨', 'attendance era 💅', 'you ate ✨', 'W 🏆'])}`);
+    else if (finalStatus === 'a') toast(`${s ? s.name : 'Class'}: ✗ Absent · ${quip(['rest era 💤', 'we don\'t judge 😴', 'it happens 🫶'])}`, 'err');
+    else if (finalStatus === 'cancelled') toast(`${s ? s.name : 'Class'}: Cancelled, no penalty · ${quip(['free real estate ☕', 'surprise free period 🎉'])}`);
     else toast('Attendance unmarked');
 
     // Cancelled → it may be taken another day; un-cancelled → drop that makeup

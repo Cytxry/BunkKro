@@ -1485,9 +1485,40 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 /* fx.js */
 .fx-float{position:fixed;z-index:9999;pointer-events:none;font-size:1.15rem;line-height:1;will-change:transform,opacity}
 .fx-dot{position:fixed;z-index:9999;pointer-events:none;width:7px;height:7px;border-radius:50%;will-change:transform,opacity}
-/* "attended so far" step */
-.so-far{gap:10px}
-.so-far-in{display:flex;align-items:center;gap:6px;flex-shrink:0;font-size:.78rem;color:var(--muted)}
-.so-far-in input{width:56px;padding:7px 8px;border-radius:10px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font:inherit;font-size:.88rem;text-align:center}
-.so-far-in input:focus{outline:2px solid var(--primary-soft);outline-offset:1px;border-color:transparent}
-.so-far-err{color:var(--danger);font-size:.82rem;margin:8px 0 0}
+/* Fairy, the guide cat (guide.js) */
+.bg-root{position:fixed;inset:0;z-index:9500;animation:bgIn .22s ease both}
+.bg-root.bg-out{animation:bgOut .2s ease both}
+.bg-veil{position:absolute;inset:0}
+.bg-veil.bg-solid{background:rgba(18,20,38,.5);backdrop-filter:blur(2px)}
+.bg-hole{position:absolute;border-radius:16px;box-shadow:0 0 0 9999px rgba(18,20,38,.5);pointer-events:none;transition:all .3s cubic-bezier(.2,.85,.25,1)}
+.bg-hole::after{content:'';position:absolute;inset:-4px;border-radius:20px;border:2.5px solid #B9ADF0;animation:bgRing 1.6s ease-out infinite}
+.bg-arrow{position:absolute;width:20px;height:20px;pointer-events:none;color:#B9ADF0}
+.bg-arrow::before{content:'';position:absolute;inset:0;background:currentColor;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.bg-arrow.bg-up{animation:bgBobY 1s ease-in-out infinite}
+.bg-arrow.bg-down{animation:bgBobY 1s ease-in-out infinite reverse}
+.bg-arrow.bg-down::before{transform:rotate(180deg)}
+.bg-arrow.bg-left{animation:bgBobX 1s ease-in-out infinite}
+.bg-arrow.bg-left::before{transform:rotate(-90deg)}
+.bg-card{position:absolute;display:flex;align-items:flex-end;gap:6px;width:min(380px,calc(100vw - 24px))}
+.bg-root.bg-center .bg-card{left:50% !important;top:50% !important;transform:translate(-50%,-50%);flex-direction:column;align-items:center;width:min(360px,calc(100vw - 32px))}
+.bg-cat{width:92px;flex-shrink:0;filter:drop-shadow(0 6px 14px rgba(0,0,0,.25))}
+.bg-center .bg-cat{width:132px;margin-bottom:-6px}
+.bg-bubble{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:20px 20px 20px 6px;box-shadow:var(--shadow-lg);padding:14px 16px 12px;text-align:left;color:var(--text)}
+.bg-center .bg-bubble{border-radius:22px;text-align:center}
+.bg-title{font-weight:800;color:var(--primary-deep);font-size:1rem;margin-bottom:4px}
+.bg-text{font-size:.88rem;color:var(--text2);line-height:1.5}
+.bg-btns{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+.bg-center .bg-btns{justify-content:center}
+.bg-dots{display:flex;gap:5px;margin-top:10px}
+.bg-center .bg-dots{justify-content:center}
+.bg-dots span{width:6px;height:6px;border-radius:50%;background:var(--surface3)}
+.bg-dots span.on{background:#9C8FE0;width:16px;border-radius:999px}
+.bg-card.bg-pop .bg-bubble{animation:bubblePop .35s ease-out}
+.bg-card.bg-pop .bg-cat{animation:catPop .45s cubic-bezier(.34,1.56,.64,1)}
+@keyframes bgIn{from{opacity:0}to{opacity:1}}
+@keyframes bgOut{to{opacity:0}}
+@keyframes bgRing{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(1.08)}}
+@keyframes bgBobY{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+@keyframes bgBobX{0%,100%{transform:translateX(0)}50%{transform:translateX(5px)}}
+@media (prefers-reduced-motion:reduce){.bg-root,.bg-hole::after,.bg-arrow,.bg-card.bg-pop .bg-bubble,.bg-card.bg-pop .bg-cat{animation:none}.bg-hole{transition:none}}
+@media (max-width:640px){.bg-card{align-items:flex-end}.bg-cat{width:64px}}

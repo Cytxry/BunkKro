@@ -114,3 +114,24 @@ after the import lets the student enter what they've already had (counted up to 
 A pop and a rising ✨ / 💤 / ☕ when marking present / absent / no class; the streak flame jumps when it grows;
 confetti when a timetable is confirmed with everything checked; a 👍 on "It's right"; saved classes pop; new subjects
 slide into the sidebar. All skipped with "reduce motion".
+
+## Fairy, the guide cat (guide.js)
+
+- **First timetable ever** (once per account): the page dims for a congratulation ("You're good to go"). Then Fairy
+  spotlights the top subject ("add what you've attended so far"), opens it and points at its numbers, then points at
+  "Set semester dates" if they're missing. Every step can be skipped (Skip, Esc, or tap the dim area).
+- **Later imports:** just a "You're good to go ✨" toast.
+- **Something the attendance maths needs is missing** (semester dates): Fairy points at it, at most once a day.
+
+The built-in scanner's subjects are made only from names that look like words, so OCR scraps don't become subjects.
+
+## Cats
+
+`assets/make_cats.py` makes the black (tuxedo), white (Persian), grey and fairy cats from the original poses. `coat()`
+picks one coat a day for each spot (greeting, subject page, verdicts, daily summary, empty states); the reading box
+changes coat each upload.
+
+## Copy
+
+The reading box rotates playful lines ("Decoding your prof's handwriting ✍️" …) with the percentage. Phase lines,
+attendance toasts, the confirm toast and the empty timetable got the same voice.

@@ -125,7 +125,7 @@
     cloud(imp);
     render();
     if (typeof toast === 'function') {
-      toast(c.unresolved ? `Saved, with ${plural(c.unresolved, 'period')} still to check` : 'Timetable confirmed ✓');
+      toast(c.unresolved ? `Saved, with ${plural(c.unresolved, 'period')} still to check` : 'Timetable confirmed ✓ it\'s giving organised ✨');
     }
   }
 
