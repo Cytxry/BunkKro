@@ -100,3 +100,17 @@ The upload first asks **Replace it** or **Add to it**.
 - **Add to it** keeps every class and subject already there and adds the new file's classes. An exact copy of a
   class already there is skipped. A class at the same time as an existing one is kept but marked to check ("another
   class is at the same time"). Periods are renumbered by time within each day.
+
+## Subjects from the timetable
+
+Every real class name on an imported timetable becomes a subject (BunkKro AI, also after "Skip for now", and the
+built-in scanner); attendance only counts for subjects. A name matching a subject the student kept is linked to it.
+Period placeholders ("Period 2"), breaks, "Needs review" and one-letter scraps are not made into subjects. A new name
+typed in "Add class" becomes a subject too. New subjects start at 0 / 0; a skippable "attended so far" step right
+after the import lets the student enter what they've already had (counted up to yesterday, so today isn't counted twice).
+
+## Little animations (fx.js)
+
+A pop and a rising ✨ / 💤 / ☕ when marking present / absent / no class; the streak flame jumps when it grows;
+confetti when a timetable is confirmed with everything checked; a 👍 on "It's right"; saved classes pop; new subjects
+slide into the sidebar. All skipped with "reduce motion".

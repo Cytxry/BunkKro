@@ -115,6 +115,8 @@
     walk = 0;
     const c = counts();
     const diff = corrections(imp);
+    const btn = document.querySelector('#tt-confirm-bar .btn-pri');
+    if (window.BunkFx && btn) { if (c.unresolved) BunkFx.pop(btn); else BunkFx.confetti(btn); }
     imp.status = c.unresolved ? 'confirmed_with_unresolved' : 'confirmed';
     imp.confirmedAt = new Date().toISOString();
     imp.fixes = diff.filter(isFix).length;

@@ -1482,3 +1482,12 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .rp-choice-txt strong{font-size:.98rem;color:var(--primary-deep)}
 .rp-choice-txt small{font-size:.8rem;color:var(--text2)}
 @media (prefers-reduced-motion:reduce){.rp-choice{transition:none}.rp-choice:hover{transform:none}}
+/* fx.js */
+.fx-float{position:fixed;z-index:9999;pointer-events:none;font-size:1.15rem;line-height:1;will-change:transform,opacity}
+.fx-dot{position:fixed;z-index:9999;pointer-events:none;width:7px;height:7px;border-radius:50%;will-change:transform,opacity}
+/* "attended so far" step */
+.so-far{gap:10px}
+.so-far-in{display:flex;align-items:center;gap:6px;flex-shrink:0;font-size:.78rem;color:var(--muted)}
+.so-far-in input{width:56px;padding:7px 8px;border-radius:10px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font:inherit;font-size:.88rem;text-align:center}
+.so-far-in input:focus{outline:2px solid var(--primary-soft);outline-offset:1px;border-color:transparent}
+.so-far-err{color:var(--danger);font-size:.82rem;margin:8px 0 0}

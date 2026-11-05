@@ -1898,6 +1898,7 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
 // ══════════════════════════════════════════════════════
 //  STREAK
 // ══════════════════════════════════════════════════════
+let lastStreakShown = null;
 function renderStreak() {
   const pill = document.getElementById('streak-card');
   if (!pill) return;
@@ -1906,6 +1907,11 @@ function renderStreak() {
   const freeToday = isFreeDay(today);
   const doneToday = markedDays().includes(today);
   document.getElementById('streak-count').textContent = cur;
+  if (window.BunkFx && lastStreakShown !== null && cur > lastStreakShown) {
+    BunkFx.pop(pill, 1.12);
+    BunkFx.float(pill, '🔥', 0.3);
+  }
+  lastStreakShown = cur;
   pill.classList.toggle('lit', cur > 0 && (doneToday || freeToday));
   pill.classList.toggle('pending', cur > 0 && !doneToday && !freeToday);
   pill.classList.toggle('cold', cur === 0);
@@ -3543,6 +3549,97 @@ function confirmProceedScan(mode) {
   if (file) processTimetableImage(file, mode === 'add' ? [] : drop, { merge: mode === 'add' });
 }
 
+// Every real class name on the timetable becomes a subject: attendance only counts for subjects, and a class without
+// one can't be marked. A name matching a subject the student kept is linked to it; anything else is created.
+const NOT_A_SUBJECT = /^(period\s*\d+|unassigned|needs review|break|lunch|recess|free( period)?|no class)$/i;
+async function ensureSubjectsForTimetable(slots) {
+  if (!currentUser || !isOnline()) return [];
+  const groups = new Map();
+  for (const s of slots) {
+    if (s.isBreak || s.isUnknown || s.subjectId) continue;
+    const name = String(s.subjectName || '').trim().replace(/\s+/g, ' ');
+    if ((name.match(/\p{L}/gu) || []).length < 2 || NOT_A_SUBJECT.test(name) || name.length > 60) continue;
+    const k = name.toLowerCase();
+    if (!groups.has(k)) groups.set(k, { name, slots: [] });
+    groups.get(k).slots.push(s);
+  }
+  const created = [];
+  for (const g of groups.values()) {
+    let sub = subjects.find(x => x.name.toLowerCase() === g.name.toLowerCase());
+    if (!sub && await addSubject({ name: g.name, code: g.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() + '101',
+                                   perWeek: g.slots.length, total: 0, present: 0 })) {
+      sub = subjects[subjects.length - 1];
+      created.push(sub);
+    }
+    if (sub) g.slots.forEach(s => { s.subjectId = sub.id; s.subjectName = sub.name; s.matchConfidence = 'confirmed'; });
+  }
+  return created;
+}
+
+// New subjects start at 0 / 0. If the semester has already started, the student can add what they've attended so
+// far, all at once (counted up to yesterday, so marking today's classes doesn't count anything twice). Skippable.
+function offerAttendanceSoFar(list) {
+  if (!list.length) return;
+  if (window.BunkFx) setTimeout(() => BunkFx.stagger(list.map(s => document.getElementById('nav-s-' + s.id))), 50);
+  const ov = document.createElement('div');
+  ov.className = 'overlay show';
+  ov.dataset.escape = 'skip';
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  ov.innerHTML = `<div class="modal modal-center rp" style="max-width:440px">
+    <img class="modal-cat" src="assets/cat-books.svg" alt="">
+    <h2>${list.length === 1 ? 'A new subject' : list.length + ' new subjects'} 🎉</h2>
+    <p class="sub">Made from your timetable. Already had some classes this semester? Add them here, or just skip.</p>
+    <div class="rp-card"><div class="rp-card-head"><span>Attended so far</span><span class="rp-tally">optional</span></div>
+      <div class="rp-list">${list.map(sb => `<div class="rp-row so-far" data-id="${escapeHTML(sb.id)}">
+        <span class="nav-dot" style="background:${subjTheme(subjects.indexOf(sb)).c}"></span>
+        <span class="rp-name"><strong>${escapeHTML(sb.name)}</strong><small>${sb.perWeek || 0} a week</small></span>
+        <span class="so-far-in"><input type="number" min="0" inputmode="numeric" aria-label="${escapeHTML(sb.name)}: classes attended" placeholder="0" data-k="present">
+          <span>of</span><input type="number" min="0" inputmode="numeric" aria-label="${escapeHTML(sb.name)}: classes held" placeholder="0" data-k="total"></span>
+      </div>`).join('')}</div></div>
+    <p class="so-far-err" hidden></p>
+    <div class="rp-btns">
+      <button class="btn-pri rp-wide" data-act="save">Save</button>
+      <button class="aic-link" data-act="skip">Skip, I'm starting fresh</button>
+    </div></div>`;
+  ov.addEventListener('click', async e => {
+    const act = e.target.closest?.('[data-act]')?.dataset.act;
+    if (act === 'skip') return ov.remove();
+    if (act !== 'save') return;
+    const rows = [...ov.querySelectorAll('.so-far')].map(r => ({
+      row: r, sub: subjects.find(s => s.id === r.dataset.id),
+      present: parseInt(r.querySelector('[data-k="present"]').value || '0', 10),
+      total: parseInt(r.querySelector('[data-k="total"]').value || '0', 10)
+    }));
+    const bad = rows.find(x => x.present < 0 || x.total < 0 || x.present > x.total);
+    const err = ov.querySelector('.so-far-err');
+    if (bad) {
+      err.hidden = false;
+      err.textContent = `${bad.sub ? bad.sub.name : 'A subject'}: attended can't be more than the classes held.`;
+      bad.row.classList.add('shake');
+      setTimeout(() => bad.row.classList.remove('shake'), 400);
+      return;
+    }
+    let saved = 0;
+    for (const x of rows) {
+      if (!x.sub || !x.total) continue;
+      x.sub.total = x.total;
+      x.sub.present = x.present;
+      if (await updateSubject(x.sub.id, { name: x.sub.name, code: x.sub.code, total: x.total, present: x.present,
+                                         perWeek: x.sub.perWeek, target: x.sub.target, semTotal: x.sub.semTotal,
+                                         mode: x.sub.mode })) {
+        setCountedUpTo(x.sub.id, dayOffset(-1));
+        saved++;
+      }
+    }
+    ov.remove();
+    renderAll();
+    if (saved) toast(`Attendance added for ${saved} subject${saved === 1 ? '' : 's'} ✓`);
+  });
+  document.body.appendChild(ov);
+  setTimeout(() => ov.querySelector('input')?.focus(), 60);
+}
+
 // "Add to it": the new classes join the timetable already there. An exact copy of a class already there is skipped;
 // a class at the same time as one already there is kept but marked for a quick check (never silently overwritten).
 // Periods are renumbered by time within each day.
@@ -3660,7 +3757,9 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       const plan = await BunkKroAI.reviewSubjects(res.slots, kept);
       // removed before new subjects are created, so a new class can't be linked to one that is about to go
       await dropOldSubjects(dropIds);
+      const hadSubjects = new Set(subjects.map(s => s.id));
       const slots = plan ? await applyAiSubjectPlan(res.slots, plan) : res.slots;
+      if (!plan) await ensureSubjectsForTimetable(slots);    // "Skip for now" still gives every class a subject
       // the page itself in the Studio: every period boxed where it was read (double-click a box to inspect it)
       scannerState.rawImage = null;
       scannerState.grid = null;
@@ -3691,6 +3790,7 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       const unknown = slots.filter(s => s.isUnknown).length;
       const unsure = slots.filter(s => s.isUncertain && !s.isBreak && !s.isUnknown).length;
       const classes = slots.filter(s => !s.isBreak && !s.isUnknown).length;
+      setTimeout(() => offerAttendanceSoFar(subjects.filter(s => !hadSubjects.has(s.id))), 1500);
       if (base) mergeToast();
       else toast(`BunkKro AI read ${classes} classes${unsure ? ` — please check the ${unsure} marked ones` : ''}` +
         (unknown ? `; ${unknown} period${unknown > 1 ? 's' : ''} could not be confirmed free (Needs review)` : ''));
@@ -3814,8 +3914,11 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     // Persist and render
     timetable = opts.merge ? mergeSlots(timetable.slice(), fusedSlots) : fusedSlots;
     await dropOldSubjects(dropIds);                 // the student's choice in the Replace dialog
+    const hadSubjects = new Set(subjects.map(s => s.id));
+    await ensureSubjectsForTimetable(timetable);    // every class gets a subject, so it can be marked
     saveTimetableToStorageAndDB();
     renderAll();
+    setTimeout(() => offerAttendanceSoFar(subjects.filter(s => !hadSubjects.has(s.id))), 1500);
     if (opts.merge) mergeToast();
 
     // Finish
@@ -5447,11 +5550,14 @@ async function saveSlotModal() {
     });
   }
 
+  const savedSlot = slotId ? timetable.find(s => s.id === slotId) : timetable[timetable.length - 1];
+  const madeSubjects = savedSlot ? await ensureSubjectsForTimetable([savedSlot]) : [];   // a new name becomes a subject
   const synced = await saveTimetableToStorageAndDB();
   closeSlotEditModal();
   renderTimetable();
   if (currPage === 'tracker') renderTracker();
-  if (synced !== false) toast('Schedule updated ✓');
+  if (window.BunkFx && savedSlot) BunkFx.pop(document.querySelector(`.tt-slot-card[data-slot-id="${savedSlot.id}"]`));
+  if (synced !== false) toast(madeSubjects.length ? `Schedule updated ✓ · "${madeSubjects[0].name}" added to your subjects` : 'Schedule updated ✓');
 }
 
 async function deleteCurrentSlot(message = 'Slot removed') {
@@ -5477,6 +5583,11 @@ async function markSlotRight() {
   closeSlotEditModal();
   renderTimetable();
   if (currPage === 'tracker') renderTracker();
+  if (window.BunkFx) {
+    const card = document.querySelector(`.tt-slot-card[data-slot-id="${slot.id}"]`);
+    BunkFx.pop(card);
+    BunkFx.float(card, '👍');
+  }
   if (synced !== false) toast('Got it ✓');
 }
 
@@ -6434,6 +6545,11 @@ async function markPeriodAttendance(slotId, subjId, newStatus, periodIndex = 1, 
     renderNav();
     renderTracker();
     if (currPage === 'home') renderHome();
+    if (window.BunkFx && finalStatus) {
+      const btn = document.querySelector(`.tbtn.on[onclick*="'${slotId}'"]`);
+      BunkFx.pop(btn, 1.08);
+      BunkFx.float(btn, finalStatus === 'p' ? '✨' : finalStatus === 'a' ? '💤' : '☕');
+    }
 
     if (finalStatus === 'p') toast(`${s ? s.name : 'Class'}: ✓ Present`);
     else if (finalStatus === 'a') toast(`${s ? s.name : 'Class'}: ✗ Absent`, 'err');
