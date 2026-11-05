@@ -3408,8 +3408,10 @@ function openReplaceDialog(step) {
     const inner = `<span class="nav-dot" style="background:${subjTheme(i).c}"></span>
       <span class="rp-name"><strong>${escapeHTML(sb.name)}</strong><small>${counted}</small></span>
       <span class="nav-pct ${subjStatus(sb).cls}">${subjPctText(sb)}</span>`;
-    return toggle
-      ? `<label class="rp-row rp-toggle"><input type="checkbox" value="${escapeHTML(sb.id)}" checked>${inner}<span class="rp-switch" aria-hidden="true"></span></label>`
+    return toggle   // the whole block is the toggle: green "Stays", faded "Removes"
+      ? `<label class="rp-row rp-toggle"><input type="checkbox" value="${escapeHTML(sb.id)}" checked><span class="nav-dot" style="background:${subjTheme(i).c}"></span>
+          <span class="rp-name"><strong>${escapeHTML(sb.name)}</strong><small>${counted} · ${subjPctText(sb)}</small></span>
+          <span class="rp-tag" aria-hidden="true"></span></label>`
       : `<div class="rp-row">${inner}</div>`;
   };
   box.classList.add('rp');
@@ -3424,7 +3426,7 @@ function openReplaceDialog(step) {
   } else if (step === 'pick') {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-blue-happy.svg" alt="">
       <h2 id="tt-confirm-title">Which subjects stay?</h2>
-      <p class="sub">Switch off the ones you don't need. Kept subjects keep their attendance.</p>
+      <p class="sub">Tap the ones you don't need. Kept subjects keep their attendance.</p>
       <div class="rp-card">
         <div class="rp-card-head"><span>Your subjects</span><span class="rp-tally" id="rp-tally"></span></div>
         <div class="rp-list">${list.map(sb => row(sb, true)).join('')}</div>
