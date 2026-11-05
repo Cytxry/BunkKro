@@ -1,9 +1,9 @@
 /* Fairy, the guide cat: dims the page, spotlights one thing, and says what to do in a speech bubble.
  *
  *   BunkGuide.afterImport(newSubjects, { first })   after a timetable import
- *       first timetable ever: a congratulation, then the top subject (add what you've attended so far), then the
- *       semester dates if they're missing. Shown once per account.
- *       later imports: no dimming, just "you're good to go".
+ *       first timetable ever: a congratulation (once per account); any import that made new subjects (replaced or
+ *       added): "you're good to go", then the first new subject, its numbers, and the semester dates if missing.
+ *       no new subjects: just a "you're good to go" toast.
  *   BunkGuide.nudge()                               on load: points at something the attendance maths needs and is
  *                                                   missing (the semester dates), at most once a day
  * Every tour can be skipped (Skip, Esc, or a tap on the dim area); nothing in the app waits on it.
@@ -132,29 +132,30 @@
     later: 'Later'
   });
 
+  // after an import: the first timetable ever gets the full welcome (once per account); any import that made new
+  // subjects (a replaced or added timetable too) is shown where their attendance goes, since new subjects start at 0
   function afterImport(newSubjects, opts = {}) {
     if (uid() === 'guest') return;
-    if (!opts.first || get('first_tt')) {
-      if (typeof toast === 'function') {
-        toast(newSubjects.length ? `You're good to go ✨ ${newSubjects.length} new subject${newSubjects.length === 1 ? '' : 's'} added`
-          : "You're good to go ✨");
-      }
+    const welcome = opts.first && !get('first_tt');
+    if (!welcome && !newSubjects.length) {
+      if (typeof toast === 'function') toast("You're good to go ✨");
       return;
     }
-    set('first_tt', today());
-    const first = newSubjects[0];
+    if (welcome) set('first_tt', today());
+    const n = newSubjects.length, first = newSubjects[0];
     const steps = [{
       target: null, cat: 'cat-fairy-happy',
-      title: 'Your first timetable is in! 🎉',
-      text: `You're good to go. BunkKro now knows your week${newSubjects.length ? `, and made ${newSubjects.length} subject${newSubjects.length === 1 ? '' : 's'} from it` : ''}. Let me show you one thing.`,
-      ok: 'Show me',
-      onShow: c => { if (window.BunkFx) setTimeout(() => BunkFx.confetti(c.querySelector('.bg-cat'), 22), 320); }
+      title: welcome ? 'Your first timetable is in! 🎉' : 'New timetable, who dis? ✨',
+      text: `You're good to go. ${welcome ? 'BunkKro now knows your week' : 'Your week is updated'}${n ? `, and ${n} new subject${n === 1 ? ' is' : 's are'} ready` : ''}. ${n ? 'Let me show you where their attendance goes.' : ''}`,
+      ok: n ? 'Show me' : 'Yay',
+      onShow: c => { if (window.BunkFx) setTimeout(() => BunkFx.confetti(c.querySelector('.bg-cat'), welcome ? 22 : 14), 320); }
     }];
     if (first) {
+      const navOf = () => document.getElementById('nav-s-' + first.id) || document.querySelector('#nav-subjects .nav-item');
       steps.push({
-        target: firstSubject, cat: 'cat-fairy-wave',
-        title: 'Here are your subjects ✨',
-        text: 'Already had some classes this semester? Open a subject and add how many you\'ve attended. Starting fresh? You can skip this.',
+        target: navOf, cat: 'cat-fairy-wave',
+        title: n === 1 ? 'Your new subject ✨' : 'Your new subjects ✨',
+        text: 'Already had some classes this semester? Open each one and add how many you\'ve attended. Starting fresh? You can skip this.',
         ok: 'Open it',
         okAction: () => {
           if (typeof goPage === 'function') goPage('subject', first.id);
@@ -166,7 +167,7 @@
       }, {
         target: () => document.getElementById('form-exact'), cat: 'cat-fairy-peek',
         title: 'Your numbers so far',
-        text: 'Type the classes held and the ones you attended, then save. Do the same for each subject. Leave them at 0 if the semester just started.',
+        text: `Type the classes held and the ones you attended, then save.${n > 1 ? ` Same for the other ${n - 1} subject${n === 2 ? '' : 's'}.` : ''} Leave them at 0 if the semester just started.`,
         ok: 'Got it'
       });
     }

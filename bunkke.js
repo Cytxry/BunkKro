@@ -3929,7 +3929,7 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       if (loadedBar) loadedBar.style.display = 'flex';
     }, 1200);
 
-    toast('Timetable read! Check it below, or open Inspector to see each period on the page.');
+    toast('Timetable read! Look it over below ✨');
 
   } catch (err) {
     console.error('Scan Error:', err);
