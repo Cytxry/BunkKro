@@ -5399,6 +5399,7 @@ function openSyncFrequenciesModal() {
     const calculated = frequencies[s.id] || 0;
     const current = s.perWeek || 0;
     const isDiff = calculated !== current;
+    const absent = calculated === 0;          // not on the timetable: its own number is left alone
 
     return `
       <div class="sync-freq-row">
@@ -5407,8 +5408,9 @@ function openSyncFrequenciesModal() {
           <div class="sync-freq-cur">Currently ${current} / week</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <span class="sync-freq-badge">${calculated} / week</span>
-          ${isDiff ? '<span class="status-pill info">Will change</span>' : '<span class="status-pill good">✓ Match</span>'}
+          ${absent ? '<span class="status-pill">Not in timetable · kept</span>'
+            : `<span class="sync-freq-badge">${calculated} / week</span>
+          ${isDiff ? '<span class="status-pill info">Will change</span>' : '<span class="status-pill good">✓ Match</span>'}`}
         </div>
       </div>
     `;
@@ -5427,7 +5429,7 @@ async function applyWeeklyFrequencies() {
 
   for (const s of subjects) {
     const calc = frequencies[s.id];
-    if (calc !== undefined && calc !== s.perWeek) {
+    if (calc && calc !== s.perWeek) {         // 0 = not on the timetable: keep the student's own number
       s.perWeek = calc;
       await updateSubject(s.id, {
         name: s.name,

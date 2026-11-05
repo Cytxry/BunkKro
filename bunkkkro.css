@@ -1429,4 +1429,12 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .keep-pill{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 12px;border-radius:12px;background:var(--surface2);text-align:left}
 .keep-pill strong{font-size:.85rem;color:var(--text)}
 .keep-pill small{font-size:.72rem;color:var(--muted)}
+.clean-row.keep{position:relative;border:1.5px solid var(--border);background:var(--surface2);transition:background .18s,border-color .18s,opacity .18s;padding-right:84px}
 .clean-row.keep input{accent-color:var(--good)}
+.clean-row.keep::after{content:'Removes';position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--danger-bg);color:var(--danger)}
+.clean-row.keep:not(:has(input:checked)){opacity:.72}
+.clean-row.keep:not(:has(input:checked)) strong{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--text2)}
+.clean-row.keep:has(input:checked){background:var(--good-bg);border-color:var(--good-line)}
+.clean-row.keep:has(input:checked)::after{content:'Stays';background:var(--surface);color:var(--good)}
+.clean-row.keep:hover{border-color:var(--good-line)}
+#tab-pane-schedule{margin-top:18px}
