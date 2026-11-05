@@ -3327,10 +3327,10 @@ async function handleTimetableFileUpload(file) {
     return;
   }
 
-  // If user already has entries, confirm replacement
-  if (timetable.length > 0) {
+  // A timetable or subjects already there: one dialog decides both, before anything is read
+  if (timetable.length > 0 || (currentUser && subjects.length)) {
     pendingOCRFile = file;
-    document.getElementById('tt-confirm-overlay').classList.add('show');
+    openReplaceDialog('ask');
     return;
   }
 
@@ -3394,11 +3394,56 @@ function closeTtConfirmModal() {
   pendingOCRFile = null;
 }
 
-function confirmProceedScan() {
+// "Replace your timetable?": the old subjects go with the old timetable (same names can belong to another college
+// or class, so they are never reused by name alone), unless the student keeps some. Nothing is removed until the new
+// timetable has been read.
+function openReplaceDialog(step) {
+  const ov = document.getElementById('tt-confirm-overlay');
+  const box = ov.querySelector('.modal');
+  const list = currentUser ? subjects : [];
+  const counted = sb => sb.total > 0 ? `${sb.present}/${sb.total} classes counted` : 'nothing counted yet';
+  const what = timetable.length ? 'Your weekly schedule will be replaced' : 'Your new timetable will be set up';
+  if (!list.length) {
+    box.innerHTML = `<img class="modal-cat" src="assets/cat-worried.svg" alt="">
+      <h2 id="tt-confirm-title">Replace your timetable?</h2>
+      <p class="sub">${what} by the new one.</p>
+      <div class="modal-btns center">
+        <button class="btn-sec" onclick="closeTtConfirmModal()">Cancel</button>
+        <button class="btn-pri" onclick="confirmProceedScan('all')">Replace</button>
+      </div>`;
+  } else if (step === 'pick') {
+    box.innerHTML = `<img class="modal-cat" src="assets/cat-blue-happy.svg" alt="">
+      <h2 id="tt-confirm-title">Which subjects should stay?</h2>
+      <p class="sub">Ticked ones stay, with their attendance. The rest are removed once your new timetable is read.</p>
+      <div class="clean-list">${list.map(sb => `<label class="clean-row keep"><input type="checkbox" value="${escapeHTML(sb.id)}" checked>
+        <span><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span></label>`).join('')}</div>
+      <div class="modal-btns center">
+        <button class="btn-sec" onclick="openReplaceDialog('ask')">Back</button>
+        <button class="btn-pri" onclick="confirmProceedScan('pick')">Replace timetable</button>
+      </div>`;
+  } else {
+    box.innerHTML = `<img class="modal-cat" src="assets/cat-worried.svg" alt="">
+      <h2 id="tt-confirm-title">Replace your timetable?</h2>
+      <p class="sub">${timetable.length ? 'Your weekly schedule will be replaced, and ' : 'With the new timetable, '}${list.length === 1 ? 'this subject is' : 'these subjects are'} removed too, attendance included:</p>
+      <div class="keep-pills">${list.map(sb => `<span class="keep-pill"><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span>`).join('')}</div>
+      <p class="aic-fine" style="text-align:center">Nothing changes until your new timetable is read.</p>
+      <div class="modal-btns center">
+        <button class="btn-sec" onclick="closeTtConfirmModal()">Cancel</button>
+        <button class="btn-sec" onclick="openReplaceDialog('pick')">Keep some</button>
+        <button class="btn-pri danger" onclick="confirmProceedScan('all')">Replace all</button>
+      </div>`;
+  }
+  ov.classList.add('show');
+}
+
+function confirmProceedScan(mode) {
   // Capture before closing: closeTtConfirmModal() clears pendingOCRFile.
   const file = pendingOCRFile;
+  const box = document.getElementById('tt-confirm-overlay');
+  const keep = mode === 'pick' ? new Set([...box.querySelectorAll('input:checked')].map(i => i.value)) : new Set();
+  const drop = currentUser ? subjects.filter(sb => !keep.has(sb.id)).map(sb => sb.id) : [];
   closeTtConfirmModal();
-  if (file) processTimetableImage(file);
+  if (file) processTimetableImage(file, drop);
 }
 
 function setScannerPhase(phaseName, pct, detailText) {
@@ -3432,57 +3477,6 @@ function setScannerPhase(phaseName, pct, detailText) {
 // After a new timetable replaces an old one, the old timetable's subjects that aren't in the new one are offered
 // for removal (ticked), together with any other subject the new timetable doesn't use (not ticked). Nothing is
 // removed without a yes: removing a subject removes its attendance too.
-// A new timetable: which of the student's existing subjects stay? Same names can belong to a different college or
-// class, so nothing is merged by name unless the student keeps that subject. Resolves to the Set of ids to keep
-// (all of them when there is nothing to ask, or the student closes the dialog).
-function askSubjectsToKeep(list) {
-  const all = new Set(list.map(sb => sb.id));
-  if (!currentUser || !list.length) return Promise.resolve(all);
-  const counted = sb => sb.total > 0 ? `${sb.present}/${sb.total} classes counted` : 'nothing counted yet';
-  return new Promise(resolve => {
-    const ov = document.createElement('div');
-    ov.className = 'overlay show';
-    ov.dataset.escape = 'keep';
-    ov.setAttribute('role', 'dialog');
-    ov.setAttribute('aria-modal', 'true');
-    const done = keep => { ov.remove(); resolve(keep); };
-    const ask = () => {
-      ov.innerHTML = `<div class="modal modal-center" style="max-width:440px">
-        <img class="modal-cat" src="assets/cat-blue-detective.svg" alt="">
-        <h2>Start fresh with this timetable?</h2>
-        <p class="sub">You already have ${list.length === 1 ? 'a subject' : list.length + ' subjects'}. Remove ${list.length === 1 ? 'it' : 'them'}
-          and ${list.length === 1 ? 'its' : 'their'} attendance, so the new timetable starts clean?</p>
-        <div class="keep-pills">${list.map(sb => `<span class="keep-pill"><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span>`).join('')}</div>
-        <div class="modal-btns center">
-          <button class="btn-sec" data-act="some">No, keep some</button>
-          <button class="btn-pri danger" data-act="none">Yes, remove ${list.length === 1 ? 'it' : 'all'}</button>
-        </div></div>`;
-    };
-    const pick = () => {
-      ov.innerHTML = `<div class="modal modal-center" style="max-width:440px">
-        <img class="modal-cat" src="assets/cat-blue-happy.svg" alt="">
-        <h2>Which ones should stay?</h2>
-        <p class="sub">Ticked subjects stay, with their attendance. Untick the ones you don't need any more.</p>
-        <div class="clean-list">${list.map(sb => `<label class="clean-row keep"><input type="checkbox" value="${escapeHTML(sb.id)}" checked>
-          <span><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span></label>`).join('')}</div>
-        <div class="modal-btns center">
-          <button class="btn-sec" data-act="back">Back</button>
-          <button class="btn-pri" data-act="keep">Keep ticked</button>
-        </div></div>`;
-    };
-    ov.addEventListener('click', e => {
-      const act = e.target.closest?.('[data-act]')?.dataset.act;
-      if (act === 'some') pick();
-      else if (act === 'back') ask();
-      else if (act === 'none') done(new Set());
-      else if (act === 'keep') done(new Set([...ov.querySelectorAll('input:checked')].map(i => i.value)));
-    });
-    ov.addEventListener('keydown', e => { if (e.key === 'Escape') done(all); });
-    ask();
-    document.body.appendChild(ov);
-  });
-}
-
 async function removeSubjects(ids) {
   let removed = 0;
   for (const id of ids) if (await removeSubjectCompletely(id)) removed++;
@@ -3490,18 +3484,14 @@ async function removeSubjects(ids) {
   return removed;
 }
 
-// the built-in scanner (no BunkKro AI): asked afterwards, about the subjects the new timetable doesn't use
-async function offerOldSubjectCleanup(oldIds) {
-  if (!currentUser || !oldIds.size) return;
-  const used = new Set(timetable.map(t => t.subjectId).filter(Boolean));
-  const unused = subjects.filter(sb => !used.has(sb.id));
-  if (!unused.length) return;
-  const keep = await askSubjectsToKeep(unused);
-  const drop = unused.filter(sb => !keep.has(sb.id)).map(sb => sb.id);
-  if (!drop.length) return;
-  await removeSubjects(drop);
-  saveTimetableToStorageAndDB();
-  renderAll();
+// subjects the student chose to drop with the old timetable (Replace dialog); classes already linked to one keep
+// their name but lose the link
+async function dropOldSubjects(ids) {
+  if (!currentUser || !ids || !ids.length) return;
+  const gone = new Set(ids.filter(id => subjects.some(sb => sb.id === id)));
+  if (!gone.size) return;
+  await removeSubjects([...gone]);
+  timetable.forEach(s => { if (gone.has(s.subjectId)) { s.subjectId = null; s.matchConfidence = 'none'; } });
 }
 // A subject and everything that counts for it (as Delete subject does)
 async function removeSubjectCompletely(subjId) {
@@ -3518,10 +3508,8 @@ async function removeSubjectCompletely(subjId) {
   return ok;
 }
 
-async function processTimetableImage(file) {
+async function processTimetableImage(file, dropIds = []) {
   currentScannedImageBlob = file;
-  // subjects the timetable used before this upload (offered for removal if the new one drops them)
-  const oldSubjectIds = new Set(timetable.map(t => t.subjectId).filter(Boolean));
   const progressBox = document.getElementById('ocr-progress-box');
   if (progressBox) progressBox.style.display = 'block';
 
@@ -3532,12 +3520,12 @@ async function processTimetableImage(file) {
       const res = await BunkKroAI.read(file, [], setScannerPhase);   // subjects are matched below, to kept ones only
       setScannerPhase('valid', 95, 'Review your subjects...');
       const predicted = JSON.parse(JSON.stringify(res.slots));   // what the AI read, before the student's fixes
-      const keep = await askSubjectsToKeep(subjects);            // same name may be another class: ask, don't assume
-      const kept = subjects.filter(sb => keep.has(sb.id));
+      // only the subjects the student kept (Replace dialog) can be matched: a same name may be another class
+      const kept = subjects.filter(sb => !dropIds.includes(sb.id));
       res.slots = BunkKroAI.matchSubjects(res.slots, kept);
       const plan = await BunkKroAI.reviewSubjects(res.slots, kept);
       // removed before new subjects are created, so a new class can't be linked to one that is about to go
-      await removeSubjects(subjects.filter(sb => !keep.has(sb.id)).map(sb => sb.id));
+      await dropOldSubjects(dropIds);
       const slots = plan ? await applyAiSubjectPlan(res.slots, plan) : res.slots;
       // the page itself in the Studio: every period boxed where it was read (double-click a box to inspect it)
       scannerState.rawImage = null;
@@ -3554,9 +3542,7 @@ async function processTimetableImage(file) {
       timetable = slots;
       saveTimetableToStorageAndDB();
       if (window.BunkKroImport) BunkKroImport.start(predicted, timetable, { engineVersion: res.engineVersion, file });
-      renderTimetable();
-      renderValidationReport();
-      renderStudioCanvas();
+      renderAll();                                   // the sidebar too: old subjects may be gone
       setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
       setTimeout(() => {
         if (progressBox) progressBox.style.display = 'none';
@@ -3690,11 +3676,9 @@ async function processTimetableImage(file) {
 
     // Persist and render
     timetable = fusedSlots;
+    await dropOldSubjects(dropIds);                 // the student's choice in the Replace dialog
     saveTimetableToStorageAndDB();
-    renderTimetable();
-    renderValidationReport();
-    renderStudioCanvas();
-    setTimeout(() => offerOldSubjectCleanup(oldSubjectIds), 1300);
+    renderAll();
 
     // Finish
     setScannerPhase('valid', 100, '✓ Multi-engine scan complete!');
