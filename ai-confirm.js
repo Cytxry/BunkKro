@@ -1,15 +1,17 @@
-/* BunkKro AI: confirm an imported timetable, and (separately, optional) share the fixes.
+/* BunkKro AI: confirm an imported timetable in one tap.
  *
- * After BunkKro AI reads a timetable it is already on the Schedule tab, as before. This adds one small bar above it:
- *   draft                      "Look right?" -> one tap to confirm. Periods the AI couldn't read ("Needs review")
- *                              are never dropped: the student checks them, or confirms with them still unchecked.
+ * After BunkKro AI reads a timetable it is already on the Schedule, as before. One small bar sits above it:
+ *   draft                      "Does it look right?" -> one tap to confirm. Periods the AI couldn't read ("Class or
+ *                              free?") are never dropped: the student checks them, or confirms with them unchecked.
+ *                              Classes the AI wasn't fully sure of are "worth a look", never required.
  *   confirmed                  every period was decided by the student
- *   confirmed_with_unresolved  the student chose to save with some "Needs review" periods left
+ *   confirmed_with_unresolved  the student chose to save with some "Class or free?" periods left
+ * "Check them" opens each flagged period in turn; each popup answers in one tap (free / it's right) or a fix.
  * Confirming saves nothing new (the timetable is saved as you edit); it records that the student checked it.
  *
- * Sharing fixes for AI improvement is a separate choice, off until the student says yes, asked once after a
- * confirmation that changed something. It sends what the AI read and what the student kept for each period,
- * never the file. It can be stopped from the "Schedule loaded" bar, which also deletes what was shared.
+ * Improving the AI: when a signed-in student confirms, what the AI read and what the student kept are sent with it
+ * (never the file). The bar says so before confirming, and "Turn off" (in the "Schedule loaded" bar) stops it and
+ * deletes what was sent.
  *
  * Cloud tables (migrations/2026-11-06-ai-confirmation.sql): timetable_imports, timetable_feedback. Until they
  * exist, everything stays on this device and nothing breaks.
@@ -22,11 +24,12 @@
     try { const v = JSON.parse(localStorage.getItem(key(name))); return v == null ? fallback : v; } catch (e) { return fallback; }
   };
   const save = (name, value) => { try { localStorage.setItem(key(name), JSON.stringify(value)); } catch (e) { /* private mode */ } };
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uuid = () => (typeof newUuid === 'function' ? newUuid() : crypto.randomUUID());
   const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
   const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
+  const sharing = () => { const s = load('share', null); return !s || s.value !== false; };   // on unless turned off
   let cloudReady = true;                 // false once the cloud tables turn out not to exist (migration not run yet)
+  let walk = 0;                          // when "Check them" was last used: the popup moves on to the next one
 
   const pick = s => ({
     day: s.day, startTime: s.startTime || '', endTime: s.endTime || '', subjectName: s.subjectName || '',
@@ -49,7 +52,7 @@
       engineVersion: (meta && meta.engineVersion) || null, sourceHash: null,
       predicted: predicted.map(s => ({ aiRef: s.id, ...pick(s) })),
       ids: Object.fromEntries(slots.filter(s => s.aiRef).map(s => [s.aiRef, s.id])),
-      fixes: 0, askShare: false
+      fixes: 0
     };
     try { imp.sourceHash = await sha256(meta && meta.file); } catch (e) { /* hashing is only for spotting re-uploads */ }
     save('import', imp);
@@ -64,12 +67,14 @@
     return timetable.some(s => ids.has(s.id)) ? imp : null;     // the timetable on screen came from this import
   }
 
+  const isUnsure = s => !s.isBreak && !s.isUnknown && s.isUncertain;
   function counts() {
     const lessons = timetable.filter(s => !s.isBreak);
     return {
       classes: lessons.filter(s => !s.isUnknown).length,
       days: new Set(lessons.map(s => s.day)).size,
-      unresolved: lessons.filter(s => s.isUnknown).length
+      unresolved: lessons.filter(s => s.isUnknown).length,
+      unsure: lessons.filter(isUnsure).length
     };
   }
 
@@ -91,7 +96,7 @@
         if (norm(cur.subjectName) !== norm(p.subjectName)) t.push('subject');
         if (cur.day !== p.day) t.push('day');
         if ((cur.startTime || '') !== p.startTime || (cur.endTime || '') !== p.endTime) t.push('time');
-        type = t.length ? t.join('+') : 'unchanged';
+        type = t.length ? t.join('+') : (p.isUncertain && !cur.isUncertain ? 'confirmed_unsure' : 'unchanged');
       }
       out.push({ type, entryId: cur ? cur.id : null, predicted: p, confirmed: cur ? pick(cur) : null });
     }
@@ -100,62 +105,82 @@
     }
     return out;
   }
-  const isFix = c => c.type !== 'unchanged' && c.type !== 'unresolved';
+  const isFix = c => !['unchanged', 'unresolved', 'confirmed_unsure'].includes(c.type);
 
   function confirm() {
     const imp = active();
     if (!imp) return;
+    walk = 0;
     const c = counts();
     const diff = corrections(imp);
     imp.status = c.unresolved ? 'confirmed_with_unresolved' : 'confirmed';
     imp.confirmedAt = new Date().toISOString();
     imp.fixes = diff.filter(isFix).length;
-    const consent = load('share', null);
-    imp.askShare = imp.fixes > 0 && !consent && uid() !== 'guest';   // only signed-in fixes can ever be sent
     save('import', imp);
-    if (consent && consent.value) queueFeedback(imp, diff);
+    if (sharing() && uid() !== 'guest') queueFeedback(imp, diff);
     cloud(imp);
     render();
     if (typeof toast === 'function') {
-      toast(c.unresolved ? `Saved — ${plural(c.unresolved, 'period')} still marked "Needs review"` : 'Timetable confirmed ✓');
+      toast(c.unresolved ? `Saved, with ${plural(c.unresolved, 'period')} still to check` : 'Timetable confirmed ✓');
     }
   }
 
+  // the flagged periods in reading order: "Class or free?" first, then the ones worth a look
+  function flagged() {
+    const order = (a, b) => a.day - b.day || String(a.startTime).localeCompare(String(b.startTime));
+    return [...timetable.filter(s => s.isUnknown && !s.isBreak).sort(order), ...timetable.filter(isUnsure).sort(order)];
+  }
+
   function checkNext() {
-    const next = timetable.filter(s => s.isUnknown && !s.isBreak)
-      .sort((a, b) => a.day - b.day || String(a.startTime).localeCompare(String(b.startTime)))[0];
-    if (!next) return render();
-    if (typeof switchTimetableTab === 'function') switchTimetableTab('schedule');
+    const next = flagged()[0];
+    if (!next) { walk = 0; return render(); }
+    walk = Date.now();
     const card = document.querySelector(`.tt-slot-card[data-slot-id="${next.id}"]`);
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     if (typeof openEditSlotModal === 'function') openEditSlotModal(next.id);
   }
 
-  // ── sharing fixes (opt-in) ─────────────────────────────────────────────────────────────────────────────────
-  function share(yes) {
-    save('share', { value: !!yes, at: new Date().toISOString(), version: 1 });
-    const imp = load('import', null);
-    if (imp) {
-      imp.askShare = false;
-      save('import', imp);
-      if (yes && active()) queueFeedback(imp, corrections(imp));
-      cloud(imp);
-    }
-    render();
-    if (typeof toast === 'function') toast(yes ? 'Thank you! Your fixes help BunkKro AI learn 💜' : 'No problem — nothing is shared');
+  // after a popup answer (a save re-renders the timetable within a moment of closing), open the next flagged one.
+  // Cancel doesn't re-render, so it ends the walk.
+  function continueWalk() {
+    if (!walk) return;
+    const open = document.getElementById('slot-edit-overlay');
+    if (open && open.classList.contains('show')) return;
+    if (Date.now() - walk > 10 * 60 * 1000) { walk = 0; return; }
+    if (!flagged().length) { walk = 0; return; }
+    setTimeout(() => { if (walk) checkNext(); }, 450);
+  }
+  if (typeof window.closeSlotEditModal === 'function') {
+    const close = window.closeSlotEditModal;
+    window.closeSlotEditModal = function () {
+      const r = close.apply(this, arguments);
+      if (walk) {                       // closed: continue only if a save re-renders right after (not on Cancel)
+        const stamp = walk = Date.now();
+        setTimeout(() => { if (walk === stamp) walk = 0; }, 1500);
+      }
+      return r;
+    };
   }
 
-  async function stopSharing() {
-    save('share', { value: false, at: new Date().toISOString(), version: 1 });
-    save('feedback_queue', []);
-    if (cloudReady && uid() !== 'guest' && typeof supabaseClient !== 'undefined' && supabaseClient) {
-      const { error } = await supabaseClient.from('timetable_feedback').delete().eq('user_id', uid());
-      if (error && !missingTable(error)) console.warn('BunkKro AI feedback delete:', error.message);
+  // ── improving the AI (on unless turned off) ────────────────────────────────────────────────────────────────
+  async function setSharing(on) {
+    save('share', { value: !!on, at: new Date().toISOString(), version: 2 });
+    if (!on) {
+      save('feedback_queue', []);
+      if (canCloud()) {
+        const { error } = await supabaseClient.from('timetable_feedback').delete().eq('user_id', uid());
+        if (error && !missingTable(error)) console.warn('BunkKro AI feedback delete:', error.message);
+      }
+    } else {
+      const imp = active();
+      if (imp && imp.status !== 'draft') queueFeedback(imp, corrections(imp));
     }
     const imp = load('import', null);
     if (imp) cloud(imp);
     render();
-    if (typeof toast === 'function') toast('Stopped sharing, and removed the fixes you shared');
+    if (typeof toast === 'function') {
+      toast(on ? 'Thanks! Your fixes will help BunkKro AI learn 💜' : 'Turned off, and removed the fixes already sent');
+    }
   }
 
   function queueFeedback(imp, diff) {
@@ -177,12 +202,11 @@
   async function cloud(imp) {
     if (!canCloud()) return;
     const c = active() ? counts() : { classes: 0, unresolved: 0 };
-    const consent = load('share', null);
+    const share = load('share', null);
     const { error } = await supabaseClient.from('timetable_imports').upsert([{
       id: imp.id, user_id: uid(), engine_version: imp.engineVersion, source_hash: imp.sourceHash, status: imp.status,
       created_at: imp.createdAt, confirmed_at: imp.confirmedAt, class_count: c.classes, unresolved_count: c.unresolved,
-      corrections_count: imp.fixes || 0, training_consent: !!(consent && consent.value),
-      consent_at: consent ? consent.at : null
+      corrections_count: imp.fixes || 0, training_consent: sharing(), consent_at: share ? share.at : imp.createdAt
     }], { onConflict: 'id' });
     if (error) return cloudError(error);
     flush();
@@ -191,8 +215,7 @@
   async function flush() {
     const queue = load('feedback_queue', []);
     if (!queue.length || !canCloud()) return;
-    const consent = load('share', null);
-    if (!consent || !consent.value) return save('feedback_queue', []);
+    if (!sharing()) return save('feedback_queue', []);
     const rows = queue.map(r => ({ ...r, user_id: uid() }));
     const { error } = await supabaseClient.from('timetable_feedback').upsert(rows, { onConflict: 'id' });
     if (error) return cloudError(error);
@@ -213,55 +236,59 @@
     const bar = document.getElementById('tt-confirm-bar');
     const note = document.getElementById('tt-ai-note');
     const imp = active();
-    const consent = load('share', null);
+    const signedIn = uid() !== 'guest';
     if (note) {
       const bits = [];
       if (imp && imp.status !== 'draft') {
         const left = counts().unresolved;
         bits.push(`<span class="aic-note-ok">✓ Confirmed</span>${left ? `, ${left} still to check` : ''}`);
       }
-      if (consent && consent.value) bits.push('Sharing fixes with BunkKro AI · <button class="tt-rescan-link" onclick="BunkKroImport.stopSharing()">Stop</button>');
+      if (imp && signedIn) {
+        bits.push(sharing()
+          ? 'Your fixes help BunkKro AI learn · <button class="tt-rescan-link" onclick="BunkKroImport.setSharing(false)">Turn off</button>'
+          : 'Not helping BunkKro AI learn · <button class="tt-rescan-link" onclick="BunkKroImport.setSharing(true)">Turn on</button>');
+      }
       note.innerHTML = bits.length ? ' · ' + bits.join(' · ') : '';
     }
-    if (!bar) return;
-    if (!imp || (imp.status !== 'draft' && !imp.askShare)) { bar.hidden = true; bar.innerHTML = ''; return; }
-    bar.hidden = false;
-    if (imp.status === 'draft') {
-      const c = counts();
-      const chips = `<span class="aic-chip">${plural(c.classes, 'class', 'classes')}</span>` +
-        `<span class="aic-chip">${plural(c.days, 'day')}</span>` +
-        (c.unresolved ? `<span class="aic-chip warn">${c.unresolved} to check</span>` : '<span class="aic-chip ok">all checked</span>');
-      bar.className = 'aic-bar draft';
-      bar.innerHTML = `
-        <img class="aic-cat" src="assets/cat-blue-detective.svg" alt="">
-        <div class="aic-body">
-          <div class="aic-title">Here's your timetable ✨ Does it look right?</div>
-          <div class="aic-sub">${c.unresolved
-            ? `BunkKro AI couldn't tell if ${c.unresolved === 1 ? 'one period is' : c.unresolved + ' periods are'} a class or free. Check ${c.unresolved === 1 ? 'it' : 'them'}, then confirm.`
-            : 'Tap any class below to fix it. When it matches your college timetable, confirm.'}</div>
-          <div class="aic-chips">${chips}</div>
-        </div>
-        <div class="aic-actions">
-          ${c.unresolved
-            ? `<button class="btn-pri" onclick="BunkKroImport.checkNext()">Check ${c.unresolved === 1 ? 'it' : 'them'}</button>
-               <button class="aic-link" onclick="BunkKroImport.confirm()">Confirm with ${c.unresolved} unchecked</button>`
-            : `<button class="btn-pri" onclick="BunkKroImport.confirm()">Looks right · Confirm</button>`}
-        </div>`;
-    } else {
-      bar.className = 'aic-bar thanks';
-      bar.innerHTML = `
-        <img class="aic-cat" src="assets/cat-happy.svg" alt="">
-        <div class="aic-body">
-          <div class="aic-title">Confirmed! 🎉 You fixed ${plural(imp.fixes, 'thing')}.</div>
-          <div class="aic-sub">Want to help BunkKro AI read timetables better? Share what it read and what you changed. Your file isn't shared, it's optional, and you can stop anytime.</div>
-        </div>
-        <div class="aic-actions">
-          <button class="btn-pri" onclick="BunkKroImport.share(true)">Share my fixes</button>
-          <button class="aic-link" onclick="BunkKroImport.share(false)">No thanks</button>
-        </div>`;
+    if (bar) {
+      if (!imp || imp.status !== 'draft') {
+        bar.hidden = true;
+        bar.innerHTML = '';
+      } else {
+        const c = counts();
+        const them = n => (n === 1 ? 'it' : 'them');
+        const chips = `<span class="aic-chip">${plural(c.classes, 'class', 'classes')}</span>` +
+          `<span class="aic-chip">${plural(c.days, 'day')}</span>` +
+          (c.unresolved ? `<span class="aic-chip warn">${c.unresolved} to check</span>` : '') +
+          (c.unsure ? `<span class="aic-chip info">${c.unsure} worth a look</span>` : '') +
+          (!c.unresolved && !c.unsure ? '<span class="aic-chip ok">all checked</span>' : '');
+        const sub = c.unresolved
+          ? `BunkKro AI couldn't tell if ${c.unresolved === 1 ? 'one period is' : c.unresolved + ' periods are'} a class or free. Check ${them(c.unresolved)}, then confirm.`
+          : c.unsure
+            ? `Every period is filled in. ${c.unsure === 1 ? 'One class is' : c.unsure + ' classes are'} marked ⚠️ because the AI wasn't fully sure, so ${them(c.unsure)}'s worth a quick look.`
+            : 'Tap any class below to fix it. When it matches your college timetable, confirm.';
+        const actions = c.unresolved
+          ? `<button class="btn-pri" onclick="BunkKroImport.checkNext()">Check ${them(c.unresolved)}</button>
+             <button class="aic-link" onclick="BunkKroImport.confirm()">Confirm with ${c.unresolved} unchecked</button>`
+          : `<button class="btn-pri" onclick="BunkKroImport.confirm()">Looks right · Confirm</button>` +
+            (c.unsure ? `<button class="aic-link" onclick="BunkKroImport.checkNext()">Look at the ${c.unsure === 1 ? 'unsure one' : c.unsure + ' unsure ones'}</button>` : '');
+        bar.hidden = false;
+        bar.className = 'aic-bar draft';
+        bar.innerHTML = `
+          <img class="aic-cat" src="assets/cat-blue-detective.svg" alt="">
+          <div class="aic-body">
+            <div class="aic-title">Here's your timetable ✨ Does it look right?</div>
+            <div class="aic-sub">${sub}</div>
+            <div class="aic-chips">${chips}</div>
+            ${signedIn && sharing() ? '<div class="aic-fine">Confirming also sends your fixes (never your file) to help BunkKro AI read timetables better.</div>' : ''}
+          </div>
+          <div class="aic-actions">${actions}</div>`;
+      }
     }
+    continueWalk();
   }
 
-  window.BunkKroImport = { start, render, confirm, checkNext, share, stopSharing, corrections: () => { const i = active(); return i ? corrections(i) : []; } };
+  window.BunkKroImport = { start, render, confirm, checkNext, setSharing,
+    corrections: () => { const i = active(); return i ? corrections(i) : []; } };
   document.addEventListener('DOMContentLoaded', () => { render(); flush(); });
 })();

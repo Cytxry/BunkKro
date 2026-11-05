@@ -1421,3 +1421,12 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .slot-unknown-pick[hidden]{display:none}
 .slot-unknown-btns{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .slot-unknown-btns span{font-size:.78rem;color:var(--text2)}
+.aic-chip.info{background:var(--info-bg);color:var(--info);border-color:transparent}
+.aic-fine{font-size:.74rem;color:var(--muted);margin-top:8px}
+.slot-unknown-pick.unsure{background:var(--info-bg);border-color:transparent}
+.slot-unknown-pick.unsure p{color:var(--info)}
+.keep-pills{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:12px 0 4px;max-height:34vh;overflow:auto}
+.keep-pill{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 12px;border-radius:12px;background:var(--surface2);text-align:left}
+.keep-pill strong{font-size:.85rem;color:var(--text)}
+.keep-pill small{font-size:.72rem;color:var(--muted)}
+.clean-row.keep input{accent-color:var(--good)}

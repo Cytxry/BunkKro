@@ -348,7 +348,15 @@
     if (input) input.accept = up ? 'image/png, image/jpeg, image/jpg, image/webp, application/pdf' : 'image/png, image/jpeg, image/jpg';
   }
 
-  window.BunkKroAI = { isAvailable, read, reviewSubjects, issues, BASE };
+  // why a class is marked "worth a look", in a few words (the popup's quick check)
+  function reason(s) {
+    if (s.overlapsAnotherClass) return 'another class is at the same time. Keep yours, and delete the other';
+    if (!s.startTime) return 'no time is printed for it. Add one if you know it';
+    const why = (s.doubts || []).map(d => DOUBT_TEXT[d]).filter(Boolean);
+    return why[0] || 'the reading was a little unclear';
+  }
+
+  window.BunkKroAI = { isAvailable, read, reviewSubjects, issues, matchSubjects, reason, BASE };
   showStatus();
   // re-check only while the Smart Timetable page is open: every 10 s while the AI is on, every 45 s while it's off
   if (enabled()) {

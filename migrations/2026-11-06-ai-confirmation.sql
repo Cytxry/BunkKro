@@ -3,8 +3,9 @@
 -- Run once in the Supabase SQL Editor, after schema-migrations.sql. Safe to re-run.
 --
 -- * timetable_imports   one row per AI import: draft / confirmed / confirmed_with_unresolved
--- * timetable_feedback  per-period "what the AI read" vs "what the student kept", ONLY when the student chose to
---                       share fixes (training_consent = true). The file itself is never stored.
+-- * timetable_feedback  per-period "what the AI read" vs "what the student kept", sent when a signed-in student
+--                       confirms, unless they turned it off (the bar says so before confirming; "Turn off" deletes
+--                       their rows). training_consent records that it was on. The file itself is never stored.
 -- * timetable_entries   new nullable review columns, for replacing the 'Needs review' subject_name sentinel later.
 --                       The site doesn't write them yet; existing rows are untouched.
 -- Students can only see and change their own rows (RLS). Feedback rows can't be edited afterwards (an audit trail),

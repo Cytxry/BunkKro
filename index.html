@@ -401,13 +401,6 @@
     <!-- BunkKro AI: confirm the imported timetable (ai-confirm.js) -->
     <div class="aic-bar" id="tt-confirm-bar" role="region" aria-label="Confirm your timetable" aria-live="polite" hidden></div>
 
-    <!-- Tab Bar -->
-    <div class="tt-view-tabs" role="tablist">
-      <button class="tt-tab-btn active" id="tab-btn-schedule" onclick="switchTimetableTab('schedule')">Schedule</button>
-      <button class="tt-tab-btn" id="tab-btn-studio" onclick="switchTimetableTab('studio')">Inspector</button>
-      <button class="tt-tab-btn" id="tab-btn-disagree" onclick="switchTimetableTab('disagree')">Issues <span id="disagree-badge-count" class="tab-badge" style="display:none">0</span></button>
-    </div>
-
     <!-- TAB 1: WEEKLY SCHEDULE -->
     <div class="tt-tab-pane active" id="tab-pane-schedule">
       <div class="tt-grid-container">
@@ -426,68 +419,6 @@
       </div>
     </div>
 
-    <!-- TAB 2: INSPECTOR -->
-    <div class="tt-tab-pane" id="tab-pane-studio" style="display:none">
-      <div class="tt-studio-card">
-        <div class="studio-layers">
-          <span class="studio-layers-label">Layers</span>
-          <label class="studio-toggle"><input type="checkbox" id="layer-original" checked onchange="toggleStudioLayer('original', this.checked)"><span>Image</span></label>
-          <label class="studio-toggle"><input type="checkbox" id="layer-cells" checked onchange="toggleStudioLayer('cells', this.checked)"><span>Grid</span></label>
-          <label class="studio-toggle"><input type="checkbox" id="layer-regions" onchange="toggleStudioLayer('regions', this.checked)"><span>Regions</span></label>
-          <div class="studio-sep-v"></div>
-          <label class="studio-toggle"><i class="dot-ind green"></i><input type="checkbox" id="layer-confirmed" checked onchange="toggleStudioLayer('confirmed', this.checked)"><span>Confirmed</span></label>
-          <label class="studio-toggle"><i class="dot-ind orange"></i><input type="checkbox" id="layer-inferred" checked onchange="toggleStudioLayer('inferred', this.checked)"><span>Inferred</span></label>
-          <label class="studio-toggle"><i class="dot-ind red"></i><input type="checkbox" id="layer-uncertain" checked onchange="toggleStudioLayer('uncertain', this.checked)"><span>Uncertain</span></label>
-          <label class="studio-toggle"><i class="dot-ind blue"></i><input type="checkbox" id="layer-manual" checked onchange="toggleStudioLayer('manual', this.checked)"><span>Manual</span></label>
-          <details class="studio-advanced">
-            <summary>More layers</summary>
-            <div class="studio-advanced-inner">
-              <label class="studio-toggle"><input type="checkbox" id="layer-threshold" onchange="toggleStudioLayer('threshold', this.checked)"><span>Threshold</span></label>
-              <label class="studio-toggle"><input type="checkbox" id="layer-masks" onchange="toggleStudioLayer('masks', this.checked)"><span>H/V Lines</span></label>
-              <label class="studio-toggle"><input type="checkbox" id="layer-segments" onchange="toggleStudioLayer('segments', this.checked)"><span>Segments</span></label>
-              <label class="studio-toggle"><input type="checkbox" id="layer-intersections" onchange="toggleStudioLayer('intersections', this.checked)"><span>Intersections</span></label>
-              <label class="studio-toggle"><input type="checkbox" id="layer-ocrwords" onchange="toggleStudioLayer('ocrwords', this.checked)"><span>Text Boxes</span></label>
-            </div>
-          </details>
-        </div>
-
-        <div class="studio-action-bar">
-          <div class="studio-actions">
-            <button class="btn-sec btn-sm" id="btn-studio-undo" onclick="studioUndo()" disabled><svg class="ic ic-sm"><use href="#i-undo"/></svg> Undo</button>
-            <button class="btn-sec btn-sm" id="btn-studio-redo" onclick="studioRedo()" disabled><svg class="ic ic-sm"><use href="#i-redo"/></svg> Redo</button>
-            <button class="btn-sec btn-sm" id="btn-studio-reset-edits" onclick="studioResetEdits()" disabled>Reset</button>
-            <button class="btn-sec btn-sm" onclick="exportScannerJSON()"><svg class="ic ic-sm"><use href="#i-download"/></svg> Export</button>
-          </div>
-          <div id="studio-quick-hint" class="studio-hint">Tap a cell to edit or inspect</div>
-        </div>
-
-        <div class="studio-canvas-container" id="studio-canvas-container">
-          <div class="studio-empty-state" id="studio-empty-state">
-            <img src="assets/cat-detective.svg" alt="">
-            <div class="studio-empty-title">Nothing to inspect yet</div>
-            <div class="studio-empty-sub">Upload your schedule image and it'll show up here.</div>
-          </div>
-          <canvas id="studio-canvas" style="display:none"></canvas>
-        </div>
-
-        <div class="studio-info-box" id="studio-info-box">
-          <div style="color:var(--text2)">Select a cell to inspect</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 3: ISSUES -->
-    <div class="tt-tab-pane" id="tab-pane-disagree" style="display:none">
-      <div class="tt-disagree-card">
-        <div id="disagree-items-list">
-          <div class="empty">
-            <img class="empty-illus" src="assets/cat-peek.svg" alt="">
-            <h3>No scan yet</h3>
-            <p>After you upload a timetable image, anything that needs a second look shows up here.</p>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 
 </main>
@@ -554,6 +485,13 @@
       <div class="slot-unknown-btns">
         <button type="button" class="btn-sec btn-sm" onclick="markSlotFree()">🌿 It's a free period</button>
         <span>or pick the class below</span>
+      </div>
+    </div>
+    <div class="slot-unknown-pick unsure" id="slot-unsure-note" hidden>
+      <p id="slot-unsure-why">BunkKro AI isn't fully sure about this one.</p>
+      <div class="slot-unknown-btns">
+        <button type="button" class="btn-sec btn-sm" onclick="markSlotRight()">✓ It's right</button>
+        <span>or fix it below</span>
       </div>
     </div>
 

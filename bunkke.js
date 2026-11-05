@@ -3432,47 +3432,76 @@ function setScannerPhase(phaseName, pct, detailText) {
 // After a new timetable replaces an old one, the old timetable's subjects that aren't in the new one are offered
 // for removal (ticked), together with any other subject the new timetable doesn't use (not ticked). Nothing is
 // removed without a yes: removing a subject removes its attendance too.
-async function offerOldSubjectCleanup(oldIds) {
-  if (!currentUser || !oldIds.size) return;
-  const used = new Set(timetable.map(t => t.subjectId).filter(Boolean));
-  const unused = subjects.filter(sb => !used.has(sb.id));
-  if (!unused.length) return;
-  const rows = unused.map(sb => {
-    const wasOld = oldIds.has(sb.id);
-    const counted = sb.total > 0 ? `${sb.present}/${sb.total} classes counted` : 'nothing counted yet';
-    return `<label class="clean-row"><input type="checkbox" value="${escapeHTML(sb.id)}" ${wasOld ? 'checked' : ''}>
-      <span><strong>${escapeHTML(sb.name)}</strong><small>${wasOld ? 'from your old timetable' : 'added by hand'} · ${counted}</small></span></label>`;
-  }).join('');
-  const picked = await new Promise(resolve => {
+// A new timetable: which of the student's existing subjects stay? Same names can belong to a different college or
+// class, so nothing is merged by name unless the student keeps that subject. Resolves to the Set of ids to keep
+// (all of them when there is nothing to ask, or the student closes the dialog).
+function askSubjectsToKeep(list) {
+  const all = new Set(list.map(sb => sb.id));
+  if (!currentUser || !list.length) return Promise.resolve(all);
+  const counted = sb => sb.total > 0 ? `${sb.present}/${sb.total} classes counted` : 'nothing counted yet';
+  return new Promise(resolve => {
     const ov = document.createElement('div');
     ov.className = 'overlay show';
     ov.dataset.escape = 'keep';
     ov.setAttribute('role', 'dialog');
     ov.setAttribute('aria-modal', 'true');
-    ov.innerHTML = `<div class="modal modal-center" style="max-width:440px">
-      <img class="modal-cat" src="assets/cat-blue-detective.svg" alt="">
-      <h2>Clean up old subjects?</h2>
-      <p class="sub">These subjects aren't in your new timetable. Tick the ones to remove — their attendance goes with them.</p>
-      <div class="clean-list">${rows}</div>
-      <div class="modal-btns center">
-        <button class="btn-sec" data-act="keep">Keep all</button>
-        <button class="btn-pri danger" data-act="remove">Remove ticked</button>
-      </div></div>`;
+    const done = keep => { ov.remove(); resolve(keep); };
+    const ask = () => {
+      ov.innerHTML = `<div class="modal modal-center" style="max-width:440px">
+        <img class="modal-cat" src="assets/cat-blue-detective.svg" alt="">
+        <h2>Start fresh with this timetable?</h2>
+        <p class="sub">You already have ${list.length === 1 ? 'a subject' : list.length + ' subjects'}. Remove ${list.length === 1 ? 'it' : 'them'}
+          and ${list.length === 1 ? 'its' : 'their'} attendance, so the new timetable starts clean?</p>
+        <div class="keep-pills">${list.map(sb => `<span class="keep-pill"><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span>`).join('')}</div>
+        <div class="modal-btns center">
+          <button class="btn-sec" data-act="some">No, keep some</button>
+          <button class="btn-pri danger" data-act="none">Yes, remove ${list.length === 1 ? 'it' : 'all'}</button>
+        </div></div>`;
+    };
+    const pick = () => {
+      ov.innerHTML = `<div class="modal modal-center" style="max-width:440px">
+        <img class="modal-cat" src="assets/cat-blue-happy.svg" alt="">
+        <h2>Which ones should stay?</h2>
+        <p class="sub">Ticked subjects stay, with their attendance. Untick the ones you don't need any more.</p>
+        <div class="clean-list">${list.map(sb => `<label class="clean-row keep"><input type="checkbox" value="${escapeHTML(sb.id)}" checked>
+          <span><strong>${escapeHTML(sb.name)}</strong><small>${counted(sb)}</small></span></label>`).join('')}</div>
+        <div class="modal-btns center">
+          <button class="btn-sec" data-act="back">Back</button>
+          <button class="btn-pri" data-act="keep">Keep ticked</button>
+        </div></div>`;
+    };
     ov.addEventListener('click', e => {
       const act = e.target.closest?.('[data-act]')?.dataset.act;
-      if (!act) return;
-      const ids = act === 'remove' ? [...ov.querySelectorAll('input:checked')].map(i => i.value) : [];
-      ov.remove();
-      resolve(ids);
+      if (act === 'some') pick();
+      else if (act === 'back') ask();
+      else if (act === 'none') done(new Set());
+      else if (act === 'keep') done(new Set([...ov.querySelectorAll('input:checked')].map(i => i.value)));
     });
+    ov.addEventListener('keydown', e => { if (e.key === 'Escape') done(all); });
+    ask();
     document.body.appendChild(ov);
   });
-  if (!picked.length) return;
+}
+
+async function removeSubjects(ids) {
   let removed = 0;
-  for (const id of picked) if (await removeSubjectCompletely(id)) removed++;
+  for (const id of ids) if (await removeSubjectCompletely(id)) removed++;
+  if (removed) toast(`Removed ${removed} old subject${removed !== 1 ? 's' : ''} ✓`);
+  return removed;
+}
+
+// the built-in scanner (no BunkKro AI): asked afterwards, about the subjects the new timetable doesn't use
+async function offerOldSubjectCleanup(oldIds) {
+  if (!currentUser || !oldIds.size) return;
+  const used = new Set(timetable.map(t => t.subjectId).filter(Boolean));
+  const unused = subjects.filter(sb => !used.has(sb.id));
+  if (!unused.length) return;
+  const keep = await askSubjectsToKeep(unused);
+  const drop = unused.filter(sb => !keep.has(sb.id)).map(sb => sb.id);
+  if (!drop.length) return;
+  await removeSubjects(drop);
   saveTimetableToStorageAndDB();
   renderAll();
-  toast(`Removed ${removed} old subject${removed !== 1 ? 's' : ''} ✓`);
 }
 // A subject and everything that counts for it (as Delete subject does)
 async function removeSubjectCompletely(subjId) {
@@ -3500,10 +3529,15 @@ async function processTimetableImage(file) {
   if (window.BunkKroAI && await BunkKroAI.isAvailable()) {
     try {
       setScannerPhase('prep', 10, 'Sending the timetable to BunkKro AI on this computer...');
-      const res = await BunkKroAI.read(file, subjects, setScannerPhase);
+      const res = await BunkKroAI.read(file, [], setScannerPhase);   // subjects are matched below, to kept ones only
       setScannerPhase('valid', 95, 'Review your subjects...');
       const predicted = JSON.parse(JSON.stringify(res.slots));   // what the AI read, before the student's fixes
-      const plan = await BunkKroAI.reviewSubjects(res.slots, subjects);
+      const keep = await askSubjectsToKeep(subjects);            // same name may be another class: ask, don't assume
+      const kept = subjects.filter(sb => keep.has(sb.id));
+      res.slots = BunkKroAI.matchSubjects(res.slots, kept);
+      const plan = await BunkKroAI.reviewSubjects(res.slots, kept);
+      // removed before new subjects are created, so a new class can't be linked to one that is about to go
+      await removeSubjects(subjects.filter(sb => !keep.has(sb.id)).map(sb => sb.id));
       const slots = plan ? await applyAiSubjectPlan(res.slots, plan) : res.slots;
       // the page itself in the Studio: every period boxed where it was read (double-click a box to inspect it)
       scannerState.rawImage = null;
@@ -3524,7 +3558,6 @@ async function processTimetableImage(file) {
       renderValidationReport();
       renderStudioCanvas();
       setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
-      setTimeout(() => offerOldSubjectCleanup(oldSubjectIds), 1300);
       setTimeout(() => {
         if (progressBox) progressBox.style.display = 'none';
         const dropzone = document.getElementById('tt-dropzone');
@@ -3532,7 +3565,6 @@ async function processTimetableImage(file) {
         const loadedLabel = document.getElementById('tt-loaded-label');
         if (dropzone) dropzone.style.display = 'none';
         if (loadedBar) loadedBar.style.display = 'flex';
-        if (loadedLabel && file && file.name) loadedLabel.textContent = file.name;
       }, 1200);
       const unknown = slots.filter(s => s.isUnknown).length;
       const unsure = slots.filter(s => s.isUncertain && !s.isBreak && !s.isUnknown).length;
@@ -3674,7 +3706,6 @@ async function processTimetableImage(file) {
       const loadedLabel = document.getElementById('tt-loaded-label');
       if (dropzone) dropzone.style.display = 'none';
       if (loadedBar) loadedBar.style.display = 'flex';
-      if (loadedLabel && file && file.name) loadedLabel.textContent = file.name;
     }, 1200);
 
     toast('Timetable read! Check it below, or open Inspector to see each period on the page.');
@@ -4423,7 +4454,7 @@ function updateUploadCardState() {
   loadedBar.style.display = hasData ? 'flex' : 'none';
   if (hasData) {
     const label = document.getElementById('tt-loaded-label');
-    const count = timetable.filter(s => !s.isBreak).length;
+    const count = timetable.filter(s => !s.isBreak && !s.isUnknown).length;   // "Class or free?" periods aren't classes yet
     if (label && loadedBar.style.display === 'flex') {
       label.textContent = `${count} class${count !== 1 ? 'es' : ''} loaded`;
     }
@@ -5169,9 +5200,18 @@ function openEditSlotModal(slotId) {
 
   currentEditingSlot = slot;
   slotError('');
-  document.getElementById('slot-modal-title').textContent = slot.isUnknown ? 'Class or free period? 🤔' : 'Edit Class Slot 🕒';
+  const unsure = !slot.isUnknown && !slot.isBreak && slot.isUncertain;
+  document.getElementById('slot-modal-title').textContent =
+    slot.isUnknown ? 'Class or free period? 🤔' : unsure ? 'Quick check 🔍' : 'Edit Class Slot 🕒';
   const unknownNote = document.getElementById('slot-unknown-note');
   if (unknownNote) unknownNote.hidden = !slot.isUnknown;
+  const unsureNote = document.getElementById('slot-unsure-note');
+  if (unsureNote) {
+    unsureNote.hidden = !unsure;
+    const why = unsure && window.BunkKroAI && BunkKroAI.reason ? BunkKroAI.reason(slot) : '';
+    document.getElementById('slot-unsure-why').textContent =
+      `BunkKro AI isn't fully sure about this one${why ? ': ' + why : ''}.`;
+  }
   document.getElementById('slot-edit-id').value = slot.id;
   document.getElementById('slot-day').value = slot.day;
   document.getElementById('slot-period').value = slot.period;
@@ -5302,6 +5342,20 @@ async function deleteCurrentSlot(message = 'Slot removed') {
   renderTimetable();
   if (currPage === 'tracker') renderTracker();
   if (synced !== false) toast(message);
+}
+
+// a class the AI wasn't sure of, which the student says is right as it is
+async function markSlotRight() {
+  const slot = timetable.find(s => s.id === document.getElementById('slot-edit-id').value);
+  if (!slot) return closeSlotEditModal();
+  slot.isUncertain = false;
+  slot.doubts = [];
+  slot.overlapsAnotherClass = false;
+  const synced = await saveTimetableToStorageAndDB();
+  closeSlotEditModal();
+  renderTimetable();
+  if (currPage === 'tracker') renderTracker();
+  if (synced !== false) toast('Got it ✓');
 }
 
 // a "Needs review" period the student says is free: it leaves the timetable, so the app counts it as free

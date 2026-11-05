@@ -81,6 +81,13 @@ After BunkKro AI reads a timetable, a "Does it look right?" bar sits above the S
 
 The "Class or free?" popup has a one-tap **It's a free period** button.
 
-Sharing fixes for AI improvement is a separate opt-in, asked once after a confirmation that changed something, and
-can be stopped (which deletes what was shared). Cloud tables: `migrations/2026-11-06-ai-confirmation.sql`. Until it
+Every flagged period is reached through **Check them** (the Inspector and Issues tabs are gone): "Class or free?"
+periods must be decided (or confirmed as unchecked); classes the AI wasn't sure of are "worth a look", answered with
+**✓ It's right** or a fix.
+
+When a signed-in student confirms, their fixes (what the AI read and what they kept, never the file) are sent to
+help improve BunkKro AI. The bar says so before confirming; **Turn off** stops it and deletes what was sent.
+
+A new timetable first asks about the student's existing subjects (**Start fresh?** → remove all, or pick which to
+keep). New classes are matched by name only to subjects the student kept. Cloud tables: `migrations/2026-11-06-ai-confirmation.sql`. Until it
 is run, everything stays on the device.
