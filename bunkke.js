@@ -726,9 +726,10 @@ function hideAuthMessages() {
 const SUBJ_THEMES = Array.from({ length: 8 }, (_, i) => ({ c: `var(--st${i + 1})`, bg: `var(--st${i + 1}-bg)` }));
 function subjTheme(i) { return SUBJ_THEMES[((i % SUBJ_THEMES.length) + SUBJ_THEMES.length) % SUBJ_THEMES.length]; }
 // The cats come in coats (assets/make_cats.py): each spot shows one coat a day, so it never flickers between renders
-const CAT_COATS = { happy: ['black', 'white', 'grey'], wave: ['black', 'white', 'grey'], peek: ['black', 'white', 'grey'],
-  confused: ['black', 'white', 'grey'], sad: ['black', 'white'], moon: ['black', 'white'], laptop: ['black', 'white', 'grey'],
-  coffee: ['black', 'grey'], books: ['black', 'white'], detective: ['black', 'white'], trophy: ['black', 'white'] };
+const CAT_COATS = { happy: ['black', 'grey', 'lavender', 'pink', 'mint'], wave: ['black', 'grey', 'lavender', 'mint'],
+  peek: ['black', 'grey', 'pink', 'mint'], confused: ['black', 'grey', 'lavender'], sad: ['black', 'lavender', 'pink'],
+  moon: ['black', 'lavender', 'mint'], laptop: ['black', 'grey', 'pink', 'mint'], coffee: ['black', 'grey', 'pink'],
+  books: ['black', 'lavender', 'mint'], detective: ['black', 'lavender'], trophy: ['black', 'pink', 'mint'] };
 function coat(name) {
   const m = /^cat-([a-z]+)$/.exec(name || '');
   if (!m || !CAT_COATS[m[1]]) return name;
@@ -2060,9 +2061,9 @@ function renderSubject(id, preserveSim) {
     ? `<button type="button" class="chip ${cls} editable" data-field="${field}" onclick="startChipEdit('${field}')" aria-label="${label}: ${value}. Tap to change"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}${ic('pen','ic-xs chip-pen')}</span><span class="cv">${value}</span></button>`
     : `<div class="chip ${cls}"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}</span><div class="cv">${value}</div></div>`;
   document.getElementById('sp-chips').innerHTML =
-    chip('indigo', 'calendar', 'Total', s.total, 'total') +
+    chip('indigo', 'calendar', 'Total', s.total, null) +             // attended + missed: it adds itself up
     chip('green', 'check', 'Present', s.present, 'present') +
-    chip('pink', 'x', 'Absent', s.total - s.present, null) +
+    chip('pink', 'x', 'Absent', s.total - s.present, 'absent') +
     chip('amber', 'target', 'Target', tgt + '%', 'target');
  
   // Advice: one short line in the site's voice, then the numbers as mini stat tiles
@@ -2141,10 +2142,10 @@ function checkSubjectForm(f, excludeId) {
   const target = f.target ?? null;
 
   if (f.mode !== 'estimate') {
-    if (bad(f.total, 0, 5000)) return { error: 'Total classes held must be a whole number (0 or more).', field: ids.total };
+    if (bad(f.total, 0, 5000)) return { error: 'Classes missed must be a whole number (0 or more).', field: ids.absent || ids.total };
     if (bad(f.present, 0, 5000)) return { error: 'Classes attended must be a whole number (0 or more).', field: ids.present };
     const total = f.total ?? 0, present = f.present ?? 0;
-    if (present > total) return { error: `Attended (${present}) can't be more than the total classes held (${total}).`, field: ids.present };
+    if (present > total) return { error: "Classes missed can't be less than 0.", field: ids.absent || ids.present };
     if (bad(f.perWeek, 0, 30)) return { error: 'That\'s more classes a week than fit in a timetable.', field: ids.perWeek };
     return { values: { name, total, present, perWeek: f.perWeek ?? 0, target, semTotal: f.semTotal ?? null, mode: 'exact' } };
   }
@@ -2545,7 +2546,7 @@ function readEditForm(s) {
     missed: numField('inp-est-absent'),
     semTotal: est ? numField('inp-est-semtotal') : (s.semTotal ?? null),
     ids: {
-      name: 'inp-subject-name', total: 'inp-total', present: 'inp-present',
+      name: 'inp-subject-name', total: 'inp-total', present: 'inp-present', absent: 'inp-absent',
       perWeek: 'edit-days', target: est ? 'inp-est-target' : 'inp-target',
       semStart: 'inp-semstart', missed: 'inp-est-absent', semTotal: 'inp-est-semtotal',
     },
@@ -2583,11 +2584,10 @@ function fillEditForm(s) {
 function onEditInput(e) {
   const id = e.target.id;
   const total = numField('inp-total'), present = numField('inp-present'), absent = numField('inp-absent');
-  // Attended and missed fill each other in
-  if (id === 'inp-absent' && Number.isInteger(total) && Number.isInteger(absent)) {
-    document.getElementById('inp-present').value = Math.max(0, total - absent);
-  } else if ((id === 'inp-total' || id === 'inp-present') && Number.isInteger(total) && Number.isInteger(present)) {
-    document.getElementById('inp-absent').value = Math.max(0, total - present);
+  // the student types attended and missed; the classes held add themselves up
+  if (id === 'inp-present' || id === 'inp-absent') {
+    const sum = (Number.isInteger(present) ? present : 0) + (Number.isInteger(absent) ? absent : 0);
+    document.getElementById('inp-total').value = Number.isInteger(present) || Number.isInteger(absent) ? sum : '';
   }
   e.target.classList.remove('invalid');
   e.target.removeAttribute('aria-invalid');
@@ -2678,12 +2678,12 @@ function startChipEdit(field) {
   const s = subjects.find(x => x.id === currSubjId);
   const chip = document.querySelector(`#sp-chips .chip[data-field="${field}"]`);
   if (!s || !chip) return;
-  const cur = field === 'target' ? (s.target ?? '') : s[field];
+  const cur = field === 'target' ? (s.target ?? '') : field === 'absent' ? s.total - s.present : s[field];
   const box = document.createElement('div');
   box.className = chip.className.replace('editable', 'editing');
   box.dataset.field = field;
   box.innerHTML = `${chip.querySelector('.chip-lbl').outerHTML}
-    <input class="chip-input" type="number" inputmode="numeric" min="${field === 'target' ? 1 : 0}" ${field === 'target' ? `max="100" placeholder="${globalTarget}"` : ''} value="${cur}" aria-label="${field === 'target' ? 'Target %' : field === 'total' ? 'Total classes held' : 'Classes attended'}">`;
+    <input class="chip-input" type="number" inputmode="numeric" min="${field === 'target' ? 1 : 0}" ${field === 'target' ? `max="100" placeholder="${globalTarget}"` : ''} value="${cur}" aria-label="${field === 'target' ? 'Target %' : field === 'absent' ? 'Classes missed' : 'Classes attended'}">`;
   chip.replaceWith(box);
   const input = box.querySelector('input');
   input.focus(); input.select();
@@ -2693,9 +2693,12 @@ function startChipEdit(field) {
     const raw = input.value.trim();
     const n = raw === '' ? null : Number(raw);
     const f = { mode: 'exact', name: s.name, total: s.total, present: s.present, perWeek: s.perWeek, target: s.target ?? null, semTotal: s.semTotal ?? null };
+    const missed = s.total - s.present;
     if (field === 'target') f.target = Number.isInteger(n) || n === null ? n : NaN;
-    else f[field] = Number.isInteger(n) ? n : NaN;
-    if (field !== 'target' && n === null) f[field] = NaN;
+    // the other number stays as it was; the total is attended + missed
+    else if (!Number.isInteger(n) || n < 0) { if (field === 'absent') f.total = NaN; else f.present = NaN; }   // the right message
+    else if (field === 'absent') f.total = s.present + n;
+    else { f.present = n; f.total = n + missed; }
     const r = checkSubjectForm(f, s.id);
     if (r.error) {
       toast(r.error, 'err');
@@ -3048,7 +3051,7 @@ async function obFinish() {
 function openAddModal() {
   const ov = document.getElementById('add-overlay');
   ov.classList.add('show');
-  ['as-name','as-total','as-present','as-missed','as-target','as-semtotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['as-name','as-total','as-present','as-absent','as-missed','as-target','as-semtotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   setDayPicker('as-days', emptyDays());
   setUpto('as-upto', 'today');
   showUpto('as-upto', false);
@@ -3057,6 +3060,10 @@ function openAddModal() {
     ov.dataset.wired = '1';
     ov.addEventListener('input', e => {
       e.target.classList.remove('invalid'); e.target.removeAttribute('aria-invalid');
+      if (e.target.id === 'as-present' || e.target.id === 'as-absent') {   // classes held = attended + missed
+        const p = numField('as-present'), a = numField('as-absent');
+        document.getElementById('as-total').value = Number.isInteger(p) || Number.isInteger(a) ? (p || 0) + (a || 0) : '';
+      }
       // Typed a name that's already in the timetable (e.g. from a scan)? Pre-pick its days.
       if (e.target.id === 'as-name' && !dayPickers['as-days']?.touched) {
         const found = unlinkedDayCounts(textField('as-name'));
@@ -3097,7 +3104,7 @@ function readAddForm() {
     semStart: textField('as-semstart'),
     missed: numField('as-missed'),
     semTotal: est ? numField('as-semtotal') : null,
-    ids: { name: 'as-name', total: 'as-total', present: 'as-present', perWeek: 'as-days', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: 'as-semtotal' },
+    ids: { name: 'as-name', total: 'as-total', present: 'as-present', absent: 'as-absent', perWeek: 'as-days', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: 'as-semtotal' },
   };
 }
 function updateAddPreview() {
@@ -3632,7 +3639,7 @@ function showQuip() {
   const el = document.getElementById('ocr-status-text');
   if (!el) return;
   const cat = document.querySelector('.ocr-cat');
-  if (cat && !quipTimer) cat.src = `assets/${['cat-blue-laptop', 'cat-laptop', 'cat-black-laptop', 'cat-white-laptop', 'cat-grey-laptop'][quipIndex % 5]}.svg`;
+  if (cat && !quipTimer) cat.src = `assets/${['cat-blue-laptop', 'cat-laptop', 'cat-black-laptop', 'cat-pink-laptop', 'cat-mint-laptop', 'cat-grey-laptop'][quipIndex % 6]}.svg`;
   el.textContent = `${READING_QUIPS[quipIndex % READING_QUIPS.length]} · ${quipPct}%`;
   if (window.BunkFx) BunkFx.pop(el, 1.03);
 }

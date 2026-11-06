@@ -273,9 +273,9 @@
       <p class="field-tip day-pick-note" id="edit-days-note"></p>
     </div>
         <div id="form-exact" class="edit-grid">
-          <div class="field"><label for="inp-total">Total classes held</label><input type="number" id="inp-total" placeholder="e.g. 40" min="0" inputmode="numeric"></div>
-          <div class="field"><label for="inp-present">Classes attended</label><input type="number" id="inp-present" placeholder="e.g. 30" min="0" inputmode="numeric"></div>
-          <div class="field"><label for="inp-absent">Classes missed <span class="field-hint">(fills itself)</span></label><input type="number" id="inp-absent" placeholder="auto" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-present">Classes attended <span class="field-hint">(so far)</span></label><input type="number" id="inp-present" placeholder="e.g. 30" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-absent">Classes missed <span class="field-hint">(so far)</span></label><input type="number" id="inp-absent" placeholder="e.g. 4" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-total">Classes held so far <span class="field-hint">(adds itself up)</span></label><input type="number" id="inp-total" class="auto-sum" placeholder="0" min="0" readonly tabindex="-1"></div>
           <div class="field"><label for="inp-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
         </div>
         <div class="upto" id="edit-upto" hidden>
@@ -889,9 +889,10 @@
 
     <div id="add-exact-fields">
       <div class="form-grid-2">
-        <div class="mf"><label for="as-total">Total classes held</label><input type="number" id="as-total" placeholder="e.g. 40" min="0" inputmode="numeric"></div>
-        <div class="mf"><label for="as-present">Classes attended</label><input type="number" id="as-present" placeholder="e.g. 32" min="0" inputmode="numeric"></div>
+        <div class="mf"><label for="as-present">Classes attended <span class="field-hint">(so far)</span></label><input type="number" id="as-present" placeholder="e.g. 32" min="0" inputmode="numeric"></div>
+        <div class="mf"><label for="as-absent">Classes missed <span class="field-hint">(so far)</span></label><input type="number" id="as-absent" placeholder="e.g. 4" min="0" inputmode="numeric"></div>
       </div>
+      <div class="mf"><label for="as-total">Classes held so far <span class="field-hint">(adds itself up)</span></label><input type="number" id="as-total" class="auto-sum" placeholder="0" min="0" readonly tabindex="-1"></div>
       <div class="upto" id="as-upto" hidden>
         <span>Do these numbers already include <strong>today's</strong> class?</span>
         <div class="mini-seg" role="radiogroup" aria-label="Numbers include today's class">

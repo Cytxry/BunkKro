@@ -1,12 +1,15 @@
 """Make BunkKro's extra cats from the original orange poses (same lines, same proportions, new coats).
 
-    python assets/make_cats.py          (writes the cat-black-*, cat-white-*, cat-grey-* and cat-fairy-* files)
+    python assets/make_cats.py          (writes the cat-<coat>-<pose> and cat-fairy-* files)
 
 Coats:
-  black  tuxedo: charcoal fur, white chest and muzzle, yellow eyes, light face lines so the face reads on dark fur
-  white  Persian: cream-white fur, blue eyes
-  grey   silver tabby-less: cool grey fur
-  fairy  the guide: the white Persian with lavender wings and a star wand (she is the one who talks in the guide)
+  black     tuxedo: charcoal fur, white chest and muzzle, yellow eyes, light face lines so the face reads on dark fur
+  grey      silver: cool grey fur
+  lavender  pastel lilac fur (the site's indigo family)
+  pink      pastel rose fur
+  mint      pastel mint fur
+  fairy     the guide: soft lilac Persian with wings, a flower crown and a star wand (she talks in the guide)
+A plain white coat was tried and dropped: it read as blank next to the coloured cats.
 """
 import re
 from pathlib import Path
@@ -15,14 +18,17 @@ HERE = Path(__file__).resolve().parent
 FUR, BELLY, EYE = "#F6C99B", "#FFF6EC", "#343F83"
 COATS = {
     "black": {"fur": "#4A4D63", "belly": "#F4F1FA", "eye": "#F2C14E", "face": "#F4F1FA", "stripe": "#383A4E"},
-    "white": {"fur": "#FCFAF6", "belly": "#FFFFFF", "eye": "#4F78C4", "face": None, "stripe": "#ECE6F4"},
     "grey": {"fur": "#C3C8D6", "belly": "#F3F4F8", "eye": EYE, "face": None, "stripe": "#A6ADBF"},
+    "lavender": {"fur": "#D5C9F4", "belly": "#F7F3FF", "eye": EYE, "face": None, "stripe": "#B7A6EA"},
+    "pink": {"fur": "#F6C3D3", "belly": "#FFF3F6", "eye": EYE, "face": None, "stripe": "#E9A3B9"},
+    "mint": {"fur": "#B9E3CF", "belly": "#F1FBF6", "eye": EYE, "face": None, "stripe": "#93CDB2"},
+    "fairy": {"fur": "#EAE2FC", "belly": "#FFFFFF", "eye": "#4F78C4", "face": None, "stripe": "#D6C9F7"},
 }
 POSES = {   # source pose -> the new files made from it
-    "happy": ["black", "white", "grey"], "wave": ["black", "white", "grey"], "peek": ["black", "white", "grey"],
-    "confused": ["black", "white", "grey"], "sad": ["black", "white"], "moon": ["black", "white"],
-    "laptop": ["black", "white", "grey"], "coffee": ["black", "grey"], "books": ["black", "white"],
-    "detective": ["black", "white"], "trophy": ["black", "white"],
+    "happy": ["black", "grey", "lavender", "pink", "mint"], "wave": ["black", "grey", "lavender", "mint"],
+    "peek": ["black", "grey", "pink", "mint"], "confused": ["black", "grey", "lavender"], "sad": ["black", "lavender", "pink"],
+    "moon": ["black", "lavender", "mint"], "laptop": ["black", "grey", "pink", "mint"], "coffee": ["black", "grey", "pink"],
+    "books": ["black", "lavender", "mint"], "detective": ["black", "lavender"], "trophy": ["black", "pink", "mint"],
 }
 
 
@@ -84,7 +90,7 @@ def main():
             (HERE / f"cat-{name}-{pose}.svg").write_text(out, encoding="utf-8")
             made.append(f"cat-{name}-{pose}.svg")
     # the guide: a white fairy Persian, waving with a wand, cheering, thinking, and peeking
-    white = COATS["white"]
+    white = COATS["fairy"]
     for pose, wand in (("wave", (119, 66)), ("happy", None), ("confused", (103, 47)), ("peek", None)):
         src = recolor((HERE / f"cat-{pose}.svg").read_text(encoding="utf-8"), white)
         out = fairy(src, wand)

@@ -1556,3 +1556,5 @@ input.clock-field::selection{background:transparent}
 .clock-nums text.on{fill:#fff;font-weight:800}
 .clock-hint{text-align:center;font-size:.78rem;color:var(--muted);margin:4px 0 10px}
 .clock-btns{display:flex;align-items:center;gap:8px}
+/* a number that adds itself up (classes held = attended + missed) */
+input.auto-sum{background:var(--surface2) !important;border-style:dashed !important;color:var(--primary-deep);font-weight:700;cursor:default}

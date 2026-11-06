@@ -107,8 +107,8 @@
       const g = e.target.closest?.('[data-g]')?.dataset.g;
       if (!g) return;
       const s = steps[i];
-      if (g === 'ok') {
-        if (s.okAction) await s.okAction();
+      if (g === 'ok' || (g === 'later' && s.laterNext && i < steps.length - 1)) {
+        if (g === 'ok' && s.okAction) await s.okAction();
         if (i < steps.length - 1) { i++; show(); } else finish();
       } else finish();
     });
@@ -124,12 +124,13 @@
   const firstSubject = () => document.querySelector('#nav-subjects .nav-item');
   const semLink = () => document.getElementById('sem-link');
   const semMissing = () => typeof semStart !== 'undefined' && !semStart && !(typeof semEnd !== 'undefined' && semEnd);
+  let afterTour = null;              // something to open once the tour has closed (the semester dialog)
   const semStep = () => ({
     target: semLink, cat: 'cat-fairy-confused',
     title: 'One more thing 📅',
     text: 'When does your semester end? It decides how many classes are left, so your bunk maths comes out right.',
-    ok: 'Set it now', okAction: () => { if (typeof openSemesterDialog === 'function') setTimeout(openSemesterDialog, 240); },
-    later: 'Later'
+    ok: 'Set it now', okAction: () => { afterTour = () => { if (typeof openSemesterDialog === 'function') setTimeout(openSemesterDialog, 260); }; },
+    later: 'Later', laterNext: true
   });
 
   // after an import: the first timetable ever gets the full welcome (once per account); any import that made new
@@ -146,7 +147,7 @@
     const steps = [{
       target: null, cat: 'cat-fairy-happy',
       title: welcome ? 'Your first timetable is in! 🎉' : 'New timetable, who dis? ✨',
-      text: `You're good to go. ${welcome ? 'BunkKro now knows your week' : 'Your week is updated'}${n ? `, and ${n} new subject${n === 1 ? ' is' : 's are'} ready` : ''}. ${n ? 'Let me show you where their attendance goes.' : ''}`,
+      text: `${welcome ? 'BunkKro now knows your week' : 'Your week is updated'}${n ? `, and ${n} new subject${n === 1 ? ' is' : 's are'} ready` : ''}. ${n ? "Let me show you around real quick, it's 30 seconds." : "You're good to go ✨"}`,
       ok: n ? 'Show me' : 'Yay',
       onShow: c => { if (window.BunkFx) setTimeout(() => BunkFx.confetti(c.querySelector('.bg-cat'), welcome ? 22 : 14), 320); }
     }];
@@ -167,20 +168,39 @@
       }, {
         target: () => document.getElementById('form-exact'), cat: 'cat-fairy-peek',
         title: 'Your numbers so far',
-        text: `Type the classes held and the ones you attended, then save.${n > 1 ? ` Same for the other ${n - 1} subject${n === 2 ? '' : 's'}.` : ''} Leave them at 0 if the semester just started.`,
-        ok: 'Got it'
+        text: `Type how many classes you attended and how many you missed so far. The total adds itself up. Then save.${n > 1 ? ` Same for the other ${n - 1} subject${n === 2 ? '' : 's'}.` : ''} Semester just started? Leave them at 0.`,
+        ok: 'Next'
+      }, {
+        target: () => document.querySelector('#edit-card .mode-seg'), cat: 'cat-fairy-confused',
+        title: "Don't know the exact numbers? 🤔",
+        text: 'Pick <strong>⚡ Estimate</strong>: tell BunkKro when the semester started and roughly how many classes you missed, and it works out the rest. <strong>🎯 Official numbers</strong> is for when your college portal shows them.',
+        ok: 'Makes sense'
+      }, {
+        target: () => document.getElementById('sp-chips'), cat: 'cat-fairy-wave',
+        title: 'Quick edits live up here ✏️',
+        text: 'Tap Present, Absent or Target on any subject to change it in a second, no form needed.',
+        ok: 'Nice',
+        okAction: () => { const ed = document.getElementById('edit-card'); if (ed) ed.open = false; }
       });
     }
     if (semMissing()) steps.push(semStep());
-    setTimeout(() => tour(steps), 500);
+    steps.push({
+      target: null, cat: 'cat-fairy-happy',
+      title: "That's it, you're good to go! 🎉",
+      text: 'Mark your classes as they happen and BunkKro keeps the bunk maths for you. Have fun, and bunk wisely 😼',
+      ok: "Let's go",
+      onShow: c => { if (window.BunkFx) setTimeout(() => BunkFx.confetti(c.querySelector('.bg-cat'), 26), 320); }
+    });
+    setTimeout(() => tour(steps, runAfterTour), 500);
   }
+  function runAfterTour() { const f = afterTour; afterTour = null; if (f) f(); }
 
   // something the attendance maths needs is missing: point at it (not during the first-timetable tour, once a day)
   function nudge() {
     if (uid() === 'guest' || live || get('nudge') === today()) return;
     if (typeof subjects === 'undefined' || !subjects.length || !semMissing()) return;
     set('nudge', today());
-    tour([semStep()]);
+    tour([semStep()], runAfterTour);
   }
 
   window.BunkGuide = { tour, afterImport, nudge, close };
