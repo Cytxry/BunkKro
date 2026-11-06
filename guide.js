@@ -168,7 +168,7 @@
       }, {
         target: () => document.getElementById('form-exact'), cat: 'cat-fairy-peek',
         title: 'Your numbers so far',
-        text: `Type how many classes you attended and how many you missed so far. The total adds itself up. Then save.${n > 1 ? ` Same for the other ${n - 1} subject${n === 2 ? '' : 's'}.` : ''} Semester just started? Leave them at 0.`,
+        text: `Type how many classes you attended and missed so far, and if you know it, how many the whole semester has. BunkKro works out what's held, what's left and how many you can still skip. Then save.${n > 1 ? ` Same for the other ${n - 1} subject${n === 2 ? '' : 's'}.` : ''} Semester just started? Leave them at 0.`,
         ok: 'Next'
       }, {
         target: () => document.querySelector('#edit-card .mode-seg'), cat: 'cat-fairy-confused',

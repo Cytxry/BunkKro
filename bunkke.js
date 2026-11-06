@@ -2027,7 +2027,7 @@ function renderSubject(id, preserveSim) {
   const p = pct(s), tgt = getTarget(s), col = pctColor(p, tgt), bk = bunkable(s), nd = needed(s);
  
   document.getElementById('sp-title').textContent = s.name;
-  document.getElementById('sp-meta').textContent = `${s.code||''} · Target: ${tgt}% · ${s.mode==='estimate'?'Estimated':'Exact'} Mode`;
+  document.getElementById('sp-meta').textContent = [s.code, `Target: ${tgt}%`, `${s.mode === 'estimate' ? 'Estimated' : 'Exact'} Mode`].filter(Boolean).join(' · ');
   document.getElementById('sp-name').textContent = s.name;
   document.getElementById('sp-roast').textContent = subjRoast(s);
   document.getElementById('mode-label').innerHTML = s.mode==='estimate'
@@ -2061,7 +2061,7 @@ function renderSubject(id, preserveSim) {
     ? `<button type="button" class="chip ${cls} editable" data-field="${field}" onclick="startChipEdit('${field}')" aria-label="${label}: ${value}. Tap to change"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}${ic('pen','ic-xs chip-pen')}</span><span class="cv">${value}</span></button>`
     : `<div class="chip ${cls}"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}</span><div class="cv">${value}</div></div>`;
   document.getElementById('sp-chips').innerHTML =
-    chip('indigo', 'calendar', 'Total', s.total, null) +             // attended + missed: it adds itself up
+    chip('indigo', 'calendar', 'Held', s.total, null) +              // attended + missed: it adds itself up
     chip('green', 'check', 'Present', s.present, 'present') +
     chip('pink', 'x', 'Absent', s.total - s.present, 'absent') +
     chip('amber', 'target', 'Target', tgt + '%', 'target');
@@ -2076,10 +2076,10 @@ function renderSubject(id, preserveSim) {
   } else if (p >= tgt && bk > 0) {
     pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
     if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
-    // finish % if every safe bunk is used and every other class attended
-    const skipAll = o.left !== null && o.left >= bk ? attPct(s.present + o.left - bk, s.total + o.left) : null;
-    advText = semCopy('advSafe', seed, { bk, tgt }) + statTiles([
-      skipAll !== null ? [skipAll >= tgt ? 'green' : 'pink', 'coffee', `Skip all ${bk}`, o.ab + skipAll + '%'] : ['indigo', 'coffee', 'Bunks left', String(bk)],
+    // right now: bunks before dipping under the target; over the semester: skips that still finish at it
+    const semSkips = semesterSkips(o, tgt);
+    advText = semCopy('advSafe', seed, { bk, tgt }) + semesterSkipsLine(o, tgt) + statTiles([
+      semSkips !== null ? ['green', 'coffee', 'Skips this sem', o.ab + semSkips] : ['indigo', 'coffee', 'Bunks left', String(bk)],
       leftTile(o),
       bestTile(o, tgt, 'Attend all'),
     ]) + remainingNote(o.ri, s);
@@ -2089,7 +2089,10 @@ function renderSubject(id, preserveSim) {
       advText = `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`;
     } else {
       const kind = o.lost ? 'advLost' : o.left === null ? 'advUnknown' : o.tight ? 'advTight' : 'advDoable';
-      advText = semCopy(kind, seed, { tgt }) + statTiles([
+      const room = !o.lost && o.left ? semesterSkips(o, tgt) : null;   // the whole semester can still absorb some misses
+      advText = semCopy(kind, seed, { tgt })
+        + (room ? ` Over the whole semester you can still miss up to <strong>${o.ab}${room}</strong> of the ${o.ab}${o.left} left and finish at ${tgt}%.` : '')
+        + statTiles([
         needTile(o, tgt),
         leftTile(o),
         bestTile(o, tgt, o.lost ? 'Best finish' : 'Finish at'),
@@ -2100,7 +2103,7 @@ function renderSubject(id, preserveSim) {
     advText = (p === tgt
       ? `Literally one absence away from danger. Attend <strong>3–4 more</strong> to build a buffer before even thinking about bunking.`
       : `You're at ${p}%, but skipping even one class drops you below ${tgt}%. Attend <strong>3–4 more</strong> to build a buffer.`)
-      + statTiles([leftTile(o), bestTile(o, tgt, 'Attend all')]) + remainingNote(o.ri, s);
+      + semesterSkipsLine(o, tgt) + statTiles([leftTile(o), bestTile(o, tgt, 'Attend all')]) + remainingNote(o.ri, s);
   }
   document.getElementById('adv-pills').innerHTML = pills;
   document.getElementById('adv-text').innerHTML = advText;
@@ -2147,6 +2150,10 @@ function checkSubjectForm(f, excludeId) {
     const total = f.total ?? 0, present = f.present ?? 0;
     if (present > total) return { error: "Classes missed can't be less than 0.", field: ids.absent || ids.present };
     if (bad(f.perWeek, 0, 30)) return { error: 'That\'s more classes a week than fit in a timetable.', field: ids.perWeek };
+    if (bad(f.semTotal, 1, 5000)) return { error: 'Classes in the whole semester must be a whole number, or leave it blank.', field: ids.semTotal };
+    if (f.semTotal != null && f.semTotal < total) {
+      return { error: `Classes in the whole semester (${f.semTotal}) can't be fewer than the ${total} already held.`, field: ids.semTotal };
+    }
     return { values: { name, total, present, perWeek: f.perWeek ?? 0, target, semTotal: f.semTotal ?? null, mode: 'exact' } };
   }
 
@@ -2188,6 +2195,13 @@ function subjectPreviewHTML(v) {
   html += p >= t
     ? (bk > 0 ? `${bk} safe bunk${bk !== 1 ? 's' : ''} at ${t}%` : `no bunks to spare at ${t}%`)
     : (isFinite(nd) ? `attend the next ${nd} to reach ${t}%` : `${t}% can't be reached anymore`);
+  // the whole semester known: what's left, and how it can end
+  if (v.semTotal && v.semTotal >= v.total) {
+    const left = v.semTotal - v.total, spare = v.present + left - Math.ceil(t / 100 * v.semTotal);
+    html += `<br>${nWord(left, 'class', 'classes')} left this semester: ` + (left === 0 ? 'that was the last one.'
+      : spare >= 0 ? `skip up to <strong>${spare}</strong> of them and you still end at ${t}%.`
+        : `even attending all of them, you'd end at <strong>${Math.floor((v.present + left) / v.semTotal * 100)}%</strong>.`);
+  }
   return html;
 }
 
@@ -2435,6 +2449,8 @@ function saveSemesterDialog() {
 function remainingInfo(s) {
   const end = semEndInfo();
   const today = getLocalDateString();
+  // the student typed how many classes the whole semester has: that's what's left, whatever the dates say
+  if (s.semTotal && s.semTotal >= s.total) return { n: s.semTotal - s.total, est: false, guess: false };
   // an estimated last day already behind us says nothing (the semester ran longer than the usual length)
   if (end && !(end.estimated && end.date < today) && timetable.some(t => t.subjectId === s.id && !t.isBreak)) {
     if (end.date < today) return { n: 0, est: false, guess: false };
@@ -2495,6 +2511,16 @@ function outlook(s, tgt, skip = 0) {
            lost: need > 0 && (!isFinite(need) || (left !== null && need > left)),
            tight: isFinite(need) && left !== null && need > 0 && need <= left && need > 0.8 * left };
 }
+// Skips spread over the rest of the semester that still finish at the target (null when what's left is unknown)
+function semesterSkips(o, tgt) {
+  if (o.left === null) return null;
+  return Math.max(0, o.present + o.left - Math.ceil(tgt / 100 * (o.total + o.left)));
+}
+function semesterSkipsLine(o, tgt) {
+  const n = semesterSkips(o, tgt);
+  if (n === null || o.left === 0) return '';
+  return ` Across the rest of the semester you can skip up to <strong>${o.ab}${n}</strong> of the ${o.ab}${o.left} left and still finish at ${tgt}%.`;
+}
 // The numbers as mini stat tiles, the same family as the Total / Present / Target chips: [color, icon, label, value]
 function statTiles(items) {
   const xs = items.filter(Boolean);
@@ -2544,11 +2570,11 @@ function readEditForm(s) {
     target: numField(est ? 'inp-est-target' : 'inp-target'),
     semStart: textField('inp-semstart'),
     missed: numField('inp-est-absent'),
-    semTotal: est ? numField('inp-est-semtotal') : (s.semTotal ?? null),
+    semTotal: numField(est ? 'inp-est-semtotal' : 'inp-semtotal'),
     ids: {
       name: 'inp-subject-name', total: 'inp-total', present: 'inp-present', absent: 'inp-absent',
       perWeek: 'edit-days', target: est ? 'inp-est-target' : 'inp-target',
-      semStart: 'inp-semstart', missed: 'inp-est-absent', semTotal: 'inp-est-semtotal',
+      semStart: 'inp-semstart', missed: 'inp-est-absent', semTotal: est ? 'inp-est-semtotal' : 'inp-semtotal',
     },
   };
 }
@@ -2569,6 +2595,8 @@ function fillEditForm(s) {
   set('inp-est-absent', s.total - s.present);
   set('inp-est-target', s.target || '');
   set('inp-est-semtotal', s.semTotal || '');
+  set('inp-semtotal', s.semTotal || '');
+  showClassesLeft();
   const body = document.querySelector('#edit-card .edit-body');
   if (body && !body.dataset.wired) {
     body.dataset.wired = '1';
@@ -2589,9 +2617,19 @@ function onEditInput(e) {
     const sum = (Number.isInteger(present) ? present : 0) + (Number.isInteger(absent) ? absent : 0);
     document.getElementById('inp-total').value = Number.isInteger(present) || Number.isInteger(absent) ? sum : '';
   }
+  showClassesLeft();
   e.target.classList.remove('invalid');
   e.target.removeAttribute('aria-invalid');
   updateEditPreview();
+}
+
+// "Classes left" = the whole semester's classes - the ones held so far (Official numbers)
+function showClassesLeft() {
+  const out = document.getElementById('inp-left');
+  if (!out) return;
+  const sem = numField('inp-semtotal'), held = numField('inp-total') || 0;
+  out.value = !Number.isInteger(sem) ? '' : sem < held ? `fewer than the ${held} held?` : nWord(sem - held, 'class', 'classes');
+  out.classList.toggle('invalid', Number.isInteger(sem) && sem < held);
 }
 
 function setEditMode(m) {
@@ -3051,7 +3089,7 @@ async function obFinish() {
 function openAddModal() {
   const ov = document.getElementById('add-overlay');
   ov.classList.add('show');
-  ['as-name','as-total','as-present','as-absent','as-missed','as-target','as-semtotal'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['as-name','as-total','as-present','as-absent','as-missed','as-target','as-semtotal','as-semtotal-x'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   setDayPicker('as-days', emptyDays());
   setUpto('as-upto', 'today');
   showUpto('as-upto', false);
@@ -3063,6 +3101,11 @@ function openAddModal() {
       if (e.target.id === 'as-present' || e.target.id === 'as-absent') {   // classes held = attended + missed
         const p = numField('as-present'), a = numField('as-absent');
         document.getElementById('as-total').value = Number.isInteger(p) || Number.isInteger(a) ? (p || 0) + (a || 0) : '';
+      }
+      const sem = numField('as-semtotal-x'), held = numField('as-total') || 0, left = document.getElementById('as-left');
+      if (left) {
+        left.hidden = !Number.isInteger(sem) || sem < held;
+        left.textContent = Number.isInteger(sem) && sem >= held ? `${nWord(sem - held, 'class', 'classes')} left this semester` : '';
       }
       // Typed a name that's already in the timetable (e.g. from a scan)? Pre-pick its days.
       if (e.target.id === 'as-name' && !dayPickers['as-days']?.touched) {
@@ -3103,8 +3146,8 @@ function readAddForm() {
     target: numField('as-target'),
     semStart: textField('as-semstart'),
     missed: numField('as-missed'),
-    semTotal: est ? numField('as-semtotal') : null,
-    ids: { name: 'as-name', total: 'as-total', present: 'as-present', absent: 'as-absent', perWeek: 'as-days', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: 'as-semtotal' },
+    semTotal: numField(est ? 'as-semtotal' : 'as-semtotal-x'),
+    ids: { name: 'as-name', total: 'as-total', present: 'as-present', absent: 'as-absent', perWeek: 'as-days', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: est ? 'as-semtotal' : 'as-semtotal-x' },
   };
 }
 function updateAddPreview() {
