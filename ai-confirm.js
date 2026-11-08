@@ -196,9 +196,38 @@
     return [...timetable.filter(s => s.isUnknown && !s.isBreak).sort(order), ...timetable.filter(isUnsure).sort(order)];
   }
 
-  function checkNext() {
+  // A time with nothing printed on any day (often lunch): asked once for the whole row, not once per day. Still
+  // asked: an unread area never silently becomes free.
+  const askedRows = new Set();
+  function emptyRow(slot) {
+    if (!slot || !slot.isUnknown || !slot.startTime) return null;
+    const key = `${slot.startTime}-${slot.endTime}`;
+    if (askedRows.has(key)) return null;
+    const same = timetable.filter(s => s.isUnknown && !s.isBreak && `${s.startTime}-${s.endTime}` === key);
+    const days = new Set(same.map(s => s.day));
+    const clash = timetable.some(s => !s.isUnknown && !s.isBreak && days.has(s.day) && s.startTime &&
+      s.startTime < (slot.endTime || slot.startTime) && slot.startTime < (s.endTime || s.startTime));
+    return days.size >= 3 && !clash ? { key, same } : null;
+  }
+
+  async function checkNext() {
     const next = flagged()[0];
     if (!next) { walk = 0; return render(); }
+    const row = emptyRow(next);
+    if (row && typeof askDialog === 'function') {
+      askedRows.add(row.key);
+      const free = await askDialog({ title: `Nothing is printed at ${row.key.replace('-', '–')} on any day`,
+        message: 'Is that free time for you, like lunch?', ok: 'Yes, it\'s free', cancel: 'No, check each day',
+        cat: 'cat-calendar' });
+      if (free) {
+        const gone = new Set(row.same.map(s => s.id));
+        timetable = timetable.filter(s => !gone.has(s.id));
+        if (typeof saveTimetableToStorageAndDB === 'function') saveTimetableToStorageAndDB();
+        if (typeof renderAll === 'function') renderAll();
+        if (typeof toast === 'function') toast(`Marked free on ${row.same.length} days 🌿`);
+        return checkNext();
+      }
+    }
     walk = Date.now();
     const card = document.querySelector(`.tt-slot-card[data-slot-id="${next.id}"]`);
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
