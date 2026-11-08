@@ -1165,7 +1165,9 @@ let roundMode = ROUND_MODES.includes(localStorage.getItem('bk_round')) ? localSt
 let semStart = localStorage.getItem('bk_sem_start') || '';
 // Day Order colleges (day-order.js): the timetable's days are Day 1 .. Day N, and the college calendar says which Day
 // a date is. null = an ordinary weekly timetable (Monday .. Sunday).
-let dayCycle = (() => { try { return JSON.parse(localStorage.getItem('bk_day_cycle') || 'null'); } catch (e) { return null; } })();
+// Parked on 9 Nov (the owner prefers Monday .. Sunday): it is always off, and a setting saved earlier is cleared.
+let dayCycle = null;
+try { localStorage.removeItem('bk_day_cycle'); } catch (e) { /* private mode */ }
 let examDate = localStorage.getItem('bk_exam_date') || '';
 let semEnd = localStorage.getItem('bk_sem_end') || '';   // last day of classes
 // Semester length in weeks, used to estimate the last day of classes when the student only knows the first day
@@ -1235,11 +1237,7 @@ function applyPrefsFromAccount() {
   if (typeof p.semEnd === 'string' && (p.semEnd === '' || DATE_RE.test(p.semEnd))) semEnd = p.semEnd;
   if (Number.isInteger(p.semWeeks) && p.semWeeks >= 8 && p.semWeeks <= 30) semWeeks = p.semWeeks;
   localStorage.setItem('bk_sem_weeks', semWeeks);
-  if (p.dayCycle === null || (p.dayCycle && window.BunkDayOrder && !BunkDayOrder.problems(p.dayCycle).length)) {
-    dayCycle = p.dayCycle;
-    localStorage.setItem('bk_day_cycle', JSON.stringify(dayCycle));
-    applyDayLabels();
-  }
+  if (p.dayCycle) schedulePrefsSync();          // Day Order is parked: an account that had it on is switched back
   const cu = currentUser?.user_metadata?.bk_counted_upto;
   if (cu && typeof cu === 'object') {
     countedUpTo = {};
@@ -4043,11 +4041,6 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
                       created: subjects.filter(s => !hadSubjects.has(s.id)).map(s => s.id) } });
       renderAll();                                   // the sidebar too: old subjects may be gone
       setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
-      // a Day 1 .. Day N timetable: which Day each date is comes from the college calendar, set up now
-      if (res.dayOrder && !dayOrderOn()) {
-        const n = Math.max(2, ...slots.map(s => s.day || 0));
-        setTimeout(() => openDayOrderSetup({ length: n }), 1500);
-      }
       setTimeout(() => {
         if (progressBox) progressBox.style.display = 'none';
         const dropzone = document.getElementById('tt-dropzone');

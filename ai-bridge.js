@@ -251,22 +251,22 @@
     const started = await call('POST', '/scan?filename=' + encodeURIComponent(file.name || 'upload.png'), file);
     if (!started.ok) throw new Error(started.error || 'the AI did not accept this file');
     await waitForJob(started.job, onPhase);
-    // dayorder=1: the site has a Day Order calendar (day-order.js), so a Day 1 .. Day N timetable can be imported
-    let res = await call('GET', `/result?job=${started.job}&dayorder=1`);
-    const usable = res.choices || [];
+    // Day Order timetables are refused (Day Order is parked on the site): the server prefers a weekday timetable
+    let res = await call('GET', `/result?job=${started.job}`);
+    const usable = (res.choices || []).filter(c => !c.day_order);
     if (res.job && usable.length > 1) {        // several timetables: one per class, year or page
       onPhase && onPhase('fusion', 82, 'This file holds several timetables: choose yours...');
       const file2 = await choose('Which timetable is yours?', 'This file holds several timetables (one per class, year or page).',
         usable.map(c => ({ label: choiceLabel(c), value: c.file })), 'Use this timetable');
       if (file2 === null) throw cancelled('No timetable chosen');
-      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(file2)}&dayorder=1`);
+      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(file2)}`);
     }
     if (!res.ok && res.needs_track) {
       onPhase && onPhase('fusion', 85, 'Several class rows per day: choose yours...');
       const track = await choose('Which row is yours?', 'This timetable prints several class rows per day (sections or batches). Pick yours.',
         res.tracks.map(t => ({ label: t, value: t })), 'Use this row');
       if (track === null) throw cancelled('No class row chosen');
-      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}&track=${encodeURIComponent(track)}&dayorder=1`);
+      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}&track=${encodeURIComponent(track)}`);
     }
     if (!res.ok) {
       const err = new Error(res.error || 'The AI could not read this timetable');
@@ -358,8 +358,9 @@
                  data-code="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
             </div>
             ${f.subjects.length > 1 ? `<details style="margin-top:6px"><summary style="font-size:.74rem;color:var(--muted);cursor:pointer">Different batch for some subjects?</summary>
-              ${f.subjects.map(sub => `<label style="display:flex;justify-content:space-between;gap:8px;font-size:.78rem;margin-top:6px">${escapeHtml(sub)}
-                <select data-fam="${i}" data-subject="${escapeHtml(sub)}"><option value="">same as above</option>
+              ${f.subjects.map(sub => `<label style="display:grid;grid-template-columns:minmax(0,38%) 1fr;align-items:center;gap:10px;font-size:.8rem;font-weight:700;margin-top:8px">
+                <span style="overflow-wrap:anywhere">${escapeHtml(sub)}</span>
+                <select data-fam="${i}" data-subject="${escapeHtml(sub)}" style="width:100%;min-width:0"><option value="">same as above</option>
                 ${f.codes.map(c => `<option>${escapeHtml(c)}</option>`).join('')}</select></label>`).join('')}
             </details>` : ''}
           </div>`).join('')}
