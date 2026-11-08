@@ -342,11 +342,14 @@
     if (!els.length) return;
     if (!enabled()) { els.forEach(el => { el.innerHTML = ''; }); return; }   // visitors see the upload card as before
     const up = await isAvailable(force);
+    // the on/off pill is a developer aid: only on this computer (localhost), never on the live site
+    const devHost = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    const input = document.getElementById('tt-file-input');
+    if (input) input.accept = up ? 'image/png, image/jpeg, image/jpg, image/webp, application/pdf' : 'image/png, image/jpeg, image/jpg';
+    if (!devHost) { els.forEach(el => { el.innerHTML = ''; }); return; }
     els.forEach(el => { el.innerHTML = up
       ? '<span class="pill" title="Reads PDFs, photos and scans on this computer">✨ BunkKro AI on · PDFs &amp; scans welcome</span>'
       : '<span class="pill w" title="Double-click start_bunkkro_ai.bat in the BunkKro-AI folder, then upload again">BunkKro AI off · photos use the built-in scanner</span>'; });
-    const input = document.getElementById('tt-file-input');
-    if (input) input.accept = up ? 'image/png, image/jpeg, image/jpg, image/webp, application/pdf' : 'image/png, image/jpeg, image/jpg';
   }
 
   // why a class is marked "worth a look", in a few words (the popup's quick check)
