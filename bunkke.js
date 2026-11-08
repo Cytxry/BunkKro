@@ -596,6 +596,35 @@ window.location.reload();
 }
 
 // Logout
+// "Delete all my data": every row of the student's in every table (row-level security limits each delete to their
+// own rows), the AI import records and shared fixes, the semester settings kept with the account, and this
+// device's copy. The login itself stays (deleting an account needs the server, see the privacy notes); the student
+// is told so. Children are deleted before parents, and every table is reported, so a failure is never hidden.
+async function deleteAllMyData() {
+  if (!currentUser) return;
+  const ok = await askDialog({ title: 'Delete all your data?',
+    message: 'Your subjects, attendance, timetable, holidays and AI imports are deleted for good, on every device. ' +
+      'This cannot be undone. Type DELETE to confirm.',
+    ok: 'Delete everything', danger: true, cat: 'cat-worried', input: { label: 'Type DELETE', placeholder: 'DELETE' } });
+  if (typeof ok !== 'string' || ok.trim() !== 'DELETE') { if (ok) toast('Nothing deleted: type DELETE to confirm'); return; }
+  const uid = currentUser.id;
+  const tables = ['timetable_feedback', 'timetable_imports', 'daily_period_logs', 'tracker_logs', 'timetable_exceptions',
+                  'timetable_entries', 'timetables', 'subjects'];
+  const failed = [];
+  for (const t of tables) {
+    const { error } = await supabaseClient.from(t).delete().eq('user_id', uid);
+    if (error && !/42P01|PGRST20[25]/.test(error.code || '')) failed.push(t);
+  }
+  try { await supabaseClient.auth.updateUser({ data: { bk_prefs: null, bk_counted_upto: null } }); } catch (e) { failed.push('settings'); }
+  Object.keys(localStorage).filter(k => k.startsWith('bk_') && !['bk_theme'].includes(k)).forEach(k => localStorage.removeItem(k));
+  subjects = []; timetable = []; trackerLog = {}; dailyPeriodLogs = {}; dateExceptions = {}; countedUpTo = {}; dayCycle = null;
+  timetableMeta = { id: null, title: 'Weekly Timetable', showSunday: false };
+  renderAll();
+  if (failed.length) toast(`Some data could not be deleted (${failed.join(', ')}). Please try again.`, 'err');
+  else await askDialog({ title: 'Your data is deleted', message: 'Everything you stored in BunkKro is gone, on every ' +
+    'device. Your login (email and password) still exists, with nothing in it; you can log out now.', ok: 'OK', cancel: '', cat: 'cat-wave' });
+}
+
 async function handleLogout() {
   if (!(await askDialog({ title: 'Log out?', message: "You'll need your email and password to log back in.", ok: 'Log out', cat: 'cat-wave' }))) return;
   
@@ -635,6 +664,7 @@ async function handleLogout() {
 function showAuthModal() {
   document.getElementById('auth-overlay').classList.add('show');
   document.getElementById('logout-btn').style.display = 'none';
+  document.getElementById('delete-data-btn').style.display = 'none';
   toggleProfileMenu(false);
 }
 
@@ -670,6 +700,7 @@ let appLoading = null;     // in-flight load, shared by concurrent callers
 function showApp() {
   document.getElementById('auth-overlay').classList.remove('show');
   document.getElementById('logout-btn').style.display = 'flex';
+  document.getElementById('delete-data-btn').style.display = 'flex';
   renderProfile();
   const uid = currentUser?.id;
   if (!uid) return Promise.resolve();
