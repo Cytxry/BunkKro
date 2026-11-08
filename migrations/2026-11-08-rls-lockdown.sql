@@ -32,8 +32,10 @@ CREATE POLICY "bk own tracker delete" ON tracker_logs FOR DELETE USING (auth.uid
 
 ALTER TABLE "Subjects_backup" ENABLE ROW LEVEL SECURITY;   -- no policy: closed to the browser keys
 
--- the UPDATE policies of the original tables (schema-migrations.sql) only had USING: add WITH CHECK, so a row can't
--- be moved to another user_id by an update
+-- the UPDATE policies of the original tables (schema-migrations.sql) only have USING. (Corrected 9 Nov: that is NOT
+-- a hole by itself. Without WITH CHECK, Postgres checks the new row against USING too, so a row still can't be moved
+-- to another user_id. The explicit WITH CHECK only makes it visible. What does matter is any other, broader
+-- permissive policy on the same table: see block 7 of the audit and 2026-11-09-restrictive-ownership.sql.)
 DROP POLICY IF EXISTS "Users can update their own timetables" ON timetables;
 CREATE POLICY "Users can update their own timetables" ON timetables FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "Users can update their own timetable entries" ON timetable_entries;

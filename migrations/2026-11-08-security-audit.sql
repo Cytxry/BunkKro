@@ -36,3 +36,14 @@ where n.nspname = 'public' order by p.prosecdef desc, p.proname;
 
 -- 6. Storage buckets: public = true means anyone with the URL can download the files.
 select id, name, public from storage.buckets;
+
+-- 7. The EFFECTIVE rule for each command (added 9 Nov). Permissive policies are OR-ed, restrictive ones AND-ed; an
+--    UPDATE / INSERT policy without WITH CHECK checks the new row with its USING expression. Good: on every user
+--    table, every permissive row here mentions auth.uid() = user_id (none is "true"), and once
+--    2026-11-09-restrictive-ownership.sql has run, a restrictive "bk restrict own rows" row exists for ALL.
+select tablename, cmd, permissive, policyname,
+       qual as rows_it_can_see_or_change,
+       coalesce(with_check, qual) as new_rows_must_satisfy,
+       (coalesce(qual, '') || coalesce(with_check, '')) !~ 'auth\.uid\(\)' as does_not_check_the_user
+from pg_policies where schemaname = 'public'
+order by tablename, cmd, permissive desc;

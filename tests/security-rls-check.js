@@ -1,7 +1,10 @@
 /* BunkKro cross-account security check (M10.1, M10.6).
  *
- * Run it SIGNED IN on your site (local or live), in the browser console:
- *     await (0, eval)(await (await fetch('tests/security-rls-check.js')).text())
+ * Run it SIGNED IN on your site (local or live), in the browser console. The site's Content-Security-Policy refuses
+ * eval, so load it as a script:
+ *     const s = document.createElement('script'); s.src = 'tests/security-rls-check.js'; document.body.append(s);
+ *     await new Promise(r => s.onload = r); await window.__rlsCheck
+ * (tests/ is not deployed: run it on a local copy signed in to the real project, e.g. http://localhost:5520)
  * It only reads, plus one write that MUST be refused (a row for another user id, which doesn't exist). A pass needs
  * Postgres's row-level-security refusal (42501), not just any error: user_id links to real accounts, so a made-up id
  * fails that link even with RLS off. If a write is wrongly accepted, it is undone at once and reported as a FAIL.
@@ -9,7 +12,7 @@
  * UPDATE/DELETE policies and their WITH CHECK are checked by migrations/2026-11-08-security-audit.sql instead).
  * Returns { passed, failed, results }. Every FAIL is a security problem to fix before going public.
  */
-(async () => {
+window.__rlsCheck = (async () => {
   if (!currentUser) throw new Error('Sign in first: this checks what YOUR account can and cannot reach.');
   const me = currentUser.id, stranger = crypto.randomUUID();
   const results = [];
