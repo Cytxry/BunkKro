@@ -1558,3 +1558,9 @@ input.clock-field::selection{background:transparent}
 .clock-btns{display:flex;align-items:center;gap:8px}
 /* a number that adds itself up (classes held = attended + missed) */
 input.auto-sum{background:var(--surface2) !important;border-style:dashed !important;color:var(--primary-deep);font-weight:700;cursor:default}
+/* held so far / classes left: one plain line (forms and the subject card) */
+.form-sum{grid-column:1/-1;margin:2px 0 4px;padding:9px 12px;border-radius:12px;background:var(--surface2);color:var(--text2);font-size:.85rem;font-weight:600}
+.form-sum:empty{display:none}
+.form-sum.is-error{background:var(--danger-bg);color:var(--danger)}
+.sp-held{margin:10px 2px 0;font-size:.82rem;color:var(--text2);font-weight:600}
+.sp-held:empty{display:none}

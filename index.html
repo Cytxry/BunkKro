@@ -220,13 +220,14 @@
         <h3 id="sp-name"></h3>
         <p class="circ-roast" id="sp-roast"></p>
         <div class="chips" id="sp-chips"></div>
+        <p class="sp-held" id="sp-held"></p>
       </div>
       <img class="circ-illus" id="sp-cat" src="assets/cat-books.svg" alt="">
     </div>
 
     <div class="subj-grid">
       <div class="adv-card adv-advisor">
-        <h4><span class="h-orb lavender">🤖</span> Bunk Advisor <span class="h-sub">what's safe right now</span></h4>
+        <h4><span class="h-orb lavender">🤖</span> Bunk Advisor <span class="h-sub" id="adv-sub">what's safe right now</span></h4>
         <div id="adv-pills"></div>
         <div class="adv-text" id="adv-text"></div>
         <div class="adv-cat-wrap">
@@ -275,9 +276,9 @@
         <div id="form-exact" class="edit-grid">
           <div class="field"><label for="inp-present">Classes attended <span class="field-hint">(so far)</span></label><input type="number" id="inp-present" placeholder="e.g. 30" min="0" inputmode="numeric"></div>
           <div class="field"><label for="inp-absent">Classes missed <span class="field-hint">(so far)</span></label><input type="number" id="inp-absent" placeholder="e.g. 4" min="0" inputmode="numeric"></div>
-          <div class="field"><label for="inp-total">Classes held so far <span class="field-hint">(adds itself up)</span></label><input type="number" id="inp-total" class="auto-sum" placeholder="0" min="0" readonly tabindex="-1"></div>
-          <div class="field"><label for="inp-semtotal">Classes in the whole semester <span class="field-hint">(optional, from your syllabus or portal)</span></label><input type="number" id="inp-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
-          <div class="field"><label for="inp-left">Classes left <span class="field-hint">(works itself out)</span></label><input type="text" id="inp-left" class="auto-sum" placeholder="add the semester's classes" readonly tabindex="-1"></div>
+          <input type="hidden" id="inp-total">
+          <div class="field"><label for="inp-semtotal">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label><input type="number" id="inp-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
+          <p class="form-sum" id="inp-left" aria-live="polite"></p>
           <div class="field"><label for="inp-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
         </div>
         <div class="upto" id="edit-upto" hidden>
@@ -293,7 +294,7 @@
             <div class="field"><label for="inp-est-absent">Classes missed so far</label><input type="number" id="inp-est-absent" placeholder="e.g. 5" min="0" inputmode="numeric"></div>
             <div class="field"><label for="inp-est-target">Target % <span class="field-hint">(blank = global)</span></label><input type="number" id="inp-est-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
             <div class="field">
-              <label for="inp-est-semtotal">Classes this semester <span class="field-hint">(optional)</span></label>
+              <label for="inp-est-semtotal">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label>
               <input type="number" id="inp-est-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">
             </div>
           </div>
@@ -894,11 +895,9 @@
         <div class="mf"><label for="as-present">Classes attended <span class="field-hint">(so far)</span></label><input type="number" id="as-present" placeholder="e.g. 32" min="0" inputmode="numeric"></div>
         <div class="mf"><label for="as-absent">Classes missed <span class="field-hint">(so far)</span></label><input type="number" id="as-absent" placeholder="e.g. 4" min="0" inputmode="numeric"></div>
       </div>
-      <div class="form-grid-2">
-        <div class="mf"><label for="as-total">Classes held so far <span class="field-hint">(adds itself up)</span></label><input type="number" id="as-total" class="auto-sum" placeholder="0" min="0" readonly tabindex="-1"></div>
-        <div class="mf"><label for="as-semtotal-x">Classes in the whole semester <span class="field-hint">(optional)</span></label><input type="number" id="as-semtotal-x" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
-      </div>
-      <p class="field-tip" id="as-left" hidden></p>
+      <input type="hidden" id="as-total">
+      <div class="mf"><label for="as-semtotal-x">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label><input type="number" id="as-semtotal-x" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
+      <p class="form-sum" id="as-left" hidden></p>
       <div class="upto" id="as-upto" hidden>
         <span>Do these numbers already include <strong>today's</strong> class?</span>
         <div class="mini-seg" role="radiogroup" aria-label="Numbers include today's class">
@@ -913,7 +912,7 @@
       <div class="mf"><label for="as-semstart">Semester start date <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="as-semstart"></div>
       <div class="mf"><label for="as-missed">Classes missed so far</label><input type="number" id="as-missed" placeholder="0" min="0" inputmode="numeric"></div>
       <div class="mf">
-        <label for="as-semtotal">Classes in the whole semester <span class="field-hint">(optional — for the end-of-sem projection)</span></label>
+        <label for="as-semtotal">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label>
         <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">
       </div>
     </div>

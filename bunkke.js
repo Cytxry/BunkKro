@@ -1058,10 +1058,16 @@ const semB = x => '<strong>' + x + '</strong>';
 const nWord = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const SEM_COPY = {
   advSafe: [
-    d => `You can skip ${semB(d.bk + ' more')} and still stay above ${d.tgt}%. Space them out — never two in a row.`,
+    d => `You can skip ${semB(d.bk + ' more')} and still stay above ${d.tgt}%.`,
     d => `${semB(d.bk)} bunk${d.bk !== 1 ? 's' : ''} in the bank. Spend wisely, not all on Mondays.`,
     d => `Comfy zone: ${semB(d.bk + ' class' + (d.bk !== 1 ? 'es' : ''))} to spare before ${d.tgt}%. Save some for emergencies.`,
     d => `You've got room for ${semB(d.bk)} more skip${d.bk !== 1 ? 's' : ''}. Nap responsibly.`,
+  ],
+  // the semester's classes left are known: bunks spread over all of them (any order), finishing at the target
+  advSafeSem: [
+    d => `You can miss ${semB(d.ab + d.bk)} of the ${d.ab}${d.left} classes left and still finish at ${d.tgt}%.`,
+    d => `${semB(d.ab + d.bk)} bunk${d.bk !== 1 ? 's' : ''} for the rest of the semester, and you still finish at ${d.tgt}%.`,
+    d => `Room for ${semB(d.ab + d.bk)} skip${d.bk !== 1 ? 's' : ''} before the semester ends. ${d.tgt}% stays safe.`,
   ],
   advLost: [
     d => `Khel khatam for ${d.tgt}% this semester — but every class still lifts your final number. Show up and talk condonation early.`,
@@ -1208,8 +1214,43 @@ function applyPrefsFromAccount() {
 function attPct(present, total) { return total > 0 ? Math.floor(present * 100 / total) : 0; }
 function pct(s) { return attPct(s.present, s.total); }
 function getTarget(s) { return s?.target || globalTarget; }
-// Integer-first ordering avoids float error (e.g. 29/50*100 = 57.999…).
-function bunkable(s) { return Math.max(0, Math.floor(s.present * 100 / getTarget(s)) - s.total); }
+// ── Bunks: ONE calculation for every view (Home, subject list, Daily Classes, Safe Bunks, Am I Cooked, Bunk
+// Advisor, Bunk Simulator). A bunk is a class you can miss and still meet your target:
+//   * the semester's classes left are known (a total you typed, or your last day of classes): bunks are spread over
+//     everything left, in any order, and you still finish at or above the target;
+//   * otherwise only what is certain: the next classes you could miss in a row and still be at or above it now.
+// Integer maths throughout (29/50*100 = 57.999… in floats).
+function attendNeeded(t, n) { return Math.floor((t * n + 99) / 100); }            // fewest attended of n for t%
+function bunkableNow(s, t = getTarget(s)) { return Math.max(0, Math.floor(s.present * 100 / t) - s.total); }
+function bunkPlan(s, t = getTarget(s)) {
+  const ri = remainingInfo(s);
+  const known = !!ri && !ri.guess;                     // a guessed semester length is not enough to plan bunks on
+  const left = ri ? ri.n : null;
+  const sem = left !== null ? s.total + left : null;   // classes in the whole semester
+  const must = sem !== null ? attendNeeded(t, sem) : null;
+  const reachable = sem !== null ? s.present + left >= must : null;
+  return {
+    t, ri, known, left, sem, reachable, ab: ri?.est ? '~' : '',
+    now: left !== null ? Math.min(bunkableNow(s, t), left) : bunkableNow(s, t),          // in a row, from now
+    semBunks: sem !== null ? Math.max(0, Math.min(left, s.present + left - must)) : null, // spread over what's left
+    mustAttend: sem !== null ? Math.min(left, Math.max(0, must - s.present)) : null,      // of the classes left
+    finishAll: sem ? attPct(s.present + left, sem) : null,                                // attend every class left
+    get bunks() { return this.known ? this.semBunks : this.now; },                         // the number every view shows
+  };
+}
+function bunkable(s) { return bunkPlan(s).bunks; }
+// Classes to attend in a row before one bunk is safe again (at or just under the target, semester unknown)
+function bufferIn(s, t = getTarget(s)) {
+  if (t >= 100) return Infinity;
+  return Math.max(1, Math.ceil((t * (s.total + 1) - 100 * s.present) / (100 - t)));
+}
+// What a subject below its target needs, in words: "attend 12 of 19 left" / "need 4 in a row" / "can't reach 75%"
+function needText(s) {
+  const b = bunkPlan(s), t = b.t;
+  if (b.known) return b.reachable ? `attend ${b.mustAttend} of ${b.left} left` : `can't reach ${t}%`;
+  const n = needed(s);
+  return isFinite(n) ? `need ${n} in a row` : `can't reach ${t}%`;
+}
 function needed(s, tgt) {
   const t = tgt ?? getTarget(s);
   if (pct(s) >= t) return 0;
@@ -1500,7 +1541,7 @@ function renderHome() {
   const safeSubs = subjects.filter(x => bunkable(x) > 0);
   const safeSub = safeBunks <= 0 ? 'you are cooked. attend.'
     : safeSubs.length === 1 ? `only in ${escapeHTML(safeSubs[0].name)}`
-    : atRisk.length ? `across ${nWord(safeSubs.length, 'subject')} — not the risky ones` : 'go ahead, skip something';
+    : atRisk.length ? `across ${nWord(safeSubs.length, 'subject')}${safeSubs.some(isAtRisk) ? ', by the end of the sem' : ' — not the risky ones'}` : 'go ahead, skip something';
   document.getElementById('stats-grid').innerHTML = `
     <div class="sc tone-${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">
       <div class="sc-top"><span class="sc-chip ${ovCls === 'good' ? 'green' : ovCls === 'warn' ? 'amber' : 'pink'}">${ic('trend','ic-sm')}</span><span class="sc-lbl">Overall attendance</span></div>
@@ -1540,7 +1581,7 @@ function renderHome() {
       <span class="subj-card-right">
         <span class="subj-card-pct" style="color:${subjTextColor(s)}">${subjPctText(s)}</span>
         <span class="status-pill ${st.cls}">${st.label}</span>
-        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:(risk?(isFinite(needed(s))?`need ${needed(s)} more`:'can\'t reach target'):hasClasses(s)?'0 bunks left':'mark your first class')}</span>
+        <span class="subj-card-bunk">${bk>0?`${bk} bunk${bk!==1?'s':''} left`:(risk?needText(s):hasClasses(s)?'0 bunks left':'mark your first class')}</span>
       </span>
       <span class="subj-chev">${ic('chevron-right','ic-sm')}</span>
     </button>`;
@@ -1616,8 +1657,8 @@ function anyPopoverOpen() { return Object.keys(POPOVERS).some(id => !document.ge
 // ── Safe Bunks dialog: same source of truth as the card (bunkable()/getTarget()) ──
 function openSafeBunks() {
   const rows = subjects.map((s, i) => ({ s, i, p: pct(s), tgt: getTarget(s), bk: bunkable(s) }));
-  const eligible = rows.filter(r => r.s.total > 0 && r.p >= r.tgt).sort((a, b) => b.bk - a.bk || b.p - a.p);
-  const below = rows.filter(r => r.s.total > 0 && r.p < r.tgt).length;
+  const eligible = rows.filter(r => r.bk > 0).sort((a, b) => b.bk - a.bk || b.p - a.p);   // same sum as the Home card
+  const below = rows.filter(r => r.s.total > 0 && r.bk === 0 && r.p < r.tgt).length;
   const noData = rows.filter(r => !(r.s.total > 0)).length;
   const total = rows.reduce((a, r) => a + r.bk, 0);
 
@@ -1630,7 +1671,7 @@ function openSafeBunks() {
   document.getElementById('sb-title').innerHTML = `<span style="color:${cls}">${escapeHTML(title)}</span>`;
   const extra = [below ? `${below} below target` : '', noData ? `${noData} with no classes yet` : ''].filter(Boolean).join(' · ');
   document.getElementById('sb-msg').textContent = eligible.length
-    ? `Skip these and you still stay at or above each subject's target.${extra ? ` (${extra} — not listed.)` : ''}`
+    ? `Skip these and you still meet each subject's target${eligible.some(r => bunkPlan(r.s).known) ? ' by the end of the semester' : ''}.${extra ? ` (${extra} — not listed.)` : ''}`
     : `No subject has room to skip right now.${extra ? ` (${extra}.)` : ''} Attend a few to build a buffer.`;
   document.getElementById('sb-breakdown').innerHTML = eligible.map(r => `
     <button class="cooked-row safe-row" onclick="closeSafeBunks(); goPage('subject','${r.s.id}')">
@@ -1877,7 +1918,9 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
     sub = 'You\'re right at the edge. Do NOT skip anything.';
   } else {
     cls='cooked'; emoji='💀'; title='Bro you are cooked.';
-    sub = `${atRisk.map(s=>s.name).join(', ')} below target. ${stablePick(VERDICT_SUBS.cooked, seed)}`;
+    const names = atRisk.map(s => s.name);   // "2 subjects below target: Maths and Physics", never names run into the sentence
+    const list = names.length <= 2 ? names.join(' and ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+    sub = `${nWord(atRisk.length, 'subject')} below target: ${list}. ${stablePick(VERDICT_SUBS.cooked, seed)}`;
   }
   document.getElementById('verdict-wrap').innerHTML = `
     <button class="verdict-card ${cls}" onclick="openCooked()">
@@ -2005,7 +2048,7 @@ function openCooked() {
   document.getElementById('ck-msg').textContent = msg;
   document.getElementById('ck-breakdown').innerHTML = subjects.map((s,i) => {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s), col = pctColor(p, tgt);
-    const status = !hasClasses(s) ? '🆕 no classes yet' : p >= tgt ? (bk > 3 ? '😎 safe' : '🤏 tight') : (isFinite(needed(s)) ? `💀 need ${needed(s)} more` : '💀 out of reach');
+    const status = !hasClasses(s) ? '🆕 no classes yet' : bk > 0 ? (bk > 3 ? '😎 safe' : '🤏 tight') + (p < tgt ? ' by the end' : '') : p >= tgt ? '🤏 no bunks to spare' : `💀 ${needText(s)}`;
     return `<div class="cooked-row">
       <span class="cooked-dot" style="background:${subjTheme(i).c}"></span>
       <span class="subj-n">${escapeHTML(s.name)}</span>
@@ -2061,50 +2104,76 @@ function renderSubject(id, preserveSim) {
     ? `<button type="button" class="chip ${cls} editable" data-field="${field}" onclick="startChipEdit('${field}')" aria-label="${label}: ${value}. Tap to change"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}${ic('pen','ic-xs chip-pen')}</span><span class="cv">${value}</span></button>`
     : `<div class="chip ${cls}"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}</span><div class="cv">${value}</div></div>`;
   document.getElementById('sp-chips').innerHTML =
-    chip('indigo', 'calendar', 'Held', s.total, null) +              // attended + missed: it adds itself up
+    chip('indigo', 'calendar', 'Total', s.semTotal || '—', 'semTotal') +   // the whole semester's classes
     chip('green', 'check', 'Present', s.present, 'present') +
     chip('pink', 'x', 'Absent', s.total - s.present, 'absent') +
     chip('amber', 'target', 'Target', tgt + '%', 'target');
+  // held (attended + missed) only here, in the classes-left line
+  const hl = bunkPlan(s, tgt);
+  document.getElementById('sp-held').textContent = !hasClasses(s) && hl.left === null ? ''
+    : `${nWord(s.total, 'class', 'classes')} held so far` + (hl.left !== null ? ` · ${hl.ab}${nWord(hl.left, 'class', 'classes')} left`
+      : editable ? " · tap Total to add the semester's classes" : '');
  
-  // Advice: one short line in the site's voice, then the numbers as mini stat tiles
+  // Advice: one short line in the site's voice, then the numbers as mini stat tiles (all from bunkPlan)
   let pills = '', advText = '';
-  const o = outlook(s, tgt);
+  const o = outlook(s, tgt), b = bunkPlan(s, tgt);
   const seed = subjRoastSeed(s);
-  if (!hasClasses(s)) {
+  const skipPills = n => Array.from({ length: Math.min(n, 5) }, (_, j) => `<span class="pill">Skip ${j + 1}</span>`).join('')
+    + (n > 5 ? `<span class="pill">+${n - 5} more</span>` : '');
+  const leftT = ['amber', 'calendar', 'Classes left', b.ab + b.left];
+  const finishT = label => b.finishAll === null ? null : [b.finishAll >= tgt ? 'green' : 'pink', 'trend', label, b.ab + b.finishAll + '%'];
+  if (b.known && (hasClasses(s) || b.left > 0)) {
+    // the whole semester is known: plan over every class left
+    if (b.left === 0) {
+      pills = `<span class="pill">🏁 Semester done</span>`;
+      advText = `That was the last class this semester: you finished at <strong>${p}%</strong>${p >= tgt ? `, at or above ${tgt}% 🎉` : `, under ${tgt}%`}.`;
+    } else if (!b.reachable) {
+      pills = `<span class="pill d">💀 ${tgt}% out of reach</span>`;
+      advText = semCopy('advLost', seed, { tgt }) + statTiles([['pink', 'target', `Reach ${tgt}%`, 'Not this sem'], leftT, finishT('Best finish')]);
+    } else if (b.semBunks > 0) {
+      pills = skipPills(b.semBunks);
+      // missing them back to back can dip you under the target for a while: say so honestly
+      const way = p < tgt
+        ? ` You're under ${tgt}% right now, so attend ${nWord(o.need, 'class', 'classes')} first to get back above it.`
+        : b.now < b.semBunks ? ` Missing them back to back would dip you under ${tgt}% for a while, so spread them out.` : '';
+      advText = semCopy('advSafeSem', seed, { bk: b.semBunks, left: b.left, tgt, ab: b.ab }) + way
+        + statTiles([['green', 'coffee', 'Bunks this sem', b.ab + b.semBunks], leftT, finishT('Attend all')]);
+    } else {
+      pills = `<span class="pill w">⚠️ No bunks to spare</span>`;
+      advText = `To finish at ${tgt}% you need ${b.mustAttend === b.left ? '<strong>every one</strong>' : `<strong>${b.mustAttend}</strong>`} of the ${b.ab}${b.left} classes left.`
+        + statTiles([['indigo', 'target', 'Attend at least', `${b.ab}${b.mustAttend} of ${b.ab}${b.left}`], finishT('Attend all')]);
+    }
+    advText += remainingNote(b.ri, s);
+  } else if (!hasClasses(s)) {
     pills = `<span class="pill">🆕 Fresh subject</span>`;
-    advText = `No classes counted yet. Mark them on <strong>Daily Classes</strong> as they happen${editable ? ', or tap <strong>Total</strong> / <strong>Present</strong> above to enter your numbers' : ', or open <strong>Edit subject</strong> below'}.`;
-  } else if (p >= tgt && bk > 0) {
-    pills = Array.from({length:Math.min(bk,5)},(_,j)=>`<span class="pill">Skip ${j+1}</span>`).join('');
-    if (bk>5) pills += `<span class="pill">+${bk-5} more</span>`;
-    // right now: bunks before dipping under the target; over the semester: skips that still finish at it
-    const semSkips = semesterSkips(o, tgt);
-    advText = semCopy('advSafe', seed, { bk, tgt }) + semesterSkipsLine(o, tgt) + statTiles([
-      semSkips !== null ? ['green', 'coffee', 'Skips this sem', o.ab + semSkips] : ['indigo', 'coffee', 'Bunks left', String(bk)],
-      leftTile(o),
-      bestTile(o, tgt, 'Attend all'),
-    ]) + remainingNote(o.ri, s);
+    advText = `No classes counted yet. Mark them on <strong>Daily Classes</strong> as they happen${editable ? ', or tap <strong>Present</strong> / <strong>Absent</strong> above to enter your numbers' : ', or open <strong>Edit subject</strong> below'}.`;
+  } else if (p >= tgt && b.now > 0) {
+    // semester unknown: only the bunks in a row from now are certain
+    pills = skipPills(b.now);
+    advText = semCopy('advSafe', seed, { bk: b.now, tgt })
+      + statTiles([['indigo', 'coffee', 'Bunks in a row', String(b.now)], b.left !== null ? leftT : null, finishT('Attend all')])
+      + (b.ri ? remainingNote(b.ri, s) : noEstimateNote(s));
   } else if (p < tgt) {
     pills = `<span class="pill d">💀 Below ${tgt}%</span>`;
     if (!isFinite(o.need)) {
       advText = `A ${tgt}% target can't be reached once a class is missed. Try a lower target for this subject.`;
     } else {
       const kind = o.lost ? 'advLost' : o.left === null ? 'advUnknown' : o.tight ? 'advTight' : 'advDoable';
-      const room = !o.lost && o.left ? semesterSkips(o, tgt) : null;   // the whole semester can still absorb some misses
-      advText = semCopy(kind, seed, { tgt })
-        + (room ? ` Over the whole semester you can still miss up to <strong>${o.ab}${room}</strong> of the ${o.ab}${o.left} left and finish at ${tgt}%.` : '')
-        + statTiles([
+      advText = semCopy(kind, seed, { tgt }) + statTiles([
         needTile(o, tgt),
-        leftTile(o),
+        b.left !== null ? leftT : null,
         bestTile(o, tgt, o.lost ? 'Best finish' : 'Finish at'),
       ]) + (o.ri ? remainingNote(o.ri, s) : noEstimateNote(s));
     }
   } else {
     pills = `<span class="pill w">⚠️ ${p === tgt ? `Exactly at ${tgt}%` : 'No bunks to spare'}</span>`;
-    advText = (p === tgt
-      ? `Literally one absence away from danger. Attend <strong>3–4 more</strong> to build a buffer before even thinking about bunking.`
-      : `You're at ${p}%, but skipping even one class drops you below ${tgt}%. Attend <strong>3–4 more</strong> to build a buffer.`)
-      + semesterSkipsLine(o, tgt) + statTiles([leftTile(o), bestTile(o, tgt, 'Attend all')]) + remainingNote(o.ri, s);
+    const buf = bufferIn(s, tgt);
+    advText = (p === tgt ? `Literally one absence away from dropping under ${tgt}%.` : `You're at ${p}%, but skipping even one class drops you below ${tgt}%.`)
+      + (isFinite(buf) ? ` Attend <strong>${buf}</strong> more in a row and one bunk is safe.` : '')
+      + statTiles([b.left !== null ? leftT : null, finishT('Attend all')]) + (b.ri ? remainingNote(b.ri, s) : noEstimateNote(s));
   }
+  const advSub = document.getElementById('adv-sub');   // the numbers are for the whole semester once it's known
+  if (advSub) advSub.textContent = b.known && b.left > 0 ? "what's safe this semester" : "what's safe right now";
   document.getElementById('adv-pills').innerHTML = pills;
   document.getElementById('adv-text').innerHTML = advText;
  
@@ -2150,9 +2219,9 @@ function checkSubjectForm(f, excludeId) {
     const total = f.total ?? 0, present = f.present ?? 0;
     if (present > total) return { error: "Classes missed can't be less than 0.", field: ids.absent || ids.present };
     if (bad(f.perWeek, 0, 30)) return { error: 'That\'s more classes a week than fit in a timetable.', field: ids.perWeek };
-    if (bad(f.semTotal, 1, 5000)) return { error: 'Classes in the whole semester must be a whole number, or leave it blank.', field: ids.semTotal };
+    if (bad(f.semTotal, 1, 5000)) return { error: 'Total classes this semester must be a whole number, or leave it blank.', field: ids.semTotal };
     if (f.semTotal != null && f.semTotal < total) {
-      return { error: `Classes in the whole semester (${f.semTotal}) can't be fewer than the ${total} already held.`, field: ids.semTotal };
+      return { error: `Total classes this semester (${f.semTotal}) can't be fewer than the ${total} already held.`, field: ids.semTotal };
     }
     return { values: { name, total, present, perWeek: f.perWeek ?? 0, target, semTotal: f.semTotal ?? null, mode: 'exact' } };
   }
@@ -2167,9 +2236,9 @@ function checkSubjectForm(f, excludeId) {
   if (missed > total) {
     return { error: `You've entered ${missed} missed, but only about ${total} class${total !== 1 ? 'es have' : ' has'} happened since ${fmtDate(start)}.`, field: ids.missed };
   }
-  if (bad(f.semTotal, 1, 5000)) return { error: 'Classes in the whole semester must be a whole number — or leave it blank.', field: ids.semTotal };
+  if (bad(f.semTotal, 1, 5000)) return { error: 'Total classes this semester must be a whole number, or leave it blank.', field: ids.semTotal };
   if (f.semTotal != null && f.semTotal < total) {
-    return { error: `Classes in the whole semester (${f.semTotal}) can't be fewer than the ~${total} already held.`, field: ids.semTotal };
+    return { error: `Total classes this semester (${f.semTotal}) can't be fewer than the ~${total} already held.`, field: ids.semTotal };
   }
   return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: f.semTotal ?? null, mode: 'estimate', semStart: start, days: byDays ? f.days : null, holidays: byDays?.holidays || 0 } };
 }
@@ -2195,12 +2264,12 @@ function subjectPreviewHTML(v) {
   html += p >= t
     ? (bk > 0 ? `${bk} safe bunk${bk !== 1 ? 's' : ''} at ${t}%` : `no bunks to spare at ${t}%`)
     : (isFinite(nd) ? `attend the next ${nd} to reach ${t}%` : `${t}% can't be reached anymore`);
-  // the whole semester known: what's left, and how it can end
+  // the whole semester known: what's left, and how it can end (the same bunkPlan the subject page uses)
   if (v.semTotal && v.semTotal >= v.total) {
-    const left = v.semTotal - v.total, spare = v.present + left - Math.ceil(t / 100 * v.semTotal);
-    html += `<br>${nWord(left, 'class', 'classes')} left this semester: ` + (left === 0 ? 'that was the last one.'
-      : spare >= 0 ? `skip up to <strong>${spare}</strong> of them and you still end at ${t}%.`
-        : `even attending all of them, you'd end at <strong>${Math.floor((v.present + left) / v.semTotal * 100)}%</strong>.`);
+    const b = bunkPlan({ present: v.present, total: v.total, target: v.target, semTotal: v.semTotal }, t);
+    html += `<br>${nWord(b.left, 'class', 'classes')} left this semester: ` + (b.left === 0 ? 'that was the last one.'
+      : b.reachable ? `skip up to <strong>${b.semBunks}</strong> of them and you still finish at ${t}%.`
+        : `even attending all of them, you'd finish at <strong>${b.finishAll}%</strong>.`);
   }
   return html;
 }
@@ -2446,7 +2515,17 @@ function saveSemesterDialog() {
 // Falls back to "classes in the whole semester" when that was entered.
 // { n, est, guess }: est = the count is approximate; guess = it comes from the
 // semester length x classes per week, because no semester dates are set.
+let remainingMemo = null;
 function remainingInfo(s) {
+  if (!remainingMemo) { remainingMemo = new Map(); setTimeout(() => { remainingMemo = null; }, 0); }
+  const key = s && s.id ? [s.id, s.total, s.present, s.semTotal, s.perWeek, semStart, semEnd, semWeeks, timetable.length,
+                           Object.keys(dateExceptions).length].join('|') : null;
+  if (key && remainingMemo.has(key)) return remainingMemo.get(key);
+  const v = remainingInfoCalc(s);
+  if (key) remainingMemo.set(key, v);
+  return v;
+}
+function remainingInfoCalc(s) {
   const end = semEndInfo();
   const today = getLocalDateString();
   // the student typed how many classes the whole semester has: that's what's left, whatever the dates say
@@ -2511,16 +2590,6 @@ function outlook(s, tgt, skip = 0) {
            lost: need > 0 && (!isFinite(need) || (left !== null && need > left)),
            tight: isFinite(need) && left !== null && need > 0 && need <= left && need > 0.8 * left };
 }
-// Skips spread over the rest of the semester that still finish at the target (null when what's left is unknown)
-function semesterSkips(o, tgt) {
-  if (o.left === null) return null;
-  return Math.max(0, o.present + o.left - Math.ceil(tgt / 100 * (o.total + o.left)));
-}
-function semesterSkipsLine(o, tgt) {
-  const n = semesterSkips(o, tgt);
-  if (n === null || o.left === 0) return '';
-  return ` Across the rest of the semester you can skip up to <strong>${o.ab}${n}</strong> of the ${o.ab}${o.left} left and still finish at ${tgt}%.`;
-}
 // The numbers as mini stat tiles, the same family as the Total / Present / Target chips: [color, icon, label, value]
 function statTiles(items) {
   const xs = items.filter(Boolean);
@@ -2529,11 +2598,12 @@ function statTiles(items) {
 }
 function needTile(o, tgt, label) {
   if (o.lost) return ['pink', 'target', `Reach ${tgt}%`, 'Not this sem'];
-  return ['indigo', 'target', label || 'In a row', String(o.need)];
+  return ['indigo', 'target', label || 'Attend next', String(o.need)];
 }
 // When the classes left can't be worked out at all: one small line with the way to fix it
 function noEstimateNote(s) {
   return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Classes left unknown · '
+    + (s.mode !== 'estimate' ? '<button class="link-btn" onclick="startChipEdit(\'semTotal\')">add the semester total</button> or ' : '')
     + '<button class="link-btn" onclick="openSemesterDialog(\'end\')">set last day</button>'
     + (weeklyCount(s) ? '' : ' or <button class="link-btn" onclick="openEditCard()">add its days</button>') + '</span></div>';
 }
@@ -2624,12 +2694,17 @@ function onEditInput(e) {
 }
 
 // "Classes left" = the whole semester's classes - the ones held so far (Official numbers)
+function heldLeftText(held, sem) {
+  const h = `${nWord(held, 'class', 'classes')} held so far`;
+  if (!Number.isInteger(sem)) return h;
+  return sem < held ? `${h}, more than the ${sem} in the semester?` : `${h} · ${nWord(sem - held, 'class', 'classes')} left`;
+}
 function showClassesLeft() {
   const out = document.getElementById('inp-left');
   if (!out) return;
   const sem = numField('inp-semtotal'), held = numField('inp-total') || 0;
-  out.value = !Number.isInteger(sem) ? '' : sem < held ? `fewer than the ${held} held?` : nWord(sem - held, 'class', 'classes');
-  out.classList.toggle('invalid', Number.isInteger(sem) && sem < held);
+  out.textContent = heldLeftText(held, sem);
+  out.classList.toggle('is-error', Number.isInteger(sem) && sem < held);
 }
 
 function setEditMode(m) {
@@ -2716,12 +2791,12 @@ function startChipEdit(field) {
   const s = subjects.find(x => x.id === currSubjId);
   const chip = document.querySelector(`#sp-chips .chip[data-field="${field}"]`);
   if (!s || !chip) return;
-  const cur = field === 'target' ? (s.target ?? '') : field === 'absent' ? s.total - s.present : s[field];
+  const cur = field === 'target' ? (s.target ?? '') : field === 'semTotal' ? (s.semTotal ?? '') : field === 'absent' ? s.total - s.present : s[field];
   const box = document.createElement('div');
   box.className = chip.className.replace('editable', 'editing');
   box.dataset.field = field;
   box.innerHTML = `${chip.querySelector('.chip-lbl').outerHTML}
-    <input class="chip-input" type="number" inputmode="numeric" min="${field === 'target' ? 1 : 0}" ${field === 'target' ? `max="100" placeholder="${globalTarget}"` : ''} value="${cur}" aria-label="${field === 'target' ? 'Target %' : field === 'absent' ? 'Classes missed' : 'Classes attended'}">`;
+    <input class="chip-input" type="number" inputmode="numeric" min="${field === 'target' ? 1 : 0}" ${field === 'target' ? `max="100" placeholder="${globalTarget}"` : ''} value="${cur}" aria-label="${field === 'target' ? 'Target %' : field === 'semTotal' ? 'Total classes this semester' : field === 'absent' ? 'Classes missed' : 'Classes attended'}" ${field === 'semTotal' ? 'placeholder="e.g. 60"' : ''}>`;
   chip.replaceWith(box);
   const input = box.querySelector('input');
   input.focus(); input.select();
@@ -2733,6 +2808,7 @@ function startChipEdit(field) {
     const f = { mode: 'exact', name: s.name, total: s.total, present: s.present, perWeek: s.perWeek, target: s.target ?? null, semTotal: s.semTotal ?? null };
     const missed = s.total - s.present;
     if (field === 'target') f.target = Number.isInteger(n) || n === null ? n : NaN;
+    else if (field === 'semTotal') f.semTotal = n === null ? null : Number.isInteger(n) ? n : NaN;   // blank clears it
     // the other number stays as it was; the total is attended + missed
     else if (!Number.isInteger(n) || n < 0) { if (field === 'absent') f.total = NaN; else f.present = NaN; }   // the right message
     else if (field === 'absent') f.total = s.present + n;
@@ -2745,9 +2821,10 @@ function startChipEdit(field) {
     }
     done = true;
     const v = r.values;
-    if (v.total === s.total && v.present === s.present && (v.target ?? null) === (s.target ?? null)) { renderSubject(s.id, true); return; }
+    if (v.total === s.total && v.present === s.present && (v.target ?? null) === (s.target ?? null)
+        && (v.semTotal ?? null) === (s.semTotal ?? null)) { renderSubject(s.id, true); return; }
     const before = { ...s };
-    Object.assign(s, { total: v.total, present: v.present, target: v.target });
+    Object.assign(s, { total: v.total, present: v.present, target: v.target, semTotal: v.semTotal ?? null });
     const ok = await updateSubject(s.id, { name: s.name, code: s.code || '', total: s.total, present: s.present, perWeek: s.perWeek, target: s.target, semTotal: s.semTotal, mode: s.mode });
     if (!ok) Object.assign(s, before);
     // Quick fixes keep the existing "counted up to"; first numbers ever cover up to today
@@ -2899,60 +2976,73 @@ function updateSim() {
   const tgt = _st;
   const plan = Math.max(0, parseInt(document.getElementById('sim-input').value)||0);
   const seed = subjRoastSeed(s);
-  const now = outlook(s, tgt), o = outlook(s, tgt, plan);
-  const bk_now = Math.max(0, Math.floor(s.present*100/tgt) - s.total);
+  const b = bunkPlan(s, tgt), now = outlook(s, tgt), o = outlook(s, tgt, plan);
   const out = document.getElementById('sim-result');
+  const known = b.known && (s.total > 0 || b.left > 0);
   // the cat naps at the bottom of the card until you start simulating
-  out.closest('.adv-card')?.classList.toggle('simulating', plan > 0 && s.total > 0);
+  out.closest('.adv-card')?.classList.toggle('simulating', plan > 0 && (s.total > 0 || known));
   const line = h => '<div class="adv-text sim-rest">' + h + '</div>';
 
-  if (s.total === 0 || plan === 0) advisorCat(null);
-  if (s.total === 0) { out.innerHTML = line('No classes counted yet — nothing to simulate.'); return; }
+  if ((s.total === 0 && !known) || plan === 0) advisorCat(null);
+  if (s.total === 0 && !known) { out.innerHTML = line('No classes counted yet — nothing to simulate.'); return; }
   if (plan === 0) {
     // at rest: one short line; the numbers are in the Bunk Advisor beside it
-    out.innerHTML = line(bk_now > 0 ? semCopy('simSafe0', seed, { bk: bk_now, tgt })
+    out.innerHTML = line(b.bunks > 0 ? semCopy('simSafe0', seed, { bk: b.bunks, tgt })
+      : known ? (b.reachable ? `No bunks to spare: you need ${b.mustAttend} of the ${b.left} left. Tap + to see what one skip would cost.`
+                             : semCopy('simLost0', seed, { tgt }))
       : _sp < tgt && now.lost ? semCopy('simLost0', seed, { tgt })
       : _sp < tgt ? semCopy('simBelow0', seed, { tgt })
       : 'Zero safe bunks — right at the limit. Tap + to see what one skip would cost.');
     return;
   }
 
-  if (o.tooMany) {
-    out.innerHTML = '<div class="adv-text">' + semCopyStep('overLeft', seed, plan, { plan, left: now.leftNow, ab: now.ab }) + '</div>' + remainingNote(now.ri, s);
+  if (b.left !== null && plan > b.left) {
+    out.innerHTML = '<div class="adv-text">' + semCopyStep('overLeft', seed, plan, { plan, left: b.left, ab: b.ab }) + '</div>' + remainingNote(b.ri, s);
     advisorCat('tooMany', stepPick(CAT_LINES.tooMany, COPY_SALT + '|cat|' + seed, plan)());
     return;
   }
 
-  const safe = o.pct >= tgt;
-  const reaction = getSimReaction(plan, bk_now, safe, o.pct, tgt, seed);
-  const tier = !safe ? 'cooked' : o.pct - tgt <= 2 ? 'warn' : plan > bk_now ? 'safe_over_limit' : 'safe_in_limit';
-  const justLost = o.lost && !now.lost;
-  advisorCat(o.lost ? 'lost' : tier, justLost ? stepPick(CAT_LINES.lost, COPY_SALT + '|cat|' + seed, plan)(tgt) : reaction);
+  // The verdict is about the percentage that counts. Semester known: where you FINISH after missing `plan` of the
+  // classes left and attending the rest. Unknown: where you stand right after missing the next `plan`.
+  const shown = known ? attPct(s.present + b.left - plan, b.sem) : o.pct;
+  const dip = attPct(s.present, s.total + plan);          // straight after missing them back to back
+  const limit = b.bunks;
+  const safe = shown >= tgt;
+  const reaction = getSimReaction(plan, limit, safe, shown, tgt, seed);
+  const tier = !safe ? 'cooked' : shown - tgt <= 2 ? 'warn' : plan > limit ? 'safe_over_limit' : 'safe_in_limit';
+  const justLost = known ? (!safe && b.reachable) : (o.lost && !now.lost);
+  advisorCat(!safe && (known ? !b.reachable || justLost : o.lost) ? 'lost' : tier,
+    justLost ? stepPick(CAT_LINES.lost, COPY_SALT + '|cat|' + seed, plan)(tgt) : reaction);
   let icon, color, status;
-  if (safe && plan <= bk_now) { icon = '✅'; color = 'var(--accent)'; status = 'still safe ✨'; }
-  else if (safe) { icon = '👀'; color = 'var(--warn)'; status = `${plan - bk_now} over the safe limit`; }
-  else if (o.lost && !now.lost) { icon = '🫠'; color = 'var(--danger)'; status = `${tgt}% gone for this sem`; }
-  else { icon = '💀'; color = 'var(--danger)'; status = `<strong>${tgt - o.pct}%</strong> under ${tgt}%`; }
-  const tiles = safe
-    ? [['indigo', 'coffee', 'Bunks left', String(Math.max(0, bk_now - plan))], leftTile(o), bestTile(o, tgt, 'Attend all')]
-    : [needTile(o, tgt, 'In a row'), leftTile(o), bestTile(o, tgt, o.lost ? 'Best finish' : 'Finish at')];
+  if (safe && plan <= limit) {
+    icon = '✅'; color = 'var(--accent)';
+    status = known ? `you'd still finish at ${tgt}%+` + (dip < tgt ? ` · back to back, you'd dip to ${dip}% for a while` : '') : 'still safe ✨';
+  } else if (safe) { icon = '👀'; color = 'var(--warn)'; status = `${plan - limit} over the safe limit`; }
+  else if (justLost) { icon = '🫠'; color = 'var(--danger)'; status = `${tgt}% gone for this sem`; }
+  else { icon = '💀'; color = 'var(--danger)'; status = `<strong>${tgt - shown}%</strong> under ${tgt}%`; }
+  const tiles = known
+    ? [['indigo', 'coffee', 'Bunks left', b.ab + Math.max(0, limit - plan)], ['amber', 'calendar', 'Still to attend', b.ab + (b.left - plan)],
+       [safe ? 'green' : 'pink', 'trend', 'Finish at', b.ab + shown + '%']]
+    : safe
+      ? [['indigo', 'coffee', 'Bunks left', String(Math.max(0, limit - plan))], leftTile(o), bestTile(o, tgt, 'Attend all')]
+      : [needTile(o, tgt), leftTile(o), bestTile(o, tgt, o.lost ? 'Best finish' : 'Finish at')];
 
-  const bw = Math.min(100, o.pct), cwid = Math.min(100, _sp);
+  const bw = Math.min(100, shown), cwid = Math.min(100, _sp);
   const tgtPos = Math.min(tgt, 97);
   out.innerHTML = `
     <div class="sim-bar-wrap">
       <div class="sim-bar">
         <div class="sim-cur" style="width:${cwid}%"></div>
-        <div class="sim-proj" style="width:${bw}%;background:${pctColor(o.pct,tgt)}"></div>
+        <div class="sim-proj" style="width:${bw}%;background:${pctColor(shown,tgt)}"></div>
         <div class="sim-line" style="left:${tgtPos}%"></div>
-        <div class="sim-pct" style="color:${pctTextColor(o.pct,tgt)}">${o.pct}%</div>
+        <div class="sim-pct" style="color:${pctTextColor(shown,tgt)}">${shown}%</div>
       </div>
       <div class="sim-tgt-lbl" style="left:${tgtPos}%">${tgt}% ▼</div>
     </div>
-    <div class="adv-text sim-verdict"><span class="sim-icon">${icon}</span><strong style="color:${color}">${_sp}% → ${o.pct}%</strong><span class="sim-sep">·</span><span>${status}</span></div>
+    <div class="adv-text sim-verdict"><span class="sim-icon">${icon}</span><strong style="color:${color}">${_sp}% ${known ? 'now → ' + shown + '% at the end' : '→ ' + shown + '%'}</strong><span class="sim-sep">·</span><span>${status}</span></div>
     ${statTiles(tiles)}
     <div class="sim-react">${reaction}</div>
-    ${now.ri ? remainingNote(now.ri, s) : noEstimateNote(s)}`;
+    ${b.ri ? remainingNote(b.ri, s) : noEstimateNote(s)}`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -3104,8 +3194,9 @@ function openAddModal() {
       }
       const sem = numField('as-semtotal-x'), held = numField('as-total') || 0, left = document.getElementById('as-left');
       if (left) {
-        left.hidden = !Number.isInteger(sem) || sem < held;
-        left.textContent = Number.isInteger(sem) && sem >= held ? `${nWord(sem - held, 'class', 'classes')} left this semester` : '';
+        left.hidden = !held && !Number.isInteger(sem);
+        left.textContent = heldLeftText(held, sem);
+        left.classList.toggle('is-error', Number.isInteger(sem) && sem < held);
       }
       // Typed a name that's already in the timetable (e.g. from a scan)? Pre-pick its days.
       if (e.target.id === 'as-name' && !dayPickers['as-days']?.touched) {
