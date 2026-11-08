@@ -14,7 +14,8 @@
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const results = [];
   const eq = (name, got, want) => results.push({ name, ok: JSON.stringify(got) === JSON.stringify(want), got, want });
-  const saved = { subjects, timetable, semStart, semEnd, globalTarget, dateExceptions };
+  const saved = { subjects, timetable, semStart, semEnd, globalTarget, dateExceptions, roundMode };
+  roundMode = 'down';
   subjects = []; semStart = ''; semEnd = ''; globalTarget = 75; timetable = []; dateExceptions = {};   // no guess from other subjects
   const subj = (id, present, total, extra = {}) => ({ id, name: id, code: '', present, total, perWeek: 0, mode: 'exact', ...extra });
   const plan = (s, t) => { const b = bunkPlan(s, t); return [b.left, b.semBunks, b.now, b.bunks, b.mustAttend, b.reachable, b.finishAll]; };
@@ -54,6 +55,20 @@
   eq('16 unknown semester', plan(subj('m', 7, 9)), [null, null, 0, 0, null, null, null]);
   eq('16 1% target, 53 left caps it', plan(subj('n', 7, 9, { semTotal: 62, target: 1 }), 1), [53, 53, 53, 53, 0, true, 96]);
 
+  // ── how the college rounds (one setting for every subject) ──
+  roundMode = 'up';      // 83.3 -> 84
+  eq('round up: 5/6', attPct(5, 6), 84);
+  eq('round up: 149/200 (74.5%) meets 75', [attPct(149, 200), isAtRisk(subj('u1', 149, 200))], [75, false]);
+  eq('round up: one bunk at 149/200 (149/201 = 74.1 -> 75; 149/202 = 73.8 -> 74)', bunkable(subj('u2', 149, 200)), 1);
+  eq('round up: 10/20 needs 19 in a row (29/39 = 74.4 -> 75)', needed(subj('u3', 10, 20)), 19);
+  eq('round up: semester plan', plan(subj('u4', 30, 38, { semTotal: 57 })), [19, 6, 2, 6, 13, true, 86]);
+  roundMode = 'exact';   // 83.3
+  eq('exact: 5/6', attPct(5, 6), 83.3);
+  eq('exact: 149/200 is 74.5, under 75', [attPct(149, 200), isAtRisk(subj('x1', 149, 200))], [74.5, true]);
+  eq('exact: no bunk at 149/200', bunkable(subj('x2', 149, 200)), 0);
+  roundMode = 'down';    // 83.3 -> 83 (the default)
+  eq('round down: 5/6 and 149/200', [attPct(5, 6), attPct(149, 200), bunkable(subj('d1', 149, 200))], [83, 74, 0]);
+
   // ── every view agrees ─────────────────────────────────────────────────────────────────────────────────────────
   subjects = [subj('Alpha', 30, 38, { semTotal: 57 }), subj('Beta', 7, 9, { semTotal: 62 }), subj('Gamma', 14, 43, { semTotal: 50 }), subj('Delta', 20, 25)];
   const sum = subjects.reduce((a, s) => a + bunkable(s), 0);           // 6 + 13 + 0 + 1
@@ -86,7 +101,7 @@
 
   Object.assign(window, {});
   subjects = saved.subjects; timetable = saved.timetable; semStart = saved.semStart; semEnd = saved.semEnd;
-  globalTarget = saved.globalTarget; dateExceptions = saved.dateExceptions;
+  globalTarget = saved.globalTarget; dateExceptions = saved.dateExceptions; roundMode = saved.roundMode;
   goPage('home');
   const failed = results.filter(r => !r.ok);
   return { passed: results.length - failed.length, failed: failed.length, failures: failed };

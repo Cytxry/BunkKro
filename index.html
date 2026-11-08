@@ -124,6 +124,14 @@
         <span class="sym">%</span>
       </div>
     </div>
+    <div class="round-row">
+      <label for="round-mode">Your college counts <strong>83.3%</strong> as</label>
+      <select id="round-mode" onchange="updateRoundMode(this.value)">
+        <option value="down">83% · rounds down</option>
+        <option value="up">84% · rounds up</option>
+        <option value="exact">83.3% · exact</option>
+      </select>
+    </div>
     <button class="sem-link" id="sem-link" onclick="openSemesterDialog()"><svg class="ic ic-sm"><use href="#i-calendar"/></svg> <span id="sem-link-text">Set semester dates</span></button>
   </div>
 </aside>
@@ -261,7 +269,7 @@
       </summary>
       <div class="edit-body">
         <div class="mode-seg" role="radiogroup" aria-label="How do you track this subject?">
-          <button type="button" role="radio" id="edit-mode-exact" onclick="setEditMode('exact')"><b>🎯 Official numbers</b><span>Total + present from your portal</span></button>
+          <button type="button" role="radio" id="edit-mode-exact" onclick="setEditMode('exact')"><b>🎯 Official numbers</b><span>Attended + missed from your portal</span></button>
           <button type="button" role="radio" id="edit-mode-estimate" onclick="setEditMode('estimate')"><b>⚡ Estimate</b><span>From semester start + classes missed</span></button>
         </div>
         <div class="field" style="margin:14px 0 12px">
@@ -277,7 +285,8 @@
           <div class="field"><label for="inp-present">Classes attended <span class="field-hint">(so far)</span></label><input type="number" id="inp-present" placeholder="e.g. 30" min="0" inputmode="numeric"></div>
           <div class="field"><label for="inp-absent">Classes missed <span class="field-hint">(so far)</span></label><input type="number" id="inp-absent" placeholder="e.g. 4" min="0" inputmode="numeric"></div>
           <input type="hidden" id="inp-total">
-          <div class="field"><label for="inp-semtotal">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label><input type="number" id="inp-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-semtotal">Total classes this semester</label><input type="number" id="inp-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
+          <div class="field"><label for="inp-semleft">or classes left <span class="field-hint">(we'll work out the total)</span></label><input type="number" id="inp-semleft" placeholder="e.g. 20" min="0" inputmode="numeric"></div>
           <p class="form-sum" id="inp-left" aria-live="polite"></p>
           <div class="field"><label for="inp-target">Target % <span class="field-hint">(leave blank to use your global target)</span></label><input type="number" id="inp-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
         </div>
@@ -294,8 +303,12 @@
             <div class="field"><label for="inp-est-absent">Classes missed so far</label><input type="number" id="inp-est-absent" placeholder="e.g. 5" min="0" inputmode="numeric"></div>
             <div class="field"><label for="inp-est-target">Target % <span class="field-hint">(blank = global)</span></label><input type="number" id="inp-est-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
             <div class="field">
-              <label for="inp-est-semtotal">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label>
+              <label for="inp-est-semtotal">Total classes this semester</label>
               <input type="number" id="inp-est-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">
+            </div>
+            <div class="field">
+              <label for="inp-est-semleft">or classes left <span class="field-hint">(we'll work out the total)</span></label>
+              <input type="number" id="inp-est-semleft" placeholder="e.g. 20" min="0" inputmode="numeric">
             </div>
           </div>
         </div>
@@ -897,7 +910,10 @@
         <div class="mf"><label for="as-absent">Classes missed <span class="field-hint">(so far)</span></label><input type="number" id="as-absent" placeholder="e.g. 4" min="0" inputmode="numeric"></div>
       </div>
       <input type="hidden" id="as-total">
-      <div class="mf"><label for="as-semtotal-x">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label><input type="number" id="as-semtotal-x" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
+      <div class="form-grid-2">
+        <div class="mf"><label for="as-semtotal-x">Total classes this semester</label><input type="number" id="as-semtotal-x" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
+        <div class="mf"><label for="as-semleft-x">or classes left <span class="field-hint">(we'll work out the total)</span></label><input type="number" id="as-semleft-x" placeholder="e.g. 20" min="0" inputmode="numeric"></div>
+      </div>
       <p class="form-sum" id="as-left" hidden></p>
       <div class="upto" id="as-upto" hidden>
         <span>Do these numbers already include <strong>today's</strong> class?</span>
@@ -912,9 +928,9 @@
     <div id="add-est-fields" style="display:none">
       <div class="mf"><label for="as-semstart">Semester start date <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="as-semstart"></div>
       <div class="mf"><label for="as-missed">Classes missed so far</label><input type="number" id="as-missed" placeholder="0" min="0" inputmode="numeric"></div>
-      <div class="mf">
-        <label for="as-semtotal">Total classes this semester <span class="field-hint">(optional, from your syllabus or portal)</span></label>
-        <input type="number" id="as-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric">
+      <div class="form-grid-2">
+        <div class="mf"><label for="as-semtotal">Total classes this semester</label><input type="number" id="as-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
+        <div class="mf"><label for="as-semleft">or classes left <span class="field-hint">(we'll work out the total)</span></label><input type="number" id="as-semleft" placeholder="e.g. 20" min="0" inputmode="numeric"></div>
       </div>
     </div>
 

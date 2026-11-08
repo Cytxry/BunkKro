@@ -1568,3 +1568,9 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 .sp-held:empty{display:none}
 .tt-ai-status-loaded{display:block;margin-top:6px}
 .tt-ai-status-loaded:empty{display:none}
+/* how the college rounds (sidebar, under the global target) */
+.round-row{display:flex;flex-direction:column;gap:5px;margin:8px 2px 4px}
+.round-row label{font-size:.74rem;color:var(--text2);font-weight:600}
+.round-row label strong{color:var(--primary-deep)}
+.round-row select{appearance:none;-webkit-appearance:none;width:100%;font:inherit;font-size:.8rem;font-weight:700;color:var(--primary-deep);background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235E6375' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;border:1px solid var(--border);border-radius:12px;padding:7px 30px 7px 11px;cursor:pointer}
+.round-row select:hover{border-color:var(--primary-soft)}

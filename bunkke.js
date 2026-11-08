@@ -1124,6 +1124,10 @@ function semCopyStep(kind, seed, step, d) { return stepPick(SEM_COPY[kind], `${C
 //  STATE
 // ══════════════════════════════════════════════════════
 let globalTarget = parseInt(localStorage.getItem('bk_global_target') || '75');
+// How the student's college turns attended / held into its percentage, for every subject:
+//   'down' 83.3 -> 83 (the default), 'up' 83.3 -> 84, 'exact' 83.3
+const ROUND_MODES = ['down', 'up', 'exact'];
+let roundMode = ROUND_MODES.includes(localStorage.getItem('bk_round')) ? localStorage.getItem('bk_round') : 'down';
 let semStart = localStorage.getItem('bk_sem_start') || '';
 let examDate = localStorage.getItem('bk_exam_date') || '';
 let semEnd = localStorage.getItem('bk_sem_end') || '';   // last day of classes
@@ -1149,6 +1153,7 @@ let trackerLocked = false;
 
 function savePrefs() {
   localStorage.setItem('bk_global_target', globalTarget);
+  localStorage.setItem('bk_round', roundMode);
   localStorage.setItem('bk_sem_start', semStart);
   localStorage.setItem('bk_exam_date', examDate);
   localStorage.setItem('bk_sem_end', semEnd);
@@ -1168,7 +1173,7 @@ function schedulePrefsSync() {
   if (!currentUser || !supabaseClient?.auth?.updateUser) return;
   clearTimeout(prefsSyncTimer);
   prefsSyncTimer = setTimeout(async () => {
-    const want = { semStart, examDate, semEnd, semWeeks, target: globalTarget };
+    const want = { semStart, examDate, semEnd, semWeeks, target: globalTarget, round: roundMode };
     const meta = currentUser?.user_metadata || {};
     if (JSON.stringify(meta.bk_prefs || {}) === JSON.stringify(want) && JSON.stringify(meta.bk_counted_upto || {}) === JSON.stringify(countedUpTo)) return;
     try {
@@ -1201,6 +1206,7 @@ function applyPrefsFromAccount() {
   localStorage.setItem('bk_counted_upto', JSON.stringify(countedUpTo));
   const t = Math.round(Number(p.target));
   if (t >= 1 && t <= 100) globalTarget = t;
+  if (ROUND_MODES.includes(p.round)) { roundMode = p.round; localStorage.setItem('bk_round', roundMode); }
   localStorage.setItem('bk_global_target', globalTarget);
   localStorage.setItem('bk_sem_start', semStart);
   localStorage.setItem('bk_exam_date', examDate);
@@ -1211,7 +1217,14 @@ function applyPrefsFromAccount() {
 // ══════════════════════════════════════════════════════
 // Rounded DOWN: 74.6% must read 74%, never 75%, or a 75% target would look
 // met when it isn't. Every "am I above target" check relies on this.
-function attPct(present, total) { return total > 0 ? Math.floor(present * 100 / total) : 0; }
+function attPct(present, total) {
+  if (!(total > 0)) return 0;
+  if (roundMode === 'up') return Math.floor((present * 100 + total - 1) / total);   // 83.3 -> 84
+  if (roundMode === 'exact') return Math.floor(present * 1000 / total) / 10;        // 83.3 (down at the 1st decimal)
+  return Math.floor(present * 100 / total);                                         // 83.3 -> 83
+}
+// a percentage difference for text ("2.5% under"), without float noise
+function pctDiff(a, b) { return Math.round((a - b) * 10) / 10; }
 function pct(s) { return attPct(s.present, s.total); }
 function getTarget(s) { return s?.target || globalTarget; }
 // ── Bunks: ONE calculation for every view (Home, subject list, Daily Classes, Safe Bunks, Am I Cooked, Bunk
@@ -1220,8 +1233,25 @@ function getTarget(s) { return s?.target || globalTarget; }
 //     everything left, in any order, and you still finish at or above the target;
 //   * otherwise only what is certain: the next classes you could miss in a row and still be at or above it now.
 // Integer maths throughout (29/50*100 = 57.999… in floats).
-function attendNeeded(t, n) { return Math.floor((t * n + 99) / 100); }            // fewest attended of n for t%
-function bunkableNow(s, t = getTarget(s)) { return Math.max(0, Math.floor(s.present * 100 / t) - s.total); }
+// The fewest attended out of n that the college counts as t% or more (rounding up: 74.1% already counts as 75%)
+function attendNeeded(t, n) {
+  if (n <= 0) return 0;
+  if (roundMode === 'up') return t <= 0 ? 0 : Math.floor((t - 1) * n / 100) + 1;
+  return Math.floor((t * n + 99) / 100);
+}
+// The most classes held with `present` attended that still count as t%
+function maxHeld(present, t) {
+  if (roundMode === 'up') return t <= 1 ? Infinity : present > 0 ? Math.floor((present * 100 - 1) / (t - 1)) : 0;
+  return Math.floor(present * 100 / t);
+}
+// Classes to attend in a row (from `held`) before it counts as t% again; Infinity when it never can
+function attendToMeet(present, held, t) {
+  if (attendNeeded(t, held) <= present) return 0;
+  if (roundMode === 'up') return Math.floor(((t - 1) * held - 100 * present) / (101 - t)) + 1;
+  if (t >= 100) return Infinity;
+  return Math.ceil((t * held - 100 * present) / (100 - t));
+}
+function bunkableNow(s, t = getTarget(s)) { return Math.max(0, Math.min(1e6, maxHeld(s.present, t)) - s.total); }
 function bunkPlan(s, t = getTarget(s)) {
   const ri = remainingInfo(s);
   const known = !!ri && !ri.guess;                     // a guessed semester length is not enough to plan bunks on
@@ -1241,8 +1271,7 @@ function bunkPlan(s, t = getTarget(s)) {
 function bunkable(s) { return bunkPlan(s).bunks; }
 // Classes to attend in a row before one bunk is safe again (at or just under the target, semester unknown)
 function bufferIn(s, t = getTarget(s)) {
-  if (t >= 100) return Infinity;
-  return Math.max(1, Math.ceil((t * (s.total + 1) - 100 * s.present) / (100 - t)));
+  return Math.max(1, attendToMeet(s.present, s.total + 1, t));
 }
 // What a subject below its target needs, in words: "attend 12 of 19 left" / "need 4 in a row" / "can't reach 75%"
 function needText(s) {
@@ -1253,9 +1282,7 @@ function needText(s) {
 }
 function needed(s, tgt) {
   const t = tgt ?? getTarget(s);
-  if (pct(s) >= t) return 0;
-  if (t >= 100) return Infinity; // one absence means 100% is out of reach
-  return Math.max(0, Math.ceil((t * s.total - 100 * s.present) / (100 - t)));
+  return attendToMeet(s.present, s.total, t);   // Infinity: one absence put 100% out of reach
 }
 function pctColor(p, tgt) {
   tgt = tgt ?? globalTarget;
@@ -1426,6 +1453,8 @@ function toggleSidebar() {
 }
 function renderNav() {
   document.getElementById('global-target').value = globalTarget;
+  const rm = document.getElementById('round-mode');
+  if (rm) rm.value = roundMode;
   const sl = document.getElementById('sem-link-text');
   if (sl) sl.textContent = semStart && semEnd ? `Semester: ${fmtShort(semStart)} – ${fmtShort(semEnd)}`
     : semStart ? `Semester: ${fmtShort(semStart)} – ~${fmtShort(semEndInfo().date)}` : 'Set semester dates';
@@ -1441,6 +1470,15 @@ function renderNav() {
   }).join('');
   renderWisdom();
   renderStreak();
+}
+
+function updateRoundMode(v) {
+  roundMode = ROUND_MODES.includes(v) ? v : 'down';
+  savePrefs();
+  renderAll();
+  if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
+  toast(roundMode === 'up' ? 'Got it: 83.3% now counts as 84% ✨' : roundMode === 'exact' ? 'Got it: percentages keep their decimals ✨'
+    : 'Got it: 83.3% counts as 83% ✨');
 }
 
 function updateGlobalTarget(v) {
@@ -2219,11 +2257,13 @@ function checkSubjectForm(f, excludeId) {
     const total = f.total ?? 0, present = f.present ?? 0;
     if (present > total) return { error: "Classes missed can't be less than 0.", field: ids.absent || ids.present };
     if (bad(f.perWeek, 0, 30)) return { error: 'That\'s more classes a week than fit in a timetable.', field: ids.perWeek };
-    if (bad(f.semTotal, 1, 5000)) return { error: 'Total classes this semester must be a whole number, or leave it blank.', field: ids.semTotal };
-    if (f.semTotal != null && f.semTotal < total) {
-      return { error: `Total classes this semester (${f.semTotal}) can't be fewer than the ${total} already held.`, field: ids.semTotal };
+    if (bad(f.semLeft, 0, 5000)) return { error: 'Classes left must be a whole number (0 or more).', field: ids.semLeft };
+    const semTotal = f.semTotal ?? (Number.isInteger(f.semLeft) ? total + f.semLeft : null);
+    if (bad(semTotal, 1, 5000)) return { error: 'Total classes this semester must be a whole number, or leave it blank.', field: ids.semTotal };
+    if (semTotal != null && semTotal < total) {
+      return { error: `Total classes this semester (${semTotal}) can't be fewer than the ${total} already held.`, field: ids.semTotal };
     }
-    return { values: { name, total, present, perWeek: f.perWeek ?? 0, target, semTotal: f.semTotal ?? null, mode: 'exact' } };
+    return { values: { name, total, present, perWeek: f.perWeek ?? 0, target, semTotal: semTotal ?? null, mode: 'exact' } };
   }
 
   const start = f.semStart || '';
@@ -2236,11 +2276,13 @@ function checkSubjectForm(f, excludeId) {
   if (missed > total) {
     return { error: `You've entered ${missed} missed, but only about ${total} class${total !== 1 ? 'es have' : ' has'} happened since ${fmtDate(start)}.`, field: ids.missed };
   }
-  if (bad(f.semTotal, 1, 5000)) return { error: 'Total classes this semester must be a whole number, or leave it blank.', field: ids.semTotal };
-  if (f.semTotal != null && f.semTotal < total) {
-    return { error: `Total classes this semester (${f.semTotal}) can't be fewer than the ~${total} already held.`, field: ids.semTotal };
+  if (bad(f.semLeft, 0, 5000)) return { error: 'Classes left must be a whole number (0 or more).', field: ids.semLeft };
+  const semTotal = f.semTotal ?? (Number.isInteger(f.semLeft) ? total + f.semLeft : null);   // ~held + left
+  if (bad(semTotal, 1, 5000)) return { error: 'Total classes this semester must be a whole number, or leave it blank.', field: ids.semTotal };
+  if (semTotal != null && semTotal < total) {
+    return { error: `Total classes this semester (${semTotal}) can't be fewer than the ~${total} already held.`, field: ids.semTotal };
   }
-  return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: f.semTotal ?? null, mode: 'estimate', semStart: start, days: byDays ? f.days : null, holidays: byDays?.holidays || 0 } };
+  return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: semTotal ?? null, mode: 'estimate', semStart: start, days: byDays ? f.days : null, holidays: byDays?.holidays || 0 } };
 }
 
 // One friendly line describing what will be saved.
@@ -2583,7 +2625,7 @@ function outlook(s, tgt, skip = 0) {
   const ri = remainingInfo(s);
   const leftNow = ri ? ri.n : null;
   const left = leftNow !== null ? Math.max(0, leftNow - skip) : null;
-  const need = pctNow >= tgt ? 0 : (tgt >= 100 ? Infinity : Math.max(0, Math.ceil((tgt * total - 100 * present) / (100 - tgt))));
+  const need = attendToMeet(present, total, tgt);
   const best = left !== null ? attPct(present + left, total + left) : null;
   return { total, present, pct: pctNow, need, left, leftNow, best, ri, ab: ri?.est ? '~' : '',
            tooMany: leftNow !== null && skip > leftNow,
@@ -2641,10 +2683,12 @@ function readEditForm(s) {
     semStart: textField('inp-semstart'),
     missed: numField('inp-est-absent'),
     semTotal: numField(est ? 'inp-est-semtotal' : 'inp-semtotal'),
+    semLeft: numField(est ? 'inp-est-semleft' : 'inp-semleft'),
     ids: {
       name: 'inp-subject-name', total: 'inp-total', present: 'inp-present', absent: 'inp-absent',
       perWeek: 'edit-days', target: est ? 'inp-est-target' : 'inp-target',
       semStart: 'inp-semstart', missed: 'inp-est-absent', semTotal: est ? 'inp-est-semtotal' : 'inp-semtotal',
+      semLeft: est ? 'inp-est-semleft' : 'inp-semleft',
     },
   };
 }
@@ -2664,8 +2708,8 @@ function fillEditForm(s) {
   renderDayPicker('edit-days');
   set('inp-est-absent', s.total - s.present);
   set('inp-est-target', s.target || '');
-  set('inp-est-semtotal', s.semTotal || '');
-  set('inp-semtotal', s.semTotal || '');
+  fillSemPair('inp-est-semtotal', 'inp-est-semleft', s.semTotal);
+  fillSemPair('inp-semtotal', 'inp-semleft', s.semTotal);
   showClassesLeft();
   const body = document.querySelector('#edit-card .edit-body');
   if (body && !body.dataset.wired) {
@@ -2687,6 +2731,7 @@ function onEditInput(e) {
     const sum = (Number.isInteger(present) ? present : 0) + (Number.isInteger(absent) ? absent : 0);
     document.getElementById('inp-total').value = Number.isInteger(present) || Number.isInteger(absent) ? sum : '';
   }
+  syncSemPairs(id);
   showClassesLeft();
   e.target.classList.remove('invalid');
   e.target.removeAttribute('aria-invalid');
@@ -2694,6 +2739,36 @@ function onEditInput(e) {
 }
 
 // "Classes left" = the whole semester's classes - the ones held so far (Official numbers)
+// "Total classes this semester" or "classes left": whichever the student types decides; the other is worked out
+// and locked (clear yours to switch). Estimate mode can't know what's held until it saves, so the total is worked out
+// then.
+const SEM_PAIRS = [['inp-semtotal', 'inp-semleft', () => numField('inp-total') || 0], ['inp-est-semtotal', 'inp-est-semleft', null],
+                   ['as-semtotal-x', 'as-semleft-x', () => numField('as-total') || 0], ['as-semtotal', 'as-semleft', null]];
+function syncSemPairs(changedId) {
+  for (const [tId, lId, heldOf] of SEM_PAIRS) {
+    const T = document.getElementById(tId), L = document.getElementById(lId);
+    if (!T || !L) continue;
+    if (changedId === tId) T.dataset.typed = T.value.trim() ? '1' : '';
+    if (changedId === lId) L.dataset.typed = L.value.trim() ? '1' : '';
+    const by = L.dataset.typed ? 'left' : T.dataset.typed ? 'total' : '';
+    const held = heldOf ? heldOf() : null, tv = numField(tId), lv = numField(lId);
+    T.readOnly = by === 'left'; L.readOnly = by === 'total';
+    T.classList.toggle('auto-sum', by === 'left'); L.classList.toggle('auto-sum', by === 'total');
+    T.placeholder = by === 'left' ? (held === null ? 'worked out on save' : '') : 'e.g. 60';
+    L.placeholder = by === 'total' ? (held === null ? 'worked out on save' : '') : 'e.g. 20';
+    if (by === 'left') T.value = held !== null && Number.isInteger(lv) ? held + lv : '';
+    else if (by === 'total') L.value = held !== null && Number.isInteger(tv) ? Math.max(0, tv - held) : '';
+    else { T.value = ''; L.value = ''; }
+  }
+}
+// a form opened on a subject: its saved total drives
+function fillSemPair(tId, lId, total) {
+  const T = document.getElementById(tId), L = document.getElementById(lId);
+  if (!T || !L) return;
+  T.value = total || ''; T.dataset.typed = total ? '1' : '';
+  L.value = ''; L.dataset.typed = '';
+  syncSemPairs();
+}
 function heldLeftText(held, sem) {
   const h = `${nWord(held, 'class', 'classes')} held so far`;
   if (!Number.isInteger(sem)) return h;
@@ -3019,7 +3094,7 @@ function updateSim() {
     status = known ? `you'd still finish at ${tgt}%+` + (dip < tgt ? ` · back to back, you'd dip to ${dip}% for a while` : '') : 'still safe ✨';
   } else if (safe) { icon = '👀'; color = 'var(--warn)'; status = `${plan - limit} over the safe limit`; }
   else if (justLost) { icon = '🫠'; color = 'var(--danger)'; status = `${tgt}% gone for this sem`; }
-  else { icon = '💀'; color = 'var(--danger)'; status = `<strong>${tgt - shown}%</strong> under ${tgt}%`; }
+  else { icon = '💀'; color = 'var(--danger)'; status = `<strong>${pctDiff(tgt, shown)}%</strong> under ${tgt}%`; }
   const tiles = known
     ? [['indigo', 'coffee', 'Bunks left', b.ab + Math.max(0, limit - plan)], ['amber', 'calendar', 'Still to attend', b.ab + (b.left - plan)],
        [safe ? 'green' : 'pink', 'trend', 'Finish at', b.ab + shown + '%']]
@@ -3179,7 +3254,7 @@ async function obFinish() {
 function openAddModal() {
   const ov = document.getElementById('add-overlay');
   ov.classList.add('show');
-  ['as-name','as-total','as-present','as-absent','as-missed','as-target','as-semtotal','as-semtotal-x'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['as-name','as-total','as-present','as-absent','as-missed','as-target','as-semtotal','as-semtotal-x','as-semleft','as-semleft-x'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   setDayPicker('as-days', emptyDays());
   setUpto('as-upto', 'today');
   showUpto('as-upto', false);
@@ -3192,6 +3267,7 @@ function openAddModal() {
         const p = numField('as-present'), a = numField('as-absent');
         document.getElementById('as-total').value = Number.isInteger(p) || Number.isInteger(a) ? (p || 0) + (a || 0) : '';
       }
+      syncSemPairs(e.target.id);
       const sem = numField('as-semtotal-x'), held = numField('as-total') || 0, left = document.getElementById('as-left');
       if (left) {
         left.hidden = !held && !Number.isInteger(sem);
@@ -3238,7 +3314,8 @@ function readAddForm() {
     semStart: textField('as-semstart'),
     missed: numField('as-missed'),
     semTotal: numField(est ? 'as-semtotal' : 'as-semtotal-x'),
-    ids: { name: 'as-name', total: 'as-total', present: 'as-present', absent: 'as-absent', perWeek: 'as-days', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: est ? 'as-semtotal' : 'as-semtotal-x' },
+    semLeft: numField(est ? 'as-semleft' : 'as-semleft-x'),
+    ids: { name: 'as-name', total: 'as-total', present: 'as-present', absent: 'as-absent', perWeek: 'as-days', target: 'as-target', semStart: 'as-semstart', missed: 'as-missed', semTotal: est ? 'as-semtotal' : 'as-semtotal-x', semLeft: est ? 'as-semleft' : 'as-semleft-x' },
   };
 }
 function updateAddPreview() {
