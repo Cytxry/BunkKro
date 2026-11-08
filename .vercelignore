@@ -8,3 +8,4 @@ migrations/
 schema-migrations.sql
 extension/
 AI_INTEGRATION.md
+.github/

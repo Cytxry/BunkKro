@@ -1,0 +1,27 @@
+# Checks on every push and pull request. A failure blocks the merge when branch protection requires this check
+# (GitHub: Settings -> Branches -> rule for main -> "Require status checks to pass" -> "site-checks").
+name: site-checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  site-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0              # the secret scan reads the whole history
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: JavaScript parses
+        run: for f in *.js tests/*.js; do node --check "$f" || exit 1; done
+      - name: No inline JavaScript, pinned scripts, strict CSP, no secrets
+        run: node tests/static-checks.js
+      - name: Batch step and lab naming
+        run: node tests/ai-batch-check.js
+      - name: Day Order calendar
+        run: node tests/day-order-check.js
