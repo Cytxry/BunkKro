@@ -1132,6 +1132,9 @@ const ROUND_MODES = ['down', 'up', 'exact'];
 const ROUND_HINTS = { down: 'Decimals get dropped, always down', up: 'Any decimal nudges it up', exact: 'Decimals stay as they are' };
 let roundMode = ROUND_MODES.includes(localStorage.getItem('bk_round')) ? localStorage.getItem('bk_round') : 'down';
 let semStart = localStorage.getItem('bk_sem_start') || '';
+// Day Order colleges (day-order.js): the timetable's days are Day 1 .. Day N, and the college calendar says which Day
+// a date is. null = an ordinary weekly timetable (Monday .. Sunday).
+let dayCycle = (() => { try { return JSON.parse(localStorage.getItem('bk_day_cycle') || 'null'); } catch (e) { return null; } })();
 let examDate = localStorage.getItem('bk_exam_date') || '';
 let semEnd = localStorage.getItem('bk_sem_end') || '';   // last day of classes
 // Semester length in weeks, used to estimate the last day of classes when the student only knows the first day
@@ -1162,6 +1165,7 @@ function savePrefs() {
   localStorage.setItem('bk_sem_end', semEnd);
   localStorage.setItem('bk_sem_weeks', semWeeks);
   localStorage.setItem('bk_counted_upto', JSON.stringify(countedUpTo));
+  localStorage.setItem('bk_day_cycle', JSON.stringify(dayCycle));
   localStorage.setItem('bk_streak', streak);
   localStorage.setItem('bk_last_check', lastCheck);
   schedulePrefsSync();
@@ -1176,7 +1180,7 @@ function schedulePrefsSync() {
   if (!currentUser || !supabaseClient?.auth?.updateUser) return;
   clearTimeout(prefsSyncTimer);
   prefsSyncTimer = setTimeout(async () => {
-    const want = { semStart, examDate, semEnd, semWeeks, target: globalTarget, round: roundMode };
+    const want = { semStart, examDate, semEnd, semWeeks, target: globalTarget, round: roundMode, dayCycle };
     const meta = currentUser?.user_metadata || {};
     if (JSON.stringify(meta.bk_prefs || {}) === JSON.stringify(want) && JSON.stringify(meta.bk_counted_upto || {}) === JSON.stringify(countedUpTo)) return;
     try {
@@ -1200,6 +1204,11 @@ function applyPrefsFromAccount() {
   if (typeof p.semEnd === 'string' && (p.semEnd === '' || DATE_RE.test(p.semEnd))) semEnd = p.semEnd;
   if (Number.isInteger(p.semWeeks) && p.semWeeks >= 8 && p.semWeeks <= 30) semWeeks = p.semWeeks;
   localStorage.setItem('bk_sem_weeks', semWeeks);
+  if (p.dayCycle === null || (p.dayCycle && window.BunkDayOrder && !BunkDayOrder.problems(p.dayCycle).length)) {
+    dayCycle = p.dayCycle;
+    localStorage.setItem('bk_day_cycle', JSON.stringify(dayCycle));
+    applyDayLabels();
+  }
   const cu = currentUser?.user_metadata?.bk_counted_upto;
   if (cu && typeof cu === 'object') {
     countedUpTo = {};
@@ -1342,10 +1351,11 @@ function estimateHeldByDays(start, counts) {
   const [y, m, d] = start.split('-').map(Number);
   const day = new Date(y, m - 1, d), today = getLocalDateString();
   let held = 0, holidays = 0;
+  const cycle = dayOrderOn() ? BunkDayOrder.range(dayCycle, today, isHolidayDate) : null;
   for (let i = 0; i < 400; i++, day.setDate(day.getDate() + 1)) {
     const ds = getLocalDateString(day);
     if (ds >= today) break;
-    const n = counts[day.getDay() || 7] || 0;
+    const n = cycle ? (counts[cycle.get(ds) || 0] || 0) : (counts[day.getDay() || 7] || 0);
     if (!n) continue;
     if (dateExceptions[ds]?.type === 'holiday') { holidays += n; continue; }
     held += n;
@@ -2611,6 +2621,7 @@ function remainingInfoCalc(s) {
 function remainingClasses(s) { return remainingInfo(s)?.n ?? null; }
 // Timetable classes of a subject that fall on holidays planned from today up to `until`
 function holidayClassesAhead(s, until) {
+  if (dayOrderOn()) return 0;                  // a holiday doesn't use up a Day: the next working day takes it
   const today = getLocalDateString();
   let n = 0;
   for (const [ds, ex] of Object.entries(dateExceptions)) {
@@ -4001,6 +4012,11 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
                       created: subjects.filter(s => !hadSubjects.has(s.id)).map(s => s.id) } });
       renderAll();                                   // the sidebar too: old subjects may be gone
       setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
+      // a Day 1 .. Day N timetable: which Day each date is comes from the college calendar, set up now
+      if (res.dayOrder && !dayOrderOn()) {
+        const n = Math.max(2, ...slots.map(s => s.day || 0));
+        setTimeout(() => openDayOrderSetup({ length: n }), 1500);
+      }
       setTimeout(() => {
         if (progressBox) progressBox.style.display = 'none';
         const dropzone = document.getElementById('tt-dropzone');
@@ -4957,11 +4973,15 @@ function renderTimetable() {
   updateUploadCardState();
   if (window.BunkKroImport) BunkKroImport.render();   // the "Does it look right?" bar follows every edit
 
-  const activeDays = DAYS_MAP.filter(d => d.num <= 6 || timetableMeta.showSunday);
+  applyDayLabels();
+  const activeDays = visibleDays();
 
   if (sundayBtn) {
     sundayBtn.textContent = timetableMeta.showSunday ? '- Sunday' : '+ Sunday';
+    sundayBtn.hidden = dayOrderOn();
   }
+  const doBtn = document.getElementById('btn-day-order');
+  if (doBtn) doBtn.textContent = dayOrderOn() ? `Day Order · ${dayCycle.length} days` : 'Day Order?';
 
   const validSubjectSlots = timetable.filter(s => !s.isBreak);
   if (badge) {   // the same count as "N classes loaded": a "Class or free?" period isn't a class yet
@@ -5359,7 +5379,7 @@ function ttKeyMove(e) {
     if (k < 0 || k > others.length) return;
     changed = ttApplyMove(() => ttMoveSlot(slot, slot.day, others[k] ? String(others[k].id) : null), () => ttDropDescribe(slot));
   } else {
-    const days = DAYS_MAP.filter(d => d.num <= 6 || timetableMeta.showSunday).map(d => d.num);
+    const days = visibleDays().map(d => d.num);
     const next = days[days.indexOf(slot.day) + (e.key === 'ArrowUp' ? -1 : 1)];
     if (!next) return;
     const target = ttDaySlots(next);
@@ -6447,8 +6467,15 @@ function openDaySwap() {
   const dow = new Date(y, m - 1, d).getDay() || 7;
   const plan = getDayPlan(date);
   const sel = document.getElementById('dayswap-select');
-  sel.innerHTML = DAYS_MAP.map(x => `<option value="${x.num}">${x.num === dow ? `${x.name} (usual)` : `${x.name}'s timetable`}</option>`).join('');
-  sel.value = String(plan.follows || dow);
+  if (dayOrderOn()) {                          // the college announced which Day this date follows
+    const usual = BunkDayOrder.dayFor(date, { ...dayCycle, overrides: Object.fromEntries(Object.entries(dayCycle.overrides || {}).filter(([k]) => k !== date)) }, isHolidayDate);
+    sel.innerHTML = [...visibleDays().map(x => `<option value="${x.num}">${x.name}${x.num === usual ? ' (usual)' : ''}</option>`),
+      `<option value="0">No classes${usual === 0 ? ' (usual)' : ''}</option>`].join('');
+    sel.value = String(scheduleDayFor(date));
+  } else {
+    sel.innerHTML = DAYS_MAP.map(x => `<option value="${x.num}">${x.num === dow ? `${x.name} (usual)` : `${x.name}'s timetable`}</option>`).join('');
+    sel.value = String(plan.follows || dow);
+  }
   document.getElementById('dayswap-date').textContent = fmtDate(date);
   document.getElementById('dayswap-overlay').classList.add('show');
 }
@@ -6457,6 +6484,7 @@ async function confirmDaySwap() {
   const date = selectedTrackerDate;
   const [y, m, d] = date.split('-').map(Number);
   const dow = new Date(y, m - 1, d).getDay() || 7;
+  if (dayOrderOn()) return confirmDayOrderSwap(date, parseInt(document.getElementById('dayswap-select').value) || 0);
   const pick = parseInt(document.getElementById('dayswap-select').value) || dow;
   const plan = getDayPlan(date);
   const follows = pick === dow ? null : pick;
@@ -6474,6 +6502,67 @@ async function confirmDaySwap() {
   renderTracker(); renderNav();
 }
 
+async function confirmDayOrderSwap(date, pick) {
+  if (scheduleDayFor(date) === pick) return closeDaySwap();
+  const marked = getScheduledClassesForDate(date).filter(c => c.status).map(c => c.slotId);
+  if (marked.length) {
+    if (!(await askDialog({ title: 'Switch the Day?', message: `${marked.length} class${marked.length !== 1 ? 'es are' : ' is'} already marked on this day. Switching clears ${marked.length !== 1 ? 'those marks' : 'that mark'} and adjusts your totals.`, ok: 'Switch', cat: 'cat-calendar' }))) return;
+    if (!(await removeMarks(date, marked))) { toast('Could not clear marks for this day', 'err'); return; }
+  }
+  dayCycle = { ...dayCycle, overrides: { ...(dayCycle.overrides || {}), [date]: pick } };
+  savePrefs();
+  closeDaySwap();
+  toast(pick ? `This day follows ${BunkDayOrder.label(pick)} ✓ the next days follow on from it` : 'No classes this day ✓ the next working day takes its Day');
+  renderTracker(); renderNav();
+}
+
+// Setting up (or turning off) a Day Order calendar: the date of Day 1, the days in the cycle, the working weekdays
+function openDayOrderSetup(suggest) {
+  const cur = dayCycle || { kind: 'day_order', start: semStart || getLocalDateString(),
+    length: (suggest && suggest.length >= 2 && suggest.length <= 7) ? suggest.length : 6, workingDays: [1, 2, 3, 4, 5, 6], overrides: {} };
+  const names = WEEKDAY_NAMES.map(n => n[1]);
+  const ov = document.createElement('div');
+  ov.className = 'overlay show';
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  ov.dataset.escape = 'cancel';
+  ov.innerHTML = `<div class="modal modal-center" style="max-width:440px">
+      <img class="modal-cat" src="assets/cat-calendar.svg" alt="">
+      <h2>Does your college use a Day Order?</h2>
+      <p class="sub">Instead of Monday to Friday, your timetable runs Day 1, Day 2 … and starts over. BunkKro works out which Day each date is.</p>
+      <div class="mf" style="text-align:left"><label for="do-start">Which date was Day 1?</label><input type="date" id="do-start" value="${escapeHTML(cur.start)}"></div>
+      <div class="mf" style="text-align:left"><label for="do-len">How many Days in the cycle?</label>
+        <select id="do-len">${[2, 3, 4, 5, 6, 7].map(n => `<option value="${n}"${n === cur.length ? ' selected' : ''}>${n} days</option>`).join('')}</select></div>
+      <div class="mf" style="text-align:left"><label>Which weekdays does your college work?</label>
+        <div class="day-picker" id="do-days">${names.map((n, i) => `<button type="button" class="day-chip${cur.workingDays.includes(i + 1) ? ' on' : ''}" data-wd="${i + 1}" aria-pressed="${cur.workingDays.includes(i + 1)}">${n}</button>`).join('')}</div></div>
+      <p class="sub" style="font-size:.78rem">Holidays you mark don't use up a Day: the next working day takes it. If the college announces "today follows Day 3", set it from that day's classes.</p>
+      <p class="sub" id="do-err" style="color:var(--danger)" hidden></p>
+      <div class="modal-btns">
+        ${dayCycle ? '<button class="btn-sec" data-act="off">Turn off (weekly)</button>' : '<button class="btn-sec" data-act="cancel">Not now</button>'}
+        <button class="btn-pri" data-act="save">Save</button>
+      </div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => {
+    const chip = e.target.closest('.day-chip[data-wd]');
+    if (chip) { chip.classList.toggle('on'); chip.setAttribute('aria-pressed', chip.classList.contains('on')); return; }
+    const act = e.target.getAttribute && e.target.getAttribute('data-act');
+    if (!act) return;
+    if (act === 'cancel') return ov.remove();
+    if (act === 'off') { dayCycle = null; savePrefs(); ov.remove(); applyDayLabels(); renderAll(); toast('Back to a weekly timetable'); return; }
+    const next = { kind: 'day_order', start: ov.querySelector('#do-start').value, length: Number(ov.querySelector('#do-len').value),
+      workingDays: [...ov.querySelectorAll('.day-chip.on')].map(c => Number(c.dataset.wd)), overrides: cur.overrides || {} };
+    const bad = BunkDayOrder.problems(next);
+    if (bad.length) { const err = ov.querySelector('#do-err'); err.textContent = bad[0]; err.hidden = false; return; }
+    dayCycle = next;
+    savePrefs();
+    ov.remove();
+    applyDayLabels();
+    renderAll();
+    const today = scheduleDayFor(getLocalDateString());
+    toast(today ? `Day Order on ✓ today is ${BunkDayOrder.label(today)}` : 'Day Order on ✓ no classes today');
+  });
+}
+
 // A class only counts towards attendance when it's linked to one of your subjects
 function isCountable(c) { return subjects.some(x => x.id === c.subjectId); }
 
@@ -6486,15 +6575,40 @@ function setCountedUpTo(subjId, date) {
   savePrefs();
 }
 function dayOffset(n) { const d = new Date(); d.setDate(d.getDate() + n); return getLocalDateString(d); }
-function hasClassToday(counts) { return !!counts[new Date().getDay() || 7]; }
+function hasClassToday(counts) { return !!counts[scheduleDayFor(getLocalDateString())]; }
 
-// Get scheduled classes for a specific date (1=Monday ... 7=Sunday)
+// ── Day Order ──
+function dayOrderOn() { return !!(dayCycle && window.BunkDayOrder && !BunkDayOrder.problems(dayCycle).length); }
+const isHolidayDate = ds => dateExceptions[ds]?.type === 'holiday';
+// The timetable day a date follows: its weekday (1 = Monday .. 7 = Sunday, or the day it was switched to), or, for
+// a Day Order college, its Day from the college calendar (0 = no classes: a holiday doesn't use up a Day)
+function scheduleDayFor(dateStr) {
+  if (dayOrderOn()) return BunkDayOrder.dayFor(dateStr, dayCycle, isHolidayDate);
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return getDayPlan(dateStr).follows || new Date(y, m - 1, d).getDay() || 7;   // "Saturday follows Monday's timetable"
+}
+// The timetable's rows are named after the cycle's Days (never turned into weekdays)
+const WEEKDAY_NAMES = DAYS_MAP_NAMES();
+function DAYS_MAP_NAMES() {
+  return [['Monday', 'Mon'], ['Tuesday', 'Tue'], ['Wednesday', 'Wed'], ['Thursday', 'Thu'], ['Friday', 'Fri'],
+          ['Saturday', 'Sat'], ['Sunday', 'Sun']];
+}
+function applyDayLabels() {
+  if (typeof DAYS_MAP === 'undefined') return;
+  DAYS_MAP.forEach((d, i) => {
+    if (dayOrderOn()) { d.name = BunkDayOrder.label(d.num); d.short = `D${d.num}`; }
+    else { [d.name, d.short] = WEEKDAY_NAMES[i]; }
+  });
+}
+function visibleDays() {
+  return dayOrderOn() ? DAYS_MAP.filter(d => d.num <= dayCycle.length)
+    : DAYS_MAP.filter(d => d.num <= 6 || timetableMeta.showSunday);
+}
+
+// Get scheduled classes for a specific date (the timetable day it follows: scheduleDayFor)
 function getScheduledClassesForDate(dateStr) {
-  const parts = dateStr.split('-').map(Number);
-  const d = new Date(parts[0], parts[1] - 1, parts[2]);
-  let dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday ... 6 = Saturday
-  dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Convert 0 (Sun) to 7
-  dayOfWeek = getDayPlan(dateStr).follows || dayOfWeek; // "Saturday follows Monday's timetable"
+  const dayOfWeek = scheduleDayFor(dateStr);
+  if (!dayOfWeek) return [];
 
   // Filter timetable slots for that day
   const slots = timetable.filter(s => s.day === dayOfWeek && !s.isBreak);

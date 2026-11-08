@@ -38,7 +38,7 @@
     'updateRoundMode', 'updateSim',
     // below: the handlers that used to be more than one call
     'pickTimetableFile', 'openTimetablePicker', 'keyActivate', 'closeSafeBunksAndGo', 'removeSetupRow',
-    'studioSelectCell'
+    'studioSelectCell', 'openDayOrderSetup'
   ]);
 
   // ── the call parser ──────────────────────────────────────────────────────────────────────────────────────────

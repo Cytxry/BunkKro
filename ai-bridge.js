@@ -251,21 +251,22 @@
     const started = await call('POST', '/scan?filename=' + encodeURIComponent(file.name || 'upload.png'), file);
     if (!started.ok) throw new Error(started.error || 'the AI did not accept this file');
     await waitForJob(started.job, onPhase);
-    let res = await call('GET', `/result?job=${started.job}`);
-    const usable = (res.choices || []).filter(c => !c.day_order);
+    // dayorder=1: the site has a Day Order calendar (day-order.js), so a Day 1 .. Day N timetable can be imported
+    let res = await call('GET', `/result?job=${started.job}&dayorder=1`);
+    const usable = res.choices || [];
     if (res.job && usable.length > 1) {        // several timetables: one per class, year or page
       onPhase && onPhase('fusion', 82, 'This file holds several timetables: choose yours...');
       const file2 = await choose('Which timetable is yours?', 'This file holds several timetables (one per class, year or page).',
         usable.map(c => ({ label: choiceLabel(c), value: c.file })), 'Use this timetable');
       if (file2 === null) throw cancelled('No timetable chosen');
-      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(file2)}`);
+      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(file2)}&dayorder=1`);
     }
     if (!res.ok && res.needs_track) {
       onPhase && onPhase('fusion', 85, 'Several class rows per day: choose yours...');
       const track = await choose('Which row is yours?', 'This timetable prints several class rows per day (sections or batches). Pick yours.',
         res.tracks.map(t => ({ label: t, value: t })), 'Use this row');
       if (track === null) throw cancelled('No class row chosen');
-      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}&track=${encodeURIComponent(track)}`);
+      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}&track=${encodeURIComponent(track)}&dayorder=1`);
     }
     if (!res.ok) {
       const err = new Error(res.error || 'The AI could not read this timetable');
@@ -277,7 +278,7 @@
     const slots = matchSubjects(nameSessions(res.slots), subjects || []);
     const canvas = res.image ? await loadImage(res.image) : null;
     const cells = canvas ? studioCells(slots) : [];
-    return { slots, review: res.review || null, validation: issues(slots, res.review),
+    return { slots, review: res.review || null, validation: issues(slots, res.review), dayOrder: !!res.dayOrder,
       studio: canvas && cells.length ? { canvas, cells } : null, source: res.file, engineVersion };
   }
 
