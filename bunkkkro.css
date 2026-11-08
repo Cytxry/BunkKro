@@ -1566,3 +1566,5 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 .form-sum.is-error{background:var(--danger-bg);color:var(--danger)}
 .sp-held{margin:10px 2px 0;font-size:.82rem;color:var(--text2);font-weight:600}
 .sp-held:empty{display:none}
+.tt-ai-status-loaded{display:block;margin-top:6px}
+.tt-ai-status-loaded:empty{display:none}
