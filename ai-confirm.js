@@ -7,11 +7,14 @@
  *   confirmed                  every period was decided by the student
  *   confirmed_with_unresolved  the student chose to save with some "Class or free?" periods left
  * "Check them" opens each flagged period in turn; each popup answers in one tap (free / it's right) or a fix.
- * Confirming saves nothing new (the timetable is saved as you edit); it records that the student checked it.
+ * Confirming records that the student checked it (the timetable itself is saved as you edit).
  *
- * Improving the AI: when a signed-in student confirms, what the AI read and what the student kept are sent with it
- * (never the file). The bar says so before confirming, and "Turn off" (in the "Schedule loaded" bar) stops it and
- * deletes what was sent.
+ * Nothing is lost to an AI reading: until the new timetable is confirmed, the old one is kept ("Put back my old
+ * timetable"), and the old subjects the student chose to remove (with their attendance) are only removed on confirm.
+ *
+ * Improving the AI is a separate, explicit choice (off until the student turns it on): confirming a timetable is not
+ * consent. When it is on, what the AI read and what the student kept are sent on confirm (never the file); "Turn
+ * off" stops it and deletes what was sent.
  *
  * Cloud tables (migrations/2026-11-06-ai-confirmation.sql): timetable_imports, timetable_feedback. Until they
  * exist, everything stays on this device and nothing breaks.
@@ -27,14 +30,21 @@
   const uuid = () => (typeof newUuid === 'function' ? newUuid() : crypto.randomUUID());
   const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
   const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
-  const sharing = () => { const s = load('share', null); return !s || s.value !== false; };   // on unless turned off
+  // only an explicit "Turn on" counts: confirming a timetable is not consent to help train the AI
+  const sharing = () => { const s = load('share', null); return !!(s && s.value === true); };
+  let held = [];                         // subjects to remove once the import that is starting is confirmed
   let cloudReady = true;                 // false once the cloud tables turn out not to exist (migration not run yet)
   let walk = 0;                          // when "Check them" was last used: the popup moves on to the next one
 
   const pick = s => ({
     day: s.day, startTime: s.startTime || '', endTime: s.endTime || '', subjectName: s.subjectName || '',
     rawText: s.rawText || '', isUnknown: !!s.isUnknown, isUncertain: !!s.isUncertain, isBreak: !!s.isBreak,
-    cellId: s.cellId || null
+    cellId: s.cellId || null,
+    // what the page says about it (W11): kept in the import record, also for the classes of other batches
+    ...(s.batches && s.batches.length ? { batches: s.batches.slice() } : {}),
+    ...(s.allBatches ? { allBatches: true } : {}),
+    ...(s.sessionType ? { sessionType: s.sessionType } : {}),
+    ...(s.alternativeGroup ? { alternativeGroup: s.alternativeGroup } : {})
   });
 
   async function sha256(file) {
@@ -53,12 +63,22 @@
       predicted: predicted.map(s => ({ aiRef: s.id, ...pick(s) })),
       ids: Object.fromEntries(slots.filter(s => s.aiRef).map(s => [s.aiRef, s.id])),
       baseIds: (meta && meta.baseIds) || [],         // "Add to it": classes that were there before, not the AI's
+      // the timetable before this import, the old subjects to remove on confirm and the subjects this import created
+      previous: (meta && meta.previous) || null,
+      batch: (meta && meta.batch) || null,           // the student's batch, when the timetable asked for one
       fixes: 0
     };
-    try { imp.sourceHash = await sha256(meta && meta.file); } catch (e) { /* hashing is only for spotting re-uploads */ }
-    save('import', imp);
+    held = [];
+    save('import', imp);                 // at once: a confirm (or put back) right after must find this record
     render();
-    cloud(imp);
+    let hash = null;
+    try { hash = await sha256(meta && meta.file); } catch (e) { /* hashing is only for spotting re-uploads */ }
+    const now = load('import', null);    // the record as it is now (it may have been confirmed meanwhile)
+    if (now && now.id === imp.id) {
+      now.sourceHash = hash;
+      save('import', now);
+      cloud(now);
+    }
   }
 
   function active() {
@@ -109,7 +129,41 @@
   }
   const isFix = c => !['unchanged', 'unresolved', 'confirmed_unsure'].includes(c.type);
 
-  function confirm() {
+  // subjects that must not be matched by name: chosen for removal with the old timetable, not removed yet
+  function pendingDrops() {
+    const imp = active();
+    return new Set([...held, ...((imp && imp.status === 'draft' && imp.previous && imp.previous.dropIds) || [])]);
+  }
+  function holdDrops(ids) { held = (ids || []).slice(); }
+
+  // "Put back my old timetable": the draft goes, the old timetable comes back as it was, and the subjects this
+  // import created go too, unless attendance was already marked for them
+  async function putBack() {
+    const imp = active();
+    if (!imp || imp.status !== 'draft' || !imp.previous) return;
+    const ok = typeof askDialog === 'function' ? await askDialog({
+      title: 'Put back your old timetable?', message: 'The new one goes, and your old classes come back as they were.',
+      ok: 'Put it back', cancel: 'Keep the new one', cat: 'cat-worried' }) : true;
+    if (!ok) return;
+    timetable = imp.previous.timetable || [];
+    imp.status = 'cancelled';
+    imp.ids = {};
+    save('import', imp);
+    const marked = id => typeof trackerLog !== 'undefined' && Object.values(trackerLog).some(d => d && d[id]);
+    const extra = (imp.previous.created || []).filter(id => subjects.some(s => s.id === id) && !marked(id));
+    if (extra.length && typeof removeSubjectCompletely === 'function') {
+      for (const id of extra) await removeSubjectCompletely(id);
+    }
+    const synced = typeof saveTimetableToStorageAndDB === 'function' ? await saveTimetableToStorageAndDB() : true;
+    cloud(imp);
+    if (typeof renderAll === 'function') renderAll();
+    render();
+    if (typeof toast === 'function') {
+      toast(synced === false ? 'Old timetable back on this device; cloud sync failed, it will retry' : 'Your old timetable is back ✓');
+    }
+  }
+
+  async function confirm() {
     const imp = active();
     if (!imp) return;
     walk = 0;
@@ -120,7 +174,14 @@
     imp.status = c.unresolved ? 'confirmed_with_unresolved' : 'confirmed';
     imp.confirmedAt = new Date().toISOString();
     imp.fixes = diff.filter(isFix).length;
+    const drops = (imp.previous && imp.previous.dropIds) || [];
+    imp.previous = null;                 // confirmed: the old timetable is no longer kept
     save('import', imp);
+    if (drops.length && typeof dropOldSubjects === 'function') {   // the student's choice in the Replace dialog
+      await dropOldSubjects(drops);
+      if (typeof saveTimetableToStorageAndDB === 'function') saveTimetableToStorageAndDB();
+      if (typeof renderAll === 'function') renderAll();
+    }
     if (sharing() && uid() !== 'guest') queueFeedback(imp, diff);
     cloud(imp);
     render();
@@ -168,7 +229,7 @@
 
   // ── improving the AI (on unless turned off) ────────────────────────────────────────────────────────────────
   async function setSharing(on) {
-    save('share', { value: !!on, at: new Date().toISOString(), version: 2 });
+    save('share', { value: !!on, at: new Date().toISOString(), version: 3 });   // v3: off unless turned on
     if (!on) {
       save('feedback_queue', []);
       if (canCloud()) {
@@ -250,7 +311,7 @@
       if (imp && signedIn) {
         bits.push(sharing()
           ? 'Your fixes help BunkKro AI learn · <button class="tt-rescan-link" onclick="BunkKroImport.setSharing(false)">Turn off</button>'
-          : 'Not helping BunkKro AI learn · <button class="tt-rescan-link" onclick="BunkKroImport.setSharing(true)">Turn on</button>');
+          : 'Help BunkKro AI learn from your fixes? <button class="tt-rescan-link" onclick="BunkKroImport.setSharing(true)">Turn on</button>');
       }
       note.innerHTML = bits.length ? ' · ' + bits.join(' · ') : '';
     }
@@ -276,6 +337,8 @@
              <button class="aic-link" onclick="BunkKroImport.confirm()">Confirm with ${c.unresolved} unchecked</button>`
           : `<button class="btn-pri" onclick="BunkKroImport.confirm()">Looks right · Confirm</button>` +
             (c.unsure ? `<button class="aic-link" onclick="BunkKroImport.checkNext()">Look at the ${c.unsure === 1 ? 'unsure one' : c.unsure + ' unsure ones'}</button>` : '');
+        const back = imp.previous && (imp.previous.timetable || []).length
+          ? '<button class="aic-link" onclick="BunkKroImport.putBack()">Put back my old timetable</button>' : '';
         bar.hidden = false;
         bar.className = 'aic-bar draft';
         bar.innerHTML = `
@@ -284,15 +347,15 @@
             <div class="aic-title">Here's your timetable ✨ Does it look right?</div>
             <div class="aic-sub">${sub}</div>
             <div class="aic-chips">${chips}</div>
-            ${signedIn && sharing() ? '<div class="aic-fine">Confirming also sends your fixes (never your file) to help BunkKro AI read timetables better.</div>' : ''}
+            ${signedIn && sharing() ? '<div class="aic-fine">You chose to help BunkKro AI learn: confirming sends your fixes (never your file).</div>' : ''}
           </div>
-          <div class="aic-actions">${actions}</div>`;
+          <div class="aic-actions">${actions}${back}</div>`;
       }
     }
     continueWalk();
   }
 
-  window.BunkKroImport = { start, render, confirm, checkNext, setSharing,
+  window.BunkKroImport = { start, render, confirm, checkNext, setSharing, putBack, pendingDrops, holdDrops,
     corrections: () => { const i = active(); return i ? corrections(i) : []; } };
   document.addEventListener('DOMContentLoaded', () => { render(); flush(); });
 })();

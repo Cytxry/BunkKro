@@ -207,6 +207,13 @@
     low_confidence: 'the text was hard to read',
     unverified_empty: 'nothing was read here, but the page was not fully read, so it may not be free',
     page_not_understood: 'the reader did not understand this page',
+    split_unresolved: 'two classes may be printed together here, with nothing between them',
+    alternatives_unlabelled: 'several classes share this time, and the timetable doesn\'t say who goes to which',
+    session_label_shared: 'one "lab" word may belong to more than one class here',
+    batch_overlap: 'one batch would have two classes at once',
+    split_suspect: 'this box may have been split in the wrong place',
+    subject_dropped: 'a subject printed in this box may be missing',
+    duplicate_activity: 'this class may have been read twice',
     schema_invalid: 'the reading was malformed',
   };
 
@@ -220,6 +227,7 @@
     for (const s of slots) {
       if (s.isBreak) continue;
       const when = s.startTime ? `${s.startTime}${s.endTime ? '-' + s.endTime : ''}` : `period ${s.period}`;
+      const told = (s.reviewReasons || [])[0];
       const base = { cellId: s.cellId || undefined, details: escapeHtml(s.rawText || s.subjectName) };
       if (s.isUnknown) {            // never shown as free: the student decides
         const why = (s.doubts || []).filter(d => d !== 'unverified_empty').map(d => DOUBT_TEXT[d]).filter(Boolean);
@@ -231,7 +239,7 @@
         warnings.push({ ...base, message: `${DAY_SHORT[s.day]} period ${s.period}: no time printed for this class` });
       } else if (s.isUncertain) {
         const why = (s.doubts || []).map(d => DOUBT_TEXT[d]).filter(Boolean);
-        warnings.push({ ...base, message: `${DAY_SHORT[s.day]} ${when}: please check — ${why[0] || 'the reading is uncertain'}` });
+        warnings.push({ ...base, message: `${DAY_SHORT[s.day]} ${when}: please check — ${told || why[0] || 'the reading is uncertain'}` });
       }
     }
     return { warnings, errors: [], disagreements: [] };
@@ -266,11 +274,120 @@
       throw err;
     }
     onPhase && onPhase('valid', 90, 'Matching your subjects 🧩');
-    const slots = matchSubjects(res.slots, subjects || []);
+    const slots = matchSubjects(nameSessions(res.slots), subjects || []);
     const canvas = res.image ? await loadImage(res.image) : null;
     const cells = canvas ? studioCells(slots) : [];
     return { slots, review: res.review || null, validation: issues(slots, res.review),
       studio: canvas && cells.length ? { canvas, cells } : null, source: res.file, engineVersion };
+  }
+
+  // ── labs and practicals ────────────────────────────────────────────────────────────────────────────────────
+  // Only what the page prints: a class the timetable calls a lab or a practical. When the same subject also has
+  // ordinary classes, the lab gets its own name ('DSA' and 'DSA Lab'), because many colleges count lab attendance on
+  // its own; the subjects step can still link both to one subject. Nothing is added when the page says nothing.
+  const SESSION_NAME = { lab: 'Lab', practical: 'Practical', tutorial: 'Tutorial' };
+  function nameSessions(slots) {
+    const key = s => (s.subjectName || '').trim().toLowerCase();
+    const plain = new Set(slots.filter(s => !s.isBreak && !s.isUnknown && !SESSION_NAME[s.sessionType]).map(key));
+    return slots.map(s => {
+      const word = SESSION_NAME[s.sessionType];
+      if (!word || s.isBreak || s.isUnknown || !plain.has(key(s))) return s;
+      if (new RegExp(`\\b${word}\\b`, 'i').test(s.subjectName)) return s;
+      return { ...s, subjectName: `${s.subjectName} ${word}` };
+    });
+  }
+
+  // ── batch step (only when the timetable has classes for different batches) ─────────────────────────────────
+  // The reader marks a class with the batches the page prints for it (`batches`), or as everyone's (`allBatches`);
+  // a class that names no batch is for no batch in particular and always stays. A batch family is the code's letters
+  // ('A1', 'A2' -> A; 'GR01' -> GR; 'Group 2' -> #). Asked only when a family has two or more batches.
+  const family = b => (String(b).match(/^[A-Za-z]*/)[0] || '#').toUpperCase();
+  function batchFamilies(slots) {
+    const fams = new Map();
+    for (const s of slots) {
+      if (s.isBreak || !Array.isArray(s.batches)) continue;
+      for (const b of s.batches) {
+        const f = family(b);
+        if (!fams.has(f)) fams.set(f, { codes: new Set(), subjects: new Set() });
+        fams.get(f).codes.add(b);
+        fams.get(f).subjects.add(s.subjectName);
+      }
+    }
+    const order = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+    return [...fams.entries()].filter(([, v]) => v.codes.size >= 2)
+      .map(([f, v]) => ({ family: f, codes: [...v.codes].sort(order), subjects: [...v.subjects].sort() }));
+  }
+
+  // choice: {family: code, ...} plus optional per-subject overrides {'family|subject': code}
+  function keepsFor(s, choice) {
+    if (!choice || s.isBreak || s.allBatches || !Array.isArray(s.batches) || !s.batches.length) return true;
+    return s.batches.some(b => {
+      const f = family(b);
+      const mine = choice[`${f}|${s.subjectName}`] || choice[f];
+      return !mine || mine === b;          // a family the student didn't pick for: kept
+    });
+  }
+
+  // a class marked only because another one shares its time is no longer in doubt once the other one is gone
+  function settleOverlaps(slots) {
+    const clash = (a, b) => a !== b && a.day === b.day && !a.isBreak && !b.isBreak && a.startTime && b.startTime &&
+      a.startTime < (b.endTime || b.startTime) && b.startTime < (a.endTime || a.startTime);
+    return slots.map(s => {
+      if (!s.overlapsAnotherClass || slots.some(o => clash(s, o))) return s;
+      const doubt = s.isUnknown || !s.startTime || (s.doubts || []).length > 0;
+      return { ...s, overlapsAnotherClass: false, isUncertain: doubt };
+    });
+  }
+
+  // -> {slots, choice} ; choice null when nothing was asked or the student kept every batch
+  function pickBatch(slots) {
+    const fams = batchFamilies(slots);
+    if (!fams.length) return Promise.resolve({ slots, choice: null });
+    const open = slots.filter(s => !s.isBreak && !s.isUnknown && !s.allBatches && !(s.batches || []).length).length;
+    const label = f => f.subjects.length <= 4 ? f.subjects.join(', ') : `${f.subjects.slice(0, 3).join(', ')} and ${f.subjects.length - 3} more`;
+    return new Promise(resolve => {
+      const overlay = modal(`
+        <h2>Which batch are you in?</h2>
+        <p class="sub">Some classes on this timetable are for one batch only. Pick yours and we'll keep just your classes.</p>
+        ${fams.map((f, i) => `
+          <div class="mf" style="text-align:left;margin-top:10px">
+            <div style="font-size:.78rem;color:var(--muted);margin-bottom:6px">${escapeHtml(label(f))}</div>
+            <div class="bk-batch-row" style="display:flex;flex-wrap:wrap;gap:6px" data-fam="${i}" role="radiogroup" aria-label="Your batch for ${escapeHtml(label(f))}">
+              ${f.codes.map((c, k) => `<button type="button" class="day-chip${k === 0 ? ' on' : ''}" role="radio" style="min-width:56px;padding:0 14px" aria-checked="${k === 0}"
+                 data-code="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
+            </div>
+            ${f.subjects.length > 1 ? `<details style="margin-top:6px"><summary style="font-size:.74rem;color:var(--muted);cursor:pointer">Different batch for some subjects?</summary>
+              ${f.subjects.map(sub => `<label style="display:flex;justify-content:space-between;gap:8px;font-size:.78rem;margin-top:6px">${escapeHtml(sub)}
+                <select data-fam="${i}" data-subject="${escapeHtml(sub)}"><option value="">same as above</option>
+                ${f.codes.map(c => `<option>${escapeHtml(c)}</option>`).join('')}</select></label>`).join('')}
+            </details>` : ''}
+          </div>`).join('')}
+        ${open ? `<p class="sub" style="margin-top:10px">${open === 1 ? 'One class doesn\'t' : open + ' classes don\'t'} name a batch, so ${open === 1 ? 'it stays' : 'they stay'} on your timetable.</p>` : ''}
+        <div class="modal-btns">
+          <button class="btn-sec" data-act="all">Not sure, keep all</button>
+          <button class="btn-pri" data-act="ok">That's my batch</button>
+        </div>`, 460, 'cat-detective', 'all');
+      overlay.addEventListener('click', e => {
+        const chip = e.target.closest && e.target.closest('.bk-batch-row .day-chip');
+        if (chip) {
+          chip.parentElement.querySelectorAll('.day-chip').forEach(p => { p.classList.toggle('on', p === chip); p.setAttribute('aria-checked', p === chip); });
+          return;
+        }
+        const act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (!act) return;
+        if (act === 'all') { overlay.remove(); resolve({ slots, choice: null }); return; }
+        const choice = {};
+        fams.forEach((f, i) => {
+          const on = overlay.querySelector(`.bk-batch-row[data-fam="${i}"] .day-chip.on`);
+          if (on) choice[f.family] = on.dataset.code;
+          overlay.querySelectorAll(`select[data-fam="${i}"]`).forEach(sel => {
+            if (sel.value) choice[`${f.family}|${sel.dataset.subject}`] = sel.value;
+          });
+        });
+        overlay.remove();
+        resolve({ slots: settleOverlaps(slots.filter(s => keepsFor(s, choice))), choice });
+      });
+    });
   }
 
   // ── subjects step ──────────────────────────────────────────────────────────────────────────────────────────
@@ -281,7 +398,7 @@
     for (const s of slots) {
       if (s.isBreak || s.isUnknown) continue;    // "Needs review" periods stay on the timetable, not as a subject
       // 'MA102', 'MA 102' and 'ma 102' are one subject
-      const key = (s.aiName || s.subjectName || '').toUpperCase().replace(/[s.]+/g, '');
+      const key = (s.aiName || s.subjectName || '').toUpperCase().replace(/[\s.]+/g, '');
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(s);
     }
@@ -357,10 +474,11 @@
     if (s.overlapsAnotherClass) return 'another class is at the same time. Keep yours, and delete the other';
     if (!s.startTime) return 'no time is printed for it. Add one if you know it';
     const why = (s.doubts || []).map(d => DOUBT_TEXT[d]).filter(Boolean);
-    return why[0] || 'the reading was a little unclear';
+    return (s.reviewReasons || [])[0] || why[0] || 'the reading was a little unclear';
   }
 
-  window.BunkKroAI = { isAvailable, read, reviewSubjects, issues, matchSubjects, reason, showStatus, BASE };
+  window.BunkKroAI = { isAvailable, read, reviewSubjects, issues, matchSubjects, reason, showStatus, BASE,
+    pickBatch, batchFamilies, keepsFor, settleOverlaps, nameSessions };
   showStatus();
   // re-check only while the Smart Timetable page is open: every 10 s while the AI is on, every 45 s while it's off
   if (enabled()) {

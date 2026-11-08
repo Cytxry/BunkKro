@@ -222,9 +222,11 @@ async function loadTimetable() {
         subjectId: e.subject_id,
         subjectName: e.subject_name,
         isBreak: e.is_break || false,
-        // the DB has no review column: a "Needs review" period (BunkKro AI could not confirm it free) stays one
-        isUncertain: !e.subject_id && e.subject_name === 'Needs review',
-        isUnknown: !e.subject_id && e.subject_name === 'Needs review'
+        // review flags have their own columns (migrations/2026-11-06-ai-confirmation.sql); older rows only have the
+        // "Needs review" name, which still marks a period BunkKro AI could not confirm free
+        isUnknown: !!e.is_unknown || (!e.subject_id && e.subject_name === 'Needs review'),
+        isUncertain: !!e.is_uncertain || !!e.is_unknown || (!e.subject_id && e.subject_name === 'Needs review'),
+        cellId: e.source_cell_id || undefined
       }));
       localStorage.setItem('bk_timetable_' + currentUser.id, JSON.stringify(timetable));
     } else {
@@ -3584,7 +3586,7 @@ async function applyAiSubjectPlan(slots, plan) {
       const s = subjects.find(x => x.id === g.subjectId);
       if (s) { subjectId = s.id; name = s.name; }
     } else if (g.action === 'create' && canCreate) {
-      const existing = subjects.find(x => x.name.toLowerCase() === name.toLowerCase());
+      const existing = matchableSubjects().find(x => x.name.toLowerCase() === name.toLowerCase());
       if (existing) {
         subjectId = existing.id;
       } else if (await addSubject({ name, code: name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() + '101',
@@ -3798,7 +3800,7 @@ async function ensureSubjectsForTimetable(slots, strict = false) {
   const created = [];
   for (const g of groups.values()) {
     if (!looksLikeSubject(g.name, g.slots.length, strict)) continue;
-    let sub = subjects.find(x => x.name.toLowerCase() === g.name.toLowerCase());
+    let sub = matchableSubjects().find(x => x.name.toLowerCase() === g.name.toLowerCase());
     if (!sub && await addSubject({ name: g.name, code: g.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase() + '101',
                                    perWeek: g.slots.length, total: 0, present: 0 })) {
       sub = subjects[subjects.length - 1];
@@ -3915,6 +3917,14 @@ async function removeSubjects(ids) {
   return removed;
 }
 
+// Subjects a new timetable's classes may be linked to by name: not the ones the student chose to drop with the old
+// timetable. Those are only removed when the new timetable is confirmed (ai-confirm.js), so until then they still
+// exist, but nothing new may be linked to them.
+function matchableSubjects() {
+  const pending = window.BunkKroImport && BunkKroImport.pendingDrops ? BunkKroImport.pendingDrops() : new Set();
+  return subjects.filter(s => !pending.has(s.id));
+}
+
 // subjects the student chose to drop with the old timetable (Replace dialog); classes already linked to one keep
 // their name but lose the link
 async function dropOldSubjects(ids) {
@@ -3954,10 +3964,18 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       const predicted = JSON.parse(JSON.stringify(res.slots));   // what the AI read, before the student's fixes
       // only the subjects the student kept (Replace dialog) can be matched: a same name may be another class
       const kept = subjects.filter(sb => !dropIds.includes(sb.id));
-      res.slots = BunkKroAI.matchSubjects(res.slots, kept);
+      // only when the timetable has classes for different batches: keep the student's own (the rest stay in the
+      // import record, `predicted`)
+      const batch = BunkKroAI.pickBatch ? await BunkKroAI.pickBatch(res.slots) : { slots: res.slots, choice: null };
+      res.slots = BunkKroAI.matchSubjects(batch.slots, kept);
       const plan = await BunkKroAI.reviewSubjects(res.slots, kept);
-      // removed before new subjects are created, so a new class can't be linked to one that is about to go
-      await dropOldSubjects(dropIds);
+      // The old timetable is kept until the new one is confirmed, and the subjects the student chose to drop (with
+      // their attendance) are only removed then (ai-confirm.js): an AI reading never destroys anything on its own.
+      // Until then they can't be matched by name (matchableSubjects), so no new class is linked to one about to go.
+      const previous = JSON.parse(JSON.stringify(timetable));
+      const canDefer = !!(window.BunkKroImport && BunkKroImport.holdDrops);
+      if (canDefer) BunkKroImport.holdDrops(dropIds);
+      else await dropOldSubjects(dropIds);
       const hadSubjects = new Set(subjects.map(s => s.id));
       const slots = plan ? await applyAiSubjectPlan(res.slots, plan) : res.slots;
       if (!plan) await ensureSubjectsForTimetable(slots);    // "Skip for now" still gives every class a subject
@@ -3977,7 +3995,9 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       timetable = base ? mergeSlots(base, slots) : slots;
       saveTimetableToStorageAndDB();
       if (window.BunkKroImport) BunkKroImport.start(predicted, timetable,
-        { engineVersion: res.engineVersion, file, baseIds: base ? base.map(s => s.id) : [] });
+        { engineVersion: res.engineVersion, file, baseIds: base ? base.map(s => s.id) : [], batch: batch.choice,
+          previous: { timetable: previous, dropIds: canDefer ? dropIds : [],
+                      created: subjects.filter(s => !hadSubjects.has(s.id)).map(s => s.id) } });
       renderAll();                                   // the sidebar too: old subjects may be gone
       setScannerPhase('valid', 100, '✓ Read by BunkKro AI');
       setTimeout(() => {
@@ -3999,6 +4019,7 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
       return;
     } catch (aiErr) {
       console.warn('BunkKro AI:', aiErr.message);
+      if (window.BunkKroImport && BunkKroImport.holdDrops) BunkKroImport.holdDrops([]);   // nothing was imported
       if (aiErr.cancelled) {                 // the student cancelled a choice: nothing to fall back to
         if (progressBox) progressBox.style.display = 'none';
         toast('Upload cancelled');
@@ -6982,6 +7003,7 @@ function saveTimetableToStorageAndDB() {
   return ttSyncWaiting;
 }
 
+let entryReviewColumns = true;          // false once the project turns out not to have them (older schema)
 async function syncTimetableToDB() {
   if (!currentUser) return;
 
@@ -7026,10 +7048,19 @@ async function syncTimetableToDB() {
       end_time: s.endTime || '',
       subject_id: known.has(s.subjectId) ? s.subjectId : null,
       subject_name: s.subjectName || 'Unassigned',
-      is_break: s.isBreak || false
+      is_break: s.isBreak || false,
+      ...(entryReviewColumns ? {
+        is_unknown: !!s.isUnknown, is_uncertain: !!s.isUncertain && !s.isUnknown, source_cell_id: s.cellId || null
+      } : {})
     }));
     if (payload.length) {
-      const { error } = await supabaseClient.from('timetable_entries').upsert(payload, { onConflict: 'id' });
+      let { error } = await supabaseClient.from('timetable_entries').upsert(payload, { onConflict: 'id' });
+      if (error && entryReviewColumns && /42703|PGRST204/.test(error.code || '')) {
+        // a project without the review columns: keep saving the timetable itself
+        entryReviewColumns = false;
+        payload.forEach(r => { delete r.is_unknown; delete r.is_uncertain; delete r.source_cell_id; });
+        ({ error } = await supabaseClient.from('timetable_entries').upsert(payload, { onConflict: 'id' }));
+      }
       if (error) throw error;
     }
 
