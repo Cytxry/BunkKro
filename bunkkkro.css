@@ -656,7 +656,9 @@ button.sc[aria-expanded="true"]{box-shadow:0 0 0 3px var(--good-line),var(--shad
 .chip.editable:hover .chip-pen,.chip.editable:focus-visible .chip-pen{opacity:1}
 .chip.editing{box-shadow:0 0 0 2px currentColor inset}
 .chip-input{width:100%;background:transparent;border:none;outline:none;color:inherit;font:inherit;font-size:1.55rem;font-weight:800;line-height:1.1;padding:0;font-variant-numeric:tabular-nums}
-.chip-input::placeholder{color:currentColor;opacity:.4}
+.chip-input::placeholder{color:currentColor;opacity:.4;font-size:1rem;font-weight:700}   /* fits the card while typing */
+.chip-input{-moz-appearance:textfield;appearance:textfield}
+.chip-input::-webkit-outer-spin-button,.chip-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
 .subj-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:stretch;margin-bottom:20px}
 .subj-grid .adv-card{margin-bottom:0;display:flex;flex-direction:column}
