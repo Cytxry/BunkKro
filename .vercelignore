@@ -1,0 +1,10 @@
+# Not part of the website: developer pages (inline scripts, which the site's Content-Security-Policy refuses),
+# tests and their fixtures, database SQL, the browser extension's source and notes.
+ocr-test.html
+grid-test.html
+test-scanner.js
+tests/
+migrations/
+schema-migrations.sql
+extension/
+AI_INTEGRATION.md

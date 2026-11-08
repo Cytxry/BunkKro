@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google-site-verification" content="Ylj4ZEzMzvJr5QHzrJykHBRpF_MoIkcetgFTRNO_b64" />
 <meta name="theme-color" content="#F6F5F0">
-<script>try{if(localStorage.getItem('bk_theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
+<script src="theme-init.js?v=20261109"></script>
 <title>BunkKro — Can I bunk today?</title>
 <link rel="icon" type="image/png" href="/favicon.jpg">
 <link rel="icon" type="image/png" href="/favicon2.jpg">
@@ -13,10 +13,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="bunkkkro.css?v=20261108">
-<!-- Supabase CDN, Tesseract.js OCR & OpenCV.js -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script async id="cvScript" src="https://docs.opencv.org/4.x/opencv.js" onerror="window.cvLoadFailed = true"></script>
+<!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
+     the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
+        integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
+<script src="actions.js?v=20261109"></script>
 </head>
 <body>
 
@@ -85,7 +86,7 @@
 
 <!-- ══════ MOBILE TOP BAR ══════ -->
 <header class="mob-topbar">
-  <button class="mob-menu" id="mob-menu" onclick="toggleSidebar()" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg class="ic"><use href="#i-menu"/></svg></button>
+  <button class="mob-menu" id="mob-menu" data-on-click="toggleSidebar()" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg class="ic"><use href="#i-menu"/></svg></button>
   <div class="mob-logo">bunk<span>kro</span></div>
 </header>
 
@@ -96,18 +97,18 @@
     <div class="logo-sub">can i bunk today?</div>
   </div>
   <nav aria-label="Main">
-    <button class="nav-item active" id="nav-home" onclick="goPage('home')">
+    <button class="nav-item active" id="nav-home" data-on-click="goPage('home')">
       <svg class="ic"><use href="#i-home"/></svg><span class="nav-text">Home</span>
     </button>
-    <button class="nav-item" id="nav-tracker" onclick="goPage('tracker')">
+    <button class="nav-item" id="nav-tracker" data-on-click="goPage('tracker')">
       <svg class="ic"><use href="#i-calendar"/></svg><span class="nav-text">Daily Classes</span>
     </button>
-    <button class="nav-item" id="nav-timetable" onclick="goPage('timetable')">
+    <button class="nav-item" id="nav-timetable" data-on-click="goPage('timetable')">
       <svg class="ic"><use href="#i-zap"/></svg><span class="nav-text">Smart Timetable</span>
     </button>
     <div class="nav-label">Subjects</div>
     <div id="nav-subjects"></div>
-    <button class="nav-add" onclick="openAddModal()"><svg class="ic"><use href="#i-plus"/></svg> Add Subject</button>
+    <button class="nav-add" data-on-click="openAddModal()"><svg class="ic"><use href="#i-plus"/></svg> Add Subject</button>
   </nav>
   <div class="sidebar-footer">
     <div class="wisdom-card">
@@ -120,23 +121,23 @@
     <div class="target-row">
       <label for="global-target"><svg class="ic ic-sm"><use href="#i-target"/></svg> Global target</label>
       <div class="target-wrap">
-        <input type="number" id="global-target" min="1" max="100" value="75" onchange="updateGlobalTarget(this.value)">
+        <input type="number" id="global-target" min="1" max="100" value="75" data-on-change="updateGlobalTarget(this.value)">
         <span class="sym">%</span>
       </div>
     </div>
     <div class="round-row" role="radiogroup" aria-labelledby="round-lbl">
       <span class="round-lbl" id="round-lbl">How does your college round?</span>
       <div class="round-seg">
-        <button type="button" role="radio" data-r="down" onclick="updateRoundMode('down')"><span class="round-ic" aria-hidden="true">↓</span> Down</button>
-        <button type="button" role="radio" data-r="up" onclick="updateRoundMode('up')"><span class="round-ic" aria-hidden="true">↑</span> Up</button>
-        <button type="button" role="radio" data-r="exact" onclick="updateRoundMode('exact')"><span class="round-ic" aria-hidden="true">✦</span> Exact</button>
+        <button type="button" role="radio" data-r="down" data-on-click="updateRoundMode('down')"><span class="round-ic" aria-hidden="true">↓</span> Down</button>
+        <button type="button" role="radio" data-r="up" data-on-click="updateRoundMode('up')"><span class="round-ic" aria-hidden="true">↑</span> Up</button>
+        <button type="button" role="radio" data-r="exact" data-on-click="updateRoundMode('exact')"><span class="round-ic" aria-hidden="true">✦</span> Exact</button>
       </div>
       <span class="round-hint" id="round-hint" aria-live="polite"></span>
     </div>
-    <button class="sem-link" id="sem-link" onclick="openSemesterDialog()"><svg class="ic ic-sm"><use href="#i-calendar"/></svg> <span id="sem-link-text">Set semester dates</span></button>
+    <button class="sem-link" id="sem-link" data-on-click="openSemesterDialog()"><svg class="ic ic-sm"><use href="#i-calendar"/></svg> <span id="sem-link-text">Set semester dates</span></button>
   </div>
 </aside>
-<div class="sidebar-scrim" onclick="toggleSidebar()" aria-hidden="true"></div>
+<div class="sidebar-scrim" data-on-click="toggleSidebar()" aria-hidden="true"></div>
 
 <!-- ══════ MAIN ══════ -->
 <main class="main" id="main">
@@ -145,14 +146,14 @@
   <header class="topbar">
     <div class="top-controls">
       <div class="pop-host">
-        <button class="streak-pill" id="streak-card" onclick="openStreakCalendar(event)" aria-haspopup="dialog" aria-expanded="false" aria-controls="streak-pop" aria-label="Attendance streak" title="Your streak">
+        <button class="streak-pill" id="streak-card" data-on-click="openStreakCalendar(event)" aria-haspopup="dialog" aria-expanded="false" aria-controls="streak-pop" aria-label="Attendance streak" title="Your streak">
           <span class="streak-fire" aria-hidden="true">🔥</span><span class="streak-count" id="streak-count">0</span>
         </button>
         <div class="popover" id="streak-pop" role="dialog" aria-labelledby="streak-pop-title" data-width="300" hidden></div>
       </div>
-      <button class="icon-btn" id="theme-toggle" onclick="toggleTheme()" aria-label="Switch to dark theme" title="Switch theme"><svg class="ic"><use href="#i-sun"/></svg></button>
+      <button class="icon-btn" id="theme-toggle" data-on-click="toggleTheme()" aria-label="Switch to dark theme" title="Switch theme"><svg class="ic"><use href="#i-sun"/></svg></button>
       <div class="profile" id="profile">
-        <button class="profile-btn" id="profile-btn" onclick="toggleProfileMenu()" aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu" aria-label="Account menu" title="Account">
+        <button class="profile-btn" id="profile-btn" data-on-click="toggleProfileMenu()" aria-haspopup="true" aria-expanded="false" aria-controls="profile-menu" aria-label="Account menu" title="Account">
           <span class="user-avatar" id="user-avatar" aria-hidden="true">?</span>
         </button>
         <div class="profile-menu" id="profile-menu" hidden>
@@ -160,7 +161,7 @@
             <span class="user-avatar lg" id="pm-avatar" aria-hidden="true">?</span>
             <div style="min-width:0"><div class="pm-name" id="pm-name">Account</div><div class="user-email" id="user-email"></div></div>
           </div>
-          <button class="logout-btn" id="logout-btn" onclick="handleLogout()" style="display:none"><svg class="ic ic-sm"><use href="#i-logout"/></svg> Logout</button>
+          <button class="logout-btn" id="logout-btn" data-on-click="handleLogout()" style="display:none"><svg class="ic ic-sm"><use href="#i-logout"/></svg> Logout</button>
         </div>
       </div>
     </div>
@@ -190,7 +191,7 @@
       </div>
       <div class="dash-col">
         <section class="card">
-          <div class="card-title">Today's classes <button class="link-btn" onclick="openTodayTracker()">Mark attendance <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></button></div>
+          <div class="card-title">Today's classes <button class="link-btn" data-on-click="openTodayTracker()">Mark attendance <svg class="ic ic-sm"><use href="#i-arrow-right"/></svg></button></div>
           <div id="home-today"></div>
           <div id="home-unmarked"></div>
         </section>
@@ -207,7 +208,7 @@
   <!-- ░░ SUBJECT PAGE ░░ -->
   <div class="page" id="page-subject">
     <div class="subj-page-header">
-      <button class="back-btn" onclick="goPage('home')"><svg class="ic ic-sm"><use href="#i-arrow-left"/></svg> Back</button>
+      <button class="back-btn" data-on-click="goPage('home')"><svg class="ic ic-sm"><use href="#i-arrow-left"/></svg> Back</button>
       <span class="subj-icon sp-icon" id="sp-icon" aria-hidden="true"></span>
       <div style="min-width:0">
         <h2 id="sp-title"></h2>
@@ -249,12 +250,12 @@
         <div class="sim-ctrl">
           <span class="sim-lbl">Skip</span>
           <div class="sim-stepper">
-            <button onclick="adjSim(-1)" aria-label="Decrease">&#8722;</button>
-            <input type="number" id="sim-input" value="0" min="0" max="999" oninput="updateSim()" aria-label="Classes to skip">
-            <button onclick="adjSim(1)" aria-label="Increase">+</button>
+            <button data-on-click="adjSim(-1)" aria-label="Decrease">&#8722;</button>
+            <input type="number" id="sim-input" value="0" min="0" max="999" data-on-input="updateSim()" aria-label="Classes to skip">
+            <button data-on-click="adjSim(1)" aria-label="Increase">+</button>
           </div>
           <span class="sim-lbl">more classes</span>
-          <button class="sim-reset" onclick="resetSim()">↺ Reset</button>
+          <button class="sim-reset" data-on-click="resetSim()">↺ Reset</button>
         </div>
         <div id="sim-result"></div>
         <img class="sim-cat" src="assets/cat-chill.svg" alt="">
@@ -270,8 +271,8 @@
       </summary>
       <div class="edit-body">
         <div class="mode-seg" role="radiogroup" aria-label="How do you track this subject?">
-          <button type="button" role="radio" id="edit-mode-exact" onclick="setEditMode('exact')"><b>🎯 Official numbers</b><span>Attended + missed from your portal</span></button>
-          <button type="button" role="radio" id="edit-mode-estimate" onclick="setEditMode('estimate')"><b>⚡ Estimate</b><span>From semester start + classes missed</span></button>
+          <button type="button" role="radio" id="edit-mode-exact" data-on-click="setEditMode('exact')"><b>🎯 Official numbers</b><span>Attended + missed from your portal</span></button>
+          <button type="button" role="radio" id="edit-mode-estimate" data-on-click="setEditMode('estimate')"><b>⚡ Estimate</b><span>From semester start + classes missed</span></button>
         </div>
         <div class="field" style="margin:14px 0 12px">
           <label for="inp-subject-name">Subject name</label>
@@ -294,8 +295,8 @@
         <div class="upto" id="edit-upto" hidden>
         <span>Do these numbers already include <strong>today's</strong> class?</span>
         <div class="mini-seg" role="radiogroup" aria-label="Numbers include today's class">
-          <button type="button" role="radio" data-v="today" onclick="setUpto('edit-upto','today')">Yes</button>
-          <button type="button" role="radio" data-v="yesterday" onclick="setUpto('edit-upto','yesterday')">Not yet</button>
+          <button type="button" role="radio" data-v="today" data-on-click="setUpto('edit-upto','today')">Yes</button>
+          <button type="button" role="radio" data-v="yesterday" data-on-click="setUpto('edit-upto','yesterday')">Not yet</button>
         </div>
       </div>
         <div id="form-est" style="display:none">
@@ -316,8 +317,8 @@
         <div class="form-preview" id="edit-preview" aria-live="polite"></div>
         <p class="form-err" id="edit-error" role="alert" hidden></p>
         <div class="edit-actions">
-          <button class="save-btn" onclick="saveSubject()">Save changes</button>
-          <button class="del-btn" onclick="deleteSubject()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Delete subject</button>
+          <button class="save-btn" data-on-click="saveSubject()">Save changes</button>
+          <button class="del-btn" data-on-click="deleteSubject()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Delete subject</button>
         </div>
       </div>
     </details>
@@ -331,13 +332,13 @@
         <p id="tracker-date-subtitle">Track your classes and mark attendance effortlessly.</p>
       </div>
       <div class="date-nav-bar">
-        <button class="date-nav-btn" onclick="navDate(-1)" title="Previous day" aria-label="Previous day"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
+        <button class="date-nav-btn" data-on-click="navDate(-1)" title="Previous day" aria-label="Previous day"><svg class="ic"><use href="#i-chevron-left"/></svg></button>
         <div class="date-picker-wrap">
           <label class="sr-only" for="tracker-date-input">Choose a date</label>
-          <input type="date" id="tracker-date-input" onchange="onDateSelected(this.value)">
+          <input type="date" id="tracker-date-input" data-on-change="onDateSelected(this.value)">
         </div>
-        <button class="date-nav-btn" onclick="navDate(1)" title="Next day" aria-label="Next day"><svg class="ic"><use href="#i-chevron-right"/></svg></button>
-        <button class="date-today-btn" onclick="resetToToday()">Today</button>
+        <button class="date-nav-btn" data-on-click="navDate(1)" title="Next day" aria-label="Next day"><svg class="ic"><use href="#i-chevron-right"/></svg></button>
+        <button class="date-today-btn" data-on-click="resetToToday()">Today</button>
       </div>
     </div>
 
@@ -346,10 +347,10 @@
     <div id="tracker-content"></div>
 
     <div class="tracker-actions-row">
-      <button class="act-chip peach" id="btn-toggle-holiday" onclick="toggleDateHoliday()">🏖️ Mark Day as Holiday</button>
-      <button class="act-chip peach" onclick="openHolidayPlanner()" title="Got a circular? Add holidays ahead of time">🗓️ Upcoming holidays</button>
-      <button class="act-chip lavender" onclick="openExtraClassModal()">⚡ Add Extra Class</button>
-      <button class="act-chip green" onclick="openDaySwap()" title="For days like “Saturday follows Monday's timetable”">🔁 Follows another day</button>
+      <button class="act-chip peach" id="btn-toggle-holiday" data-on-click="toggleDateHoliday()">🏖️ Mark Day as Holiday</button>
+      <button class="act-chip peach" data-on-click="openHolidayPlanner()" title="Got a circular? Add holidays ahead of time">🗓️ Upcoming holidays</button>
+      <button class="act-chip lavender" data-on-click="openExtraClassModal()">⚡ Add Extra Class</button>
+      <button class="act-chip green" data-on-click="openDaySwap()" title="For days like “Saturday follows Monday's timetable”">🔁 Follows another day</button>
     </div>
 
     <section class="card" style="margin-top:22px">
@@ -366,15 +367,15 @@
         <p>Your weekly schedule — powers Daily Classes automatically.</p>
       </div>
       <div class="ph-actions">
-        <button class="btn-sec" onclick="openAddSlotModal()"><svg class="ic ic-sm"><use href="#i-plus"/></svg> Add Class</button>
+        <button class="btn-sec" data-on-click="openAddSlotModal()"><svg class="ic ic-sm"><use href="#i-plus"/></svg> Add Class</button>
       </div>
     </div>
 
     <!-- Upload Card -->
     <div class="tt-upload-card" id="tt-upload-card">
-      <input type="file" id="tt-file-input" accept="image/png, image/jpeg, image/jpg, application/pdf, image/webp" style="display:none" onchange="handleTimetableFileUpload(this.files[0]); this.value = ''">
+      <input type="file" id="tt-file-input" accept="image/png, image/jpeg, image/jpg, application/pdf, image/webp" style="display:none" data-on-change="pickTimetableFile(this)">
 
-      <div class="tt-dropzone" id="tt-dropzone" role="button" tabindex="0" onclick="document.getElementById('tt-file-input').click()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.click()}">
+      <div class="tt-dropzone" id="tt-dropzone" role="button" tabindex="0" data-on-click="openTimetablePicker()" data-on-keydown="keyActivate(event, this)">
         <img class="tt-drop-illus" src="assets/cat-peek.svg" alt="">
         <div class="tt-drop-text">
           <div class="tt-drop-title">Upload your timetable</div>
@@ -388,7 +389,7 @@
         <img class="tt-loaded-illus" src="assets/cat-trophy.svg" alt=""><div class="tt-loaded-check">✓</div>
         <div class="tt-loaded-meta">
           <span class="tt-loaded-label" id="tt-loaded-label">Schedule loaded</span>
-          <span class="tt-loaded-sub"><button class="tt-rescan-link" onclick="document.getElementById('tt-file-input').click()">Upload a new one</button><span id="tt-ai-note"></span></span>
+          <span class="tt-loaded-sub"><button class="tt-rescan-link" data-on-click="openTimetablePicker()">Upload a new one</button><span id="tt-ai-note"></span></span>
           <span id="tt-ai-status-loaded" class="tt-ai-status-loaded"></span>
         </div>
       </div>
@@ -427,9 +428,9 @@
             <span id="tt-stats-badge" class="tt-badge">0 classes</span>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn-sec btn-sm" onclick="openSharePack()" id="btn-share-pack"><svg class="ic ic-sm"><use href="#i-users"/></svg> Share / Import</button>
-            <button class="btn-sec btn-sm" onclick="toggleSundayDisplay()" id="btn-toggle-sunday">+ Sunday</button>
-            <button class="btn-sec btn-sm btn-danger" onclick="confirmClearTimetable()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Clear</button>
+            <button class="btn-sec btn-sm" data-on-click="openSharePack()" id="btn-share-pack"><svg class="ic ic-sm"><use href="#i-users"/></svg> Share / Import</button>
+            <button class="btn-sec btn-sm" data-on-click="toggleSundayDisplay()" id="btn-toggle-sunday">+ Sunday</button>
+            <button class="btn-sec btn-sm btn-danger" data-on-click="confirmClearTimetable()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Clear</button>
           </div>
         </div>
         <div class="tt-grid-wrap" id="tt-grid-wrap"></div>
@@ -466,10 +467,10 @@
     <div class="mf" style="margin-top:14px">
       <label for="insp-subject-select">Mapped subject</label>
       <div style="display:flex;gap:8px">
-        <select id="insp-subject-select" style="flex:1" onchange="onInspectorSubjectChange(this.value)">
+        <select id="insp-subject-select" style="flex:1" data-on-change="onInspectorSubjectChange(this.value)">
           <option value="">-- Select Existing Subject --</option>
         </select>
-        <button class="btn-sec btn-sm" onclick="createSubjectFromInspector()">+ New</button>
+        <button class="btn-sec btn-sm" data-on-click="createSubjectFromInspector()">+ New</button>
       </div>
     </div>
 
@@ -479,15 +480,15 @@
     </div>
 
     <div class="insp-actions-row">
-      <button class="btn-sec btn-sm" onclick="inspectorSplitCell('v')" title="Split into 2 periods">✂️ Split vertical</button>
-      <button class="btn-sec btn-sm" onclick="inspectorSplitCell('h')" title="Split into 2 rows">✂️ Split horizontal</button>
-      <button class="btn-sec btn-sm" onclick="inspectorToggleBreak()">☕ Mark break</button>
-      <button class="btn-sec btn-sm btn-danger" onclick="inspectorDeleteCell()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Delete</button>
+      <button class="btn-sec btn-sm" data-on-click="inspectorSplitCell('v')" title="Split into 2 periods">✂️ Split vertical</button>
+      <button class="btn-sec btn-sm" data-on-click="inspectorSplitCell('h')" title="Split into 2 rows">✂️ Split horizontal</button>
+      <button class="btn-sec btn-sm" data-on-click="inspectorToggleBreak()">☕ Mark break</button>
+      <button class="btn-sec btn-sm btn-danger" data-on-click="inspectorDeleteCell()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Delete</button>
     </div>
 
     <div class="modal-btns">
-      <button class="btn-sec" onclick="closeCellInspector()">Cancel</button>
-      <button class="btn-pri" onclick="saveCellInspectorChanges()">Apply changes ✓</button>
+      <button class="btn-sec" data-on-click="closeCellInspector()">Cancel</button>
+      <button class="btn-pri" data-on-click="saveCellInspectorChanges()">Apply changes ✓</button>
     </div>
   </div>
 </div>
@@ -500,14 +501,14 @@
     <div class="slot-unknown-pick" id="slot-unknown-note" hidden>
       <p>BunkKro AI read nothing here, but couldn't be sure it's free. Which is it?</p>
       <div class="slot-unknown-btns">
-        <button type="button" class="btn-sec btn-sm" onclick="markSlotFree()">🌿 It's a free period</button>
+        <button type="button" class="btn-sec btn-sm" data-on-click="markSlotFree()">🌿 It's a free period</button>
         <span>or pick the class below</span>
       </div>
     </div>
     <div class="slot-unknown-pick unsure" id="slot-unsure-note" hidden>
       <p id="slot-unsure-why">BunkKro AI isn't fully sure about this one.</p>
       <div class="slot-unknown-btns">
-        <button type="button" class="btn-sec btn-sm" onclick="markSlotRight()">✓ It's right</button>
+        <button type="button" class="btn-sec btn-sm" data-on-click="markSlotRight()">✓ It's right</button>
         <span>or fix it below</span>
       </div>
     </div>
@@ -534,7 +535,7 @@
       </div>
       <div class="mf">
         <label for="slot-type">Type</label>
-        <select id="slot-type" onchange="onSlotTypeChange(this.value)">
+        <select id="slot-type" data-on-change="onSlotTypeChange(this.value)">
           <option value="subject">Subject class</option>
           <option value="break">Break / free period</option>
         </select>
@@ -553,8 +554,8 @@
     </div>
 
     <div class="mf" id="slot-subject-group">
-      <div class="slot-subj-head"><label for="slot-subject-select">Subject</label><button type="button" class="link-btn" id="slot-rename" onclick="renameSlotSubject()" hidden>✏️ Rename</button></div>
-      <select id="slot-subject-select" onchange="onSlotSubjectSelect(this.value)">
+      <div class="slot-subj-head"><label for="slot-subject-select">Subject</label><button type="button" class="link-btn" id="slot-rename" data-on-click="renameSlotSubject()" hidden>✏️ Rename</button></div>
+      <select id="slot-subject-select" data-on-change="onSlotSubjectSelect(this.value)">
         <option value="">-- Choose Existing Subject --</option>
       </select>
       <div style="margin-top:10px" id="slot-name-wrap">
@@ -566,9 +567,9 @@
     <p class="form-err" id="slot-error" role="alert" hidden></p>
 
     <div class="modal-btns">
-      <button class="btn-sec" onclick="closeSlotEditModal()">Cancel</button>
-      <button class="btn-sec btn-danger" id="btn-delete-slot" onclick="deleteCurrentSlot()">Delete</button>
-      <button class="btn-pri" onclick="saveSlotModal()">Save slot</button>
+      <button class="btn-sec" data-on-click="closeSlotEditModal()">Cancel</button>
+      <button class="btn-sec btn-danger" id="btn-delete-slot" data-on-click="deleteCurrentSlot()">Delete</button>
+      <button class="btn-pri" data-on-click="saveSlotModal()">Save slot</button>
     </div>
   </div>
 </div>
@@ -597,8 +598,8 @@
     </div>
     <div class="form-preview" id="sem-preview" aria-live="polite"></div>
     <div class="modal-btns">
-      <button class="btn-sec" onclick="closeSemesterDialog()">Cancel</button>
-      <button class="btn-pri" onclick="saveSemesterDialog()">Save</button>
+      <button class="btn-sec" data-on-click="closeSemesterDialog()">Cancel</button>
+      <button class="btn-pri" data-on-click="saveSemesterDialog()">Save</button>
     </div>
   </div>
 </div>
@@ -614,8 +615,8 @@
       <input type="text" id="ask-input" maxlength="80">
     </div>
     <div class="modal-btns">
-      <button class="btn-sec" id="ask-cancel" onclick="closeAsk(false)">Cancel</button>
-      <button class="btn-pri" id="ask-ok" onclick="closeAsk(true)">OK</button>
+      <button class="btn-sec" id="ask-cancel" data-on-click="closeAsk(false)">Cancel</button>
+      <button class="btn-pri" id="ask-ok" data-on-click="closeAsk(true)">OK</button>
     </div>
   </div>
 </div>
@@ -629,32 +630,32 @@
       <img src="assets/cat-mail.svg" alt="">
     </div>
     <div class="mode-seg share-tabs" role="tablist">
-      <button type="button" role="tab" id="share-tab-out" onclick="switchShareTab('out')"><b>📤 Share mine</b><span>Send your setup</span></button>
-      <button type="button" role="tab" id="share-tab-in" onclick="switchShareTab('in')"><b>📥 Import</b><span>Use a classmate's setup</span></button>
+      <button type="button" role="tab" id="share-tab-out" data-on-click="switchShareTab('out')"><b>📤 Share mine</b><span>Send your setup</span></button>
+      <button type="button" role="tab" id="share-tab-in" data-on-click="switchShareTab('in')"><b>📥 Import</b><span>Use a classmate's setup</span></button>
     </div>
 
     <div id="share-pane-out" class="share-pane">
       <ul class="pack-summary" id="share-summary"></ul>
       <div class="share-actions">
-        <button class="btn-pri" onclick="downloadPack()"><svg class="ic ic-sm"><use href="#i-download"/></svg> Download file</button>
-        <button class="btn-sec" onclick="copyPackCode()"><svg class="ic ic-sm"><use href="#i-copy"/></svg> Copy as text</button>
-        <button class="btn-sec" id="share-native" onclick="nativeSharePack()" hidden>Share…</button>
+        <button class="btn-pri" data-on-click="downloadPack()"><svg class="ic ic-sm"><use href="#i-download"/></svg> Download file</button>
+        <button class="btn-sec" data-on-click="copyPackCode()"><svg class="ic ic-sm"><use href="#i-copy"/></svg> Copy as text</button>
+        <button class="btn-sec" id="share-native" data-on-click="nativeSharePack()" hidden>Share…</button>
       </div>
       <textarea id="share-code" class="pack-code" readonly hidden aria-label="Share code"></textarea>
       <p class="field-tip" style="margin-top:12px">Classmates open <strong>Smart Timetable → Share / Import → Import</strong> and drop in the file or paste the text.</p>
     </div>
 
     <div id="share-pane-in" class="share-pane" hidden>
-      <label class="pack-file"><input type="file" id="pack-file" accept=".json,.txt,application/json,text/plain" onchange="onPackFile(this)"><svg class="ic"><use href="#i-upload"/></svg> <span id="pack-file-name">Choose the file you received</span></label>
+      <label class="pack-file"><input type="file" id="pack-file" accept=".json,.txt,application/json,text/plain" data-on-change="onPackFile(this)"><svg class="ic"><use href="#i-upload"/></svg> <span id="pack-file-name">Choose the file you received</span></label>
       <div class="mf" style="margin-top:12px">
         <label for="pack-text">…or paste the text a classmate sent</label>
-        <textarea id="pack-text" class="pack-code" rows="3" placeholder="BUNKKRO1.…" oninput="onPackText()"></textarea>
+        <textarea id="pack-text" class="pack-code" rows="3" placeholder="BUNKKRO1.…" data-on-input="onPackText()"></textarea>
       </div>
       <p class="form-err" id="pack-error" role="alert" hidden></p>
       <div id="pack-preview"></div>
       <div class="modal-btns">
-        <button class="btn-sec" onclick="closeSharePack()">Cancel</button>
-        <button class="btn-pri" id="pack-import-btn" onclick="confirmImportPack()" disabled>Import</button>
+        <button class="btn-sec" data-on-click="closeSharePack()">Cancel</button>
+        <button class="btn-pri" id="pack-import-btn" data-on-click="confirmImportPack()" disabled>Import</button>
       </div>
     </div>
   </div>
@@ -675,12 +676,12 @@
       <p class="form-err" id="resched-error" role="alert" hidden></p>
     </div>
     <div class="modal-btns" id="resched-ask">
-      <button class="btn-sec" onclick="closeReschedule()">No, just cancelled</button>
-      <button class="btn-pri" onclick="showReschedulePick()">Yes, pick the day</button>
+      <button class="btn-sec" data-on-click="closeReschedule()">No, just cancelled</button>
+      <button class="btn-pri" data-on-click="showReschedulePick()">Yes, pick the day</button>
     </div>
     <div class="modal-btns" id="resched-save" hidden>
-      <button class="btn-sec" onclick="closeReschedule()">Skip</button>
-      <button class="btn-pri" onclick="confirmReschedule()">Add makeup class</button>
+      <button class="btn-sec" data-on-click="closeReschedule()">Skip</button>
+      <button class="btn-pri" data-on-click="confirmReschedule()">Add makeup class</button>
     </div>
   </div>
 </div>
@@ -692,8 +693,8 @@
     <p class="sub">Colleges sometimes announce “<em>Saturday follows Monday's timetable</em>”. Pick which timetable <strong id="dayswap-date"></strong> runs on.</p>
     <div class="mf"><label for="dayswap-select">Timetable for this day</label><select id="dayswap-select"></select></div>
     <div class="modal-btns">
-      <button class="btn-sec" onclick="closeDaySwap()">Cancel</button>
-      <button class="btn-pri" onclick="confirmDaySwap()">Save</button>
+      <button class="btn-sec" data-on-click="closeDaySwap()">Cancel</button>
+      <button class="btn-pri" data-on-click="confirmDaySwap()">Save</button>
     </div>
   </div>
 </div>
@@ -711,8 +712,8 @@
     </div>
 
     <div class="modal-btns">
-      <button class="btn-sec" onclick="closeSyncFrequenciesModal()">Close</button>
-      <button class="btn-pri" onclick="applyWeeklyFrequencies()">Apply to subjects ✓</button>
+      <button class="btn-sec" data-on-click="closeSyncFrequenciesModal()">Close</button>
+      <button class="btn-pri" data-on-click="applyWeeklyFrequencies()">Apply to subjects ✓</button>
     </div>
   </div>
 </div>
@@ -734,8 +735,8 @@
     </div>
 
     <div class="modal-btns">
-      <button class="btn-sec" onclick="closeExtraClassModal()">Cancel</button>
-      <button class="btn-pri" onclick="confirmAddExtraClass()">Add to this day</button>
+      <button class="btn-sec" data-on-click="closeExtraClassModal()">Cancel</button>
+      <button class="btn-pri" data-on-click="confirmAddExtraClass()">Add to this day</button>
     </div>
   </div>
 </div>
@@ -743,7 +744,7 @@
 <!-- ══════ UPCOMING HOLIDAYS (from a circular, ahead of time) ══════ -->
 <div class="overlay" id="hol-overlay" role="dialog" aria-modal="true" aria-labelledby="hol-title">
   <div class="modal" style="max-width:460px;position:relative">
-    <button class="modal-x" onclick="closeHolidayPlanner()" aria-label="Close">&times;</button>
+    <button class="modal-x" data-on-click="closeHolidayPlanner()" aria-label="Close">&times;</button>
     <div class="modal-hero">
       <div><h2 id="hol-title">Upcoming holidays 🗓️</h2>
       <p class="sub">Got a circular? Tap the days (or drag across a few) — they won't count as absent, and BunkKro plans around them.</p></div>
@@ -753,7 +754,7 @@
     <div class="mf"><label for="hol-name">Name <span class="field-hint">(optional)</span></label><input type="text" id="hol-name" maxlength="40" placeholder="e.g. Diwali break, Sports day"></div>
     <div class="hol-foot">
       <div class="form-preview" id="hol-preview" aria-live="polite"></div>
-      <div class="modal-btns"><button class="btn-pri" id="hol-add" onclick="addPlannedHolidays()">Add holiday</button></div>
+      <div class="modal-btns"><button class="btn-pri" id="hol-add" data-on-click="addPlannedHolidays()">Add holiday</button></div>
     </div>
     <div class="hol-list-title">Coming up</div>
     <div id="hol-list"></div>
@@ -767,8 +768,8 @@
     <h2 id="tt-confirm-title">Replace existing timetable?</h2>
     <p class="sub">Your current weekly schedule will be replaced.</p>
     <div class="modal-btns center">
-      <button class="btn-sec" onclick="closeTtConfirmModal()">Cancel</button>
-      <button class="btn-pri" onclick="confirmProceedScan()">Proceed</button>
+      <button class="btn-sec" data-on-click="closeTtConfirmModal()">Cancel</button>
+      <button class="btn-pri" data-on-click="confirmProceedScan()">Proceed</button>
     </div>
   </div>
 </div>
@@ -792,7 +793,7 @@
       <div id="auth-error" class="auth-error" style="display:none" role="alert"></div>
       <div id="auth-success" class="auth-success" style="display:none" role="status"></div>
 
-      <form id="auth-form" onsubmit="handleAuth(event)">
+      <form id="auth-form" data-on-submit="handleAuth(event)">
         <div class="auth-field">
           <label for="auth-email">Email</label>
           <input type="email" id="auth-email" placeholder="your@email.com" autocomplete="email" required>
@@ -806,7 +807,7 @@
 
       <div class="auth-toggle">
         <span id="auth-toggle-text">Don't have an account?</span>
-        <button class="auth-link" id="auth-toggle-btn" onclick="toggleAuthMode()">Sign Up</button>
+        <button class="auth-link" id="auth-toggle-btn" data-on-click="toggleAuthMode()">Sign Up</button>
       </div>
     </div>
   </div>
@@ -820,7 +821,7 @@
     <div class="cooked-msg" id="ck-msg"></div>
     <img class="cooked-cat" id="ck-cat" src="assets/cat-books.svg" alt="">
     <div class="cooked-breakdown" id="ck-breakdown"></div>
-    <button class="cooked-close" onclick="closeCooked()">Close</button>
+    <button class="cooked-close" data-on-click="closeCooked()">Close</button>
   </div>
 </div>
 
@@ -831,7 +832,7 @@
     <div class="cooked-verdict" id="sb-title"></div>
     <div class="cooked-msg" id="sb-msg"></div>
     <div class="cooked-breakdown" id="sb-breakdown"></div>
-    <button class="cooked-close" onclick="closeSafeBunks()">Close</button>
+    <button class="cooked-close" data-on-click="closeSafeBunks()">Close</button>
   </div>
 </div>
 
@@ -842,17 +843,17 @@
       <h2>yo, welcome to BunkKro 👋</h2>
       <p class="sub">Your one-stop app for deciding whether to attend class or disappear. How do you want to set up?</p>
       <div class="modal-opts">
-        <button type="button" class="modal-opt" onclick="selMode('exact')" id="ob-opt-exact">
+        <button type="button" class="modal-opt" data-on-click="selMode('exact')" id="ob-opt-exact">
           <div class="modal-opt-icon">🎯</div>
           <div><h4>I know official numbers</h4><p>Got your attendance from the portal? Enter exact numbers.</p></div>
         </button>
-        <button type="button" class="modal-opt" onclick="selMode('estimate')" id="ob-opt-estimate">
+        <button type="button" class="modal-opt" data-on-click="selMode('estimate')" id="ob-opt-estimate">
           <div class="modal-opt-icon">⚡</div>
           <div><h4>Just estimate it</h4><p>Tell us your semester start date + missed classes — we calculate the rest.</p></div>
         </button>
       </div>
       <div class="modal-btns">
-        <button class="btn-pri" onclick="obNext()">Let's go →</button>
+        <button class="btn-pri" data-on-click="obNext()">Let's go →</button>
       </div>
     </div>
     <div class="modal-step" id="ob-1">
@@ -861,18 +862,18 @@
       <div class="mf"><label for="ob-exam">Exam date <span class="field-hint">(optional)</span></label><input type="date" id="ob-exam"></div>
       <div class="mf"><label for="ob-target">Default attendance target %</label><input type="number" id="ob-target" placeholder="75" min="1" max="100"></div>
       <div class="modal-btns">
-        <button class="btn-sec" onclick="obBack()">← Back</button>
-        <button class="btn-pri" onclick="obNext()">Next →</button>
+        <button class="btn-sec" data-on-click="obBack()">← Back</button>
+        <button class="btn-pri" data-on-click="obNext()">Next →</button>
       </div>
     </div>
     <div class="modal-step" id="ob-2">
       <h3 id="ob-step2-head">📚 Add your subjects</h3>
       <div class="subj-rows" id="ob-subj-list"></div>
-      <button class="add-row-btn" onclick="obAddRow()">+ Add Subject</button>
+      <button class="add-row-btn" data-on-click="obAddRow()">+ Add Subject</button>
       <div id="ob-est-note" class="est-note" style="display:none">📡 We'll calculate totals from your semester start date.</div>
       <div class="modal-btns">
-        <button class="btn-sec" onclick="obBack()">← Back</button>
-        <button class="btn-pri" onclick="obFinish()">Launch BunkKro 🚀</button>
+        <button class="btn-sec" data-on-click="obBack()">← Back</button>
+        <button class="btn-pri" data-on-click="obFinish()">Launch BunkKro 🚀</button>
       </div>
     </div>
   </div>
@@ -888,11 +889,11 @@
     </div>
 
     <div class="modal-opts row">
-      <button type="button" class="modal-opt" onclick="selAddMode('exact')" id="add-opt-exact">
+      <button type="button" class="modal-opt" data-on-click="selAddMode('exact')" id="add-opt-exact">
         <div class="modal-opt-icon">🎯</div>
         <div><h4>Official numbers</h4><p>Total + present from portal</p></div>
       </button>
-      <button type="button" class="modal-opt" onclick="selAddMode('estimate')" id="add-opt-estimate">
+      <button type="button" class="modal-opt" data-on-click="selAddMode('estimate')" id="add-opt-estimate">
         <div class="modal-opt-icon">⚡</div>
         <div><h4>Estimate it</h4><p>Semester date + missed classes</p></div>
       </button>
@@ -919,8 +920,8 @@
       <div class="upto" id="as-upto" hidden>
         <span>Do these numbers already include <strong>today's</strong> class?</span>
         <div class="mini-seg" role="radiogroup" aria-label="Numbers include today's class">
-          <button type="button" role="radio" data-v="today" onclick="setUpto('as-upto','today')">Yes</button>
-          <button type="button" role="radio" data-v="yesterday" onclick="setUpto('as-upto','yesterday')">Not yet</button>
+          <button type="button" role="radio" data-v="today" data-on-click="setUpto('as-upto','today')">Yes</button>
+          <button type="button" role="radio" data-v="yesterday" data-on-click="setUpto('as-upto','yesterday')">Not yet</button>
         </div>
       </div>
       <p class="field-tip">New subject with no classes yet? Leave both at 0 and mark classes as they happen.</p>
@@ -943,8 +944,8 @@
     <div class="form-preview" id="as-preview" aria-live="polite"></div>
 
     <div class="modal-btns">
-      <button class="btn-sec" onclick="closeAddModal()">Cancel</button>
-      <button id="add-submit" class="btn-pri" onclick="confirmAdd()">Add Subject</button>
+      <button class="btn-sec" data-on-click="closeAddModal()">Cancel</button>
+      <button id="add-submit" class="btn-pri" data-on-click="confirmAdd()">Add Subject</button>
     </div>
   </div>
 </div>
@@ -958,18 +959,18 @@
     <h2 id="delete-title">Delete subject?</h2>
     <p class="sub" id="delete-msg"></p>
     <div class="modal-btns center">
-      <button class="btn-sec" onclick="closeDeleteModal()">Cancel</button>
-      <button class="btn-pri danger" onclick="confirmDeleteSubject()">Delete</button>
+      <button class="btn-sec" data-on-click="closeDeleteModal()">Cancel</button>
+      <button class="btn-pri danger" data-on-click="confirmDeleteSubject()">Delete</button>
     </div>
   </div>
 </div>
 
-<script src="timetable-scanner.js?v=20261108"></script>
+<script src="timetable-scanner.js?v=20261109"></script>
 <script src="fx.js?v=20261108"></script>
 <script src="guide.js?v=20261108"></script>
 <script src="clock.js?v=20261108"></script>
-<script src="ai-bridge.js?v=20261108"></script>
-<script src="bunkke.js?v=20261108"></script>
-<script src="ai-confirm.js?v=20261108"></script>
+<script src="ai-bridge.js?v=20261109"></script>
+<script src="bunkke.js?v=20261109"></script>
+<script src="ai-confirm.js?v=20261109"></script>
 </body>
 </html>

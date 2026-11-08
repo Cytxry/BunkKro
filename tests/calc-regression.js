@@ -5,12 +5,16 @@
  * It swaps in test subjects (your real data is not touched: nothing is saved while signed out), checks the shared
  * calculation (bunkPlan) against hand-worked answers, then renders every view and checks they all agree.
  * Returns { passed, failed, failures }.
+ * Under the site's Content-Security-Policy (no eval), load it as a script instead; the result is then in
+ * window.__calcRegression:
+ *     const s = document.createElement('script'); s.src = 'tests/calc-regression.js'; document.body.append(s);
+ *     await new Promise(r => s.onload = r); await window.__calcRegression
  *
  * Model under test (bunkke.js, bunkPlan): P attended, H held (P + missed), S = classes in the whole semester,
  * L = S - H left, t = target. Must attend by the end = ceil(t*S/100). Bunks over the semester = P + L - that,
  * capped to 0..L. Without S: bunks = the next classes you can miss in a row and stay >= t.
  */
-(async () => {
+window.__calcRegression = (async () => {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const results = [];
   const eq = (name, got, want) => results.push({ name, ok: JSON.stringify(got) === JSON.stringify(want), got, want });

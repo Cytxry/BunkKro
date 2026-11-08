@@ -310,8 +310,8 @@
       }
       if (imp && signedIn) {
         bits.push(sharing()
-          ? 'Your fixes help BunkKro AI learn · <button class="tt-rescan-link" onclick="BunkKroImport.setSharing(false)">Turn off</button>'
-          : 'Help BunkKro AI learn from your fixes? <button class="tt-rescan-link" onclick="BunkKroImport.setSharing(true)">Turn on</button>');
+          ? 'Your fixes help BunkKro AI learn · <button class="tt-rescan-link" data-on-click="BunkKroImport.setSharing(false)">Turn off</button>'
+          : 'Help BunkKro AI learn from your fixes? <button class="tt-rescan-link" data-on-click="BunkKroImport.setSharing(true)">Turn on</button>');
       }
       note.innerHTML = bits.length ? ' · ' + bits.join(' · ') : '';
     }
@@ -333,12 +333,12 @@
             ? `Every period is filled in. ${c.unsure === 1 ? 'One class is' : c.unsure + ' classes are'} marked ⚠️ because the AI wasn't fully sure, so ${them(c.unsure)}'s worth a quick look.`
             : 'Tap any class below to fix it. When it matches your college timetable, confirm.';
         const actions = c.unresolved
-          ? `<button class="btn-pri" onclick="BunkKroImport.checkNext()">Check ${them(c.unresolved)}</button>
-             <button class="aic-link" onclick="BunkKroImport.confirm()">Confirm with ${c.unresolved} unchecked</button>`
-          : `<button class="btn-pri" onclick="BunkKroImport.confirm()">Looks right · Confirm</button>` +
-            (c.unsure ? `<button class="aic-link" onclick="BunkKroImport.checkNext()">Look at the ${c.unsure === 1 ? 'unsure one' : c.unsure + ' unsure ones'}</button>` : '');
+          ? `<button class="btn-pri" data-on-click="BunkKroImport.checkNext()">Check ${them(c.unresolved)}</button>
+             <button class="aic-link" data-on-click="BunkKroImport.confirm()">Confirm with ${c.unresolved} unchecked</button>`
+          : `<button class="btn-pri" data-on-click="BunkKroImport.confirm()">Looks right · Confirm</button>` +
+            (c.unsure ? `<button class="aic-link" data-on-click="BunkKroImport.checkNext()">Look at the ${c.unsure === 1 ? 'unsure one' : c.unsure + ' unsure ones'}</button>` : '');
         const back = imp.previous && (imp.previous.timetable || []).length
-          ? '<button class="aic-link" onclick="BunkKroImport.putBack()">Put back my old timetable</button>' : '';
+          ? '<button class="aic-link" data-on-click="BunkKroImport.putBack()">Put back my old timetable</button>' : '';
         bar.hidden = false;
         bar.className = 'aic-bar draft';
         bar.innerHTML = `

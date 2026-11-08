@@ -1419,6 +1419,7 @@ function askDialog({ title, message = '', ok = 'OK', cancel = 'Cancel', danger =
   okBtn.textContent = ok;
   okBtn.classList.toggle('danger', danger);
   document.getElementById('ask-cancel').textContent = cancel;
+  document.getElementById('ask-cancel').hidden = !cancel;     // a plain notice: one button
   const wrap = document.getElementById('ask-input-wrap');
   const field = document.getElementById('ask-input');
   wrap.hidden = !input;
@@ -1469,7 +1470,7 @@ function renderNav() {
     const risk = isAtRisk(s);
     const active = currPage === 'subject' && currSubjId === s.id ? ' active' : '';
     const st = subjStatus(s).cls;
-    return `<button class="nav-item${active}" id="nav-s-${s.id}" onclick="goPage('subject','${s.id}')">
+    return `<button class="nav-item${active}" id="nav-s-${s.id}" data-on-click="goPage('subject','${s.id}')">
       <span class="nav-dot" style="background:${subjTheme(i).c}"></span>
       <span class="nav-text">${escapeHTML(s.name)}</span>
       <span class="${risk ? 'nav-risk' : 'nav-safe'} nav-pct ${st}">${subjPctText(s)}</span>
@@ -1567,8 +1568,8 @@ function renderHome() {
         <h3>No subjects yet</h3>
         <p>Add your subjects to find out if you're cooked.</p>
         <div class="empty-actions">
-          <button class="btn-pri" onclick="openAddModal()">${ic('plus','ic-sm')} Add Subject</button>
-          <button class="btn-sec" onclick="openSharePack('in')">${ic('users','ic-sm')} Import from a classmate</button>
+          <button class="btn-pri" data-on-click="openAddModal()">${ic('plus','ic-sm')} Add Subject</button>
+          <button class="btn-sec" data-on-click="openSharePack('in')">${ic('users','ic-sm')} Import from a classmate</button>
         </div>
       </div>`;
     document.getElementById('bar-chart').innerHTML = '<div class="empty" style="padding:20px;width:100%"><p style="margin:0">Your class history will show up here.</p></div>';
@@ -1596,7 +1597,7 @@ function renderHome() {
       <div class="sc-val" style="color:${pctTextColor(ov)}">${ov}<span class="unit">%</span></div>
       <div class="sc-sub">target: ${globalTarget}% · ${present}/${total} classes</div>
     </div>
-    <button class="sc tone-green" id="safe-card" onclick="openSafeBunks()" aria-haspopup="dialog">
+    <button class="sc tone-green" id="safe-card" data-on-click="openSafeBunks()" aria-haspopup="dialog">
       <span class="sc-top"><span class="sc-chip green">${ic('coffee','ic-sm')}</span><span class="sc-lbl">Safe bunks</span><span class="sc-go">${ic('chevron-right','ic-sm')}</span></span>
       <span class="sc-val" style="color:${safeBunks>0?'var(--good)':'var(--danger)'}">${safeBunks}</span>
       <span class="sc-sub">${safeSub}</span>
@@ -1619,7 +1620,7 @@ function renderHome() {
     const p = pct(s), tgt = getTarget(s), bk = bunkable(s);
     const risk = isAtRisk(s);
     const st = subjStatus(s);
-    return `<button class="subj-card ${risk?'at-risk':'safe-zone'}" onclick="goPage('subject','${s.id}')">
+    return `<button class="subj-card ${risk?'at-risk':'safe-zone'}" data-on-click="goPage('subject','${s.id}')">
       <span class="subj-avatar" style="background:${subjTheme(i).c}" aria-hidden="true">${escapeHTML((s.name || '?').trim().charAt(0))}</span>
       <span class="subj-card-main">
         <span class="subj-card-name">${escapeHTML(s.name)}</span>
@@ -1639,7 +1640,7 @@ function renderHome() {
   document.getElementById('bar-chart').innerHTML = subjects.map((s,i) => {
     const ph = Math.round(s.present/maxV*112);
     const ah = Math.round((s.total-s.present)/maxV*112);
-    return `<button class="bg" onclick="goPage('subject','${s.id}')" title="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent" aria-label="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent">
+    return `<button class="bg" data-on-click="goPage('subject','${s.id}')" title="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent" aria-label="${escapeHTML(s.name)}: ${s.present} present, ${s.total-s.present} absent">
       <span class="bw"><span class="b p" style="height:${ph}px"></span><span class="b a" style="height:${ah}px"></span></span>
       <span class="bl">${escapeHTML(s.name)}</span>
     </button>`;
@@ -1722,7 +1723,7 @@ function openSafeBunks() {
     ? `Skip these and you still meet each subject's target${eligible.some(r => bunkPlan(r.s).known) ? ' by the end of the semester' : ''}.${extra ? ` (${extra} — not listed.)` : ''}`
     : `No subject has room to skip right now.${extra ? ` (${extra}.)` : ''} Attend a few to build a buffer.`;
   document.getElementById('sb-breakdown').innerHTML = eligible.map(r => `
-    <button class="cooked-row safe-row" onclick="closeSafeBunks(); goPage('subject','${r.s.id}')">
+    <button class="cooked-row safe-row" data-on-click="closeSafeBunksAndGo('${r.s.id}')">
       <span class="cooked-dot" style="background:${subjTheme(r.i).c}"></span>
       <span class="subj-n">${escapeHTML(r.s.name)}</span>
       <span class="subj-p" style="color:${pctTextColor(r.p, r.tgt)}">${r.p}%</span>
@@ -1827,12 +1828,12 @@ function streakCalendarHTML() {
     <div class="pop-head">
       <span class="pop-icon amber">${ic('fire-solid','ic-sm')}</span>
       <h3 id="streak-pop-title">Your streak <span class="pop-count">${cur} day${cur !== 1 ? 's' : ''}</span></h3>
-      <button class="pop-close" onclick="closePopover('streak-pop')" aria-label="Close">${ic('x','ic-sm')}</button>
+      <button class="pop-close" data-on-click="closePopover('streak-pop')" aria-label="Close">${ic('x','ic-sm')}</button>
     </div>
     <div class="cal-head">
-      <button class="cal-nav cal-prev" onclick="shiftCalMonth(-1)" ${atMin ? 'disabled' : ''} aria-label="Previous month">${ic('chevron-left','ic-sm')}</button>
+      <button class="cal-nav cal-prev" data-on-click="shiftCalMonth(-1)" ${atMin ? 'disabled' : ''} aria-label="Previous month">${ic('chevron-left','ic-sm')}</button>
       <span class="cal-month">${monthName}</span>
-      <button class="cal-nav cal-next" onclick="shiftCalMonth(1)" ${atMax ? 'disabled' : ''} aria-label="Next month">${ic('chevron-right','ic-sm')}</button>
+      <button class="cal-nav cal-next" data-on-click="shiftCalMonth(1)" ${atMax ? 'disabled' : ''} aria-label="Next month">${ic('chevron-right','ic-sm')}</button>
     </div>
     <div class="cal-grid" role="grid" aria-label="${monthName} days with attendance marked">
       ${['M','T','W','T','F','S','S'].map(w => `<span class="cal-wd">${w}</span>`).join('')}
@@ -1868,7 +1869,7 @@ function renderUnmarkedNudge() {
   if (!box) return;
   const u = unmarkedRecent();
   box.innerHTML = u
-    ? `<button class="unmarked-nudge" onclick="openTrackerOn('${u.earliest}')">${ic('clock','ic-sm')}<span><strong>${u.total} class${u.total !== 1 ? 'es' : ''}</strong> from the past week ${u.total !== 1 ? "aren't" : "isn't"} marked yet</span><span class="unmarked-go">Mark ${ic('arrow-right','ic-xs')}</span></button>`
+    ? `<button class="unmarked-nudge" data-on-click="openTrackerOn('${u.earliest}')">${ic('clock','ic-sm')}<span><strong>${u.total} class${u.total !== 1 ? 'es' : ''}</strong> from the past week ${u.total !== 1 ? "aren't" : "isn't"} marked yet</span><span class="unmarked-go">Mark ${ic('arrow-right','ic-xs')}</span></button>`
     : '';
 }
 
@@ -1908,7 +1909,7 @@ function renderHomeToday() {
   if (!classes.length) {
     box.innerHTML = timetable.length
       ? `<div class="today-note"><img src="assets/cat-books.svg" alt=""><div><strong>No classes today</strong><br>Nap responsibly.</div></div>`
-      : `<div class="today-note"><img src="assets/cat-peek.svg" alt=""><div><strong>No timetable yet</strong><br><button class="link-btn" style="padding:0" onclick="goPage('timetable')">Set up your weekly schedule</button></div></div>`;
+      : `<div class="today-note"><img src="assets/cat-peek.svg" alt=""><div><strong>No timetable yet</strong><br><button class="link-btn" style="padding:0" data-on-click="goPage('timetable')">Set up your weekly schedule</button></div></div>`;
     return;
   }
 
@@ -1922,7 +1923,7 @@ function renderHomeToday() {
   const marked = markable.filter(c => STATES[c.status]).length;
   // Periods not linked to a subject can't be tracked: one line instead of a row each
   const unlinked = classes.length - countable.length;
-  const linkLine = unlinked ? `<button class="tl-unlinked" onclick="openTodayTracker()">${ic('pen','ic-sm')}<span>${unlinked} class${unlinked !== 1 ? 'es' : ''} today ${unlinked !== 1 ? "aren't" : "isn't"} linked to a subject</span><span class="unmarked-go">Link ${ic('arrow-right','ic-xs')}</span></button>` : '';
+  const linkLine = unlinked ? `<button class="tl-unlinked" data-on-click="openTodayTracker()">${ic('pen','ic-sm')}<span>${unlinked} class${unlinked !== 1 ? 'es' : ''} today ${unlinked !== 1 ? "aren't" : "isn't"} linked to a subject</span><span class="unmarked-go">Link ${ic('arrow-right','ic-xs')}</span></button>` : '';
   if (!countable.length) {
     box.innerHTML = `<div class="today-note"><img src="assets/cat-confused.svg" alt=""><div><strong>Nothing to mark yet</strong><br>Link today's periods to your subjects to track them.</div></div>${linkLine}`;
     return;
@@ -1949,7 +1950,7 @@ function renderHomeToday() {
       <span class="tl-body"><span class="tl-name">${escapeHTML(name)}</span><span class="tl-time">${escapeHTML(time)}${c.isExtra && c.startTime ? ' · Extra' : ''}${c.isMakeup && c.startTime ? ' · Makeup' : ''}</span></span>
       <span class="tl-state">${st ? st.label : 'Not marked'}</span>
     </li>`;
-  }).join('')}</ol>${countable.length > shown.length ? `<button class="today-more link-btn" onclick="openTodayTracker()">+${countable.length - shown.length} more today</button>` : ''}${linkLine}`;
+  }).join('')}</ol>${countable.length > shown.length ? `<button class="today-more link-btn" data-on-click="openTodayTracker()">+${countable.length - shown.length} more today</button>` : ''}${linkLine}`;
 }
  
 function renderVerdictCard(ov, atRisk, safeBunks) {
@@ -1971,7 +1972,7 @@ function renderVerdictCard(ov, atRisk, safeBunks) {
     sub = `${nWord(atRisk.length, 'subject')} below target: ${list}. ${stablePick(VERDICT_SUBS.cooked, seed)}`;
   }
   document.getElementById('verdict-wrap').innerHTML = `
-    <button class="verdict-card ${cls}" onclick="openCooked()">
+    <button class="verdict-card ${cls}" data-on-click="openCooked()">
       <span class="verdict-emoji" aria-hidden="true">${emoji}</span>
       <span class="verdict-body">
         <span class="verdict-title">${escapeHTML(title)}</span>
@@ -2149,7 +2150,7 @@ function renderSubject(id, preserveSim) {
   // Estimated subjects are worked out from dates, so they're edited below.
   const editable = s.mode !== 'estimate';
   const chip = (cls, icon, label, value, field) => editable && field
-    ? `<button type="button" class="chip ${cls} editable" data-field="${field}" onclick="startChipEdit('${field}')" aria-label="${label}: ${value}. Tap to change"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}${ic('pen','ic-xs chip-pen')}</span><span class="cv">${value}</span></button>`
+    ? `<button type="button" class="chip ${cls} editable" data-field="${field}" data-on-click="startChipEdit('${field}')" aria-label="${label}: ${value}. Tap to change"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}${ic('pen','ic-xs chip-pen')}</span><span class="cv">${value}</span></button>`
     : `<div class="chip ${cls}"><span class="chip-lbl">${ic(icon,'ic-sm')} ${label}</span><div class="cv">${value}</div></div>`;
   document.getElementById('sp-chips').innerHTML =
     chip('indigo', 'calendar', 'Total', s.semTotal || '—', 'semTotal') +   // the whole semester's classes
@@ -2429,7 +2430,7 @@ function renderDayPicker(id) {
   if (!el || !p) return;
   el.innerHTML = DAY_SHORT.slice(1).map((d, i) => {
     const n = p.counts[i + 1] || 0;
-    return `<button type="button" class="day-chip${n ? ' on' : ''}" aria-pressed="${n > 0}" aria-label="${DAYS_MAP[i].name}: ${n} class${n !== 1 ? 'es' : ''}" onclick="onDayChip('${id}', ${i + 1})">${d}${n > 1 ? `<b>×${n}</b>` : ''}</button>`;
+    return `<button type="button" class="day-chip${n ? ' on' : ''}" aria-pressed="${n > 0}" aria-label="${DAYS_MAP[i].name}: ${n} class${n !== 1 ? 'es' : ''}" data-on-click="onDayChip('${id}', ${i + 1})">${d}${n > 1 ? `<b>×${n}</b>` : ''}</button>`;
   }).join('');
   const note = document.getElementById(id + '-note');
   const total = dayTotal(p.counts);
@@ -2655,9 +2656,9 @@ function needTile(o, tgt, label) {
 // When the classes left can't be worked out at all: one small line with the way to fix it
 function noEstimateNote(s) {
   return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Classes left unknown · '
-    + (s.mode !== 'estimate' ? '<button class="link-btn" onclick="startChipEdit(\'semTotal\')">add the semester total</button> or ' : '')
-    + '<button class="link-btn" onclick="openSemesterDialog(\'end\')">set last day</button>'
-    + (weeklyCount(s) ? '' : ' or <button class="link-btn" onclick="openEditCard()">add its days</button>') + '</span></div>';
+    + (s.mode !== 'estimate' ? '<button class="link-btn" data-on-click="startChipEdit(\'semTotal\')">add the semester total</button> or ' : '')
+    + '<button class="link-btn" data-on-click="openSemesterDialog(\'end\')">set last day</button>'
+    + (weeklyCount(s) ? '' : ' or <button class="link-btn" data-on-click="openEditCard()">add its days</button>') + '</span></div>';
 }
 function leftTile(o) {
   return o.left === null ? null : ['amber', 'calendar', 'Classes left', o.ab + o.left];
@@ -2669,13 +2670,13 @@ function bestTile(o, tgt, label) {
 // One small line saying how the classes left were estimated, with the fix
 function remainingNote(info, s) {
   if (!info?.est) return '';
-  const link = (label, focus) => '<button class="link-btn" onclick="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
+  const link = (label, focus) => '<button class="link-btn" data-on-click="openSemesterDialog(\'' + focus + '\')">' + label + '</button>';
   const cpw = classesPerWeek(s), end = semEndInfo();
   let text;
   if (!info.guess) text = 'ends ~' + fmtShort(end.date) + ' · ' + link('set last day', 'end');
   else if (info.stale) text = 'start date (' + fmtShort(semStart) + ') looks old · ' + link('update', 'start');
   else text = semWeeks + '-week sem · ' + link('add dates', 'start');
-  if (cpw.guessed) text += ' · <button class="link-btn" onclick="openEditCard()">' + (cpw.mismatch ? 'check its days' : 'add its days') + '</button>';
+  if (cpw.guessed) text += ' · <button class="link-btn" data-on-click="openEditCard()">' + (cpw.mismatch ? 'check its days' : 'add its days') + '</button>';
   return '<div class="sem-note">' + ic('info', 'ic-sm') + '<span>Estimated · ' + text + '</span></div>';
 }
 // ── Edit subject ──
@@ -3174,7 +3175,7 @@ function obAddRow(name='') {
   div.innerHTML = `
     <div class="rt">
       <input type="text" placeholder="Subject name" value="${escapeHTML(name)}">
-      <button class="rm-btn" onclick="this.closest('.subj-setup-row').remove()">✕</button>
+      <button class="rm-btn" data-on-click="removeSetupRow(this)">✕</button>
     </div>
     <div class="rf">
       ${isEst ? `
@@ -3644,30 +3645,30 @@ function openReplaceDialog(step) {
       : `<div class="rp-row">${inner}</div>`;
   };
   box.classList.add('rp');
-  const back = had ? `<button class="aic-link" onclick="openReplaceDialog('mode')">Back</button>`
-    : `<button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button>`;
+  const back = had ? `<button class="aic-link" data-on-click="openReplaceDialog('mode')">Back</button>`
+    : `<button class="aic-link" data-on-click="closeTtConfirmModal()">Cancel</button>`;
   if (step === 'mode' && had) {
     const n = timetable.filter(s => !s.isBreak).length;
     box.innerHTML = `<img class="modal-cat" src="assets/cat-blue-confused.svg" alt="">
       <h2 id="tt-confirm-title">You already have a timetable</h2>
       <p class="sub">${n} class${n === 1 ? '' : 'es'} a week right now. What should the new one do?</p>
       <div class="rp-choices">
-        <button class="rp-choice" onclick="openReplaceDialog('ask')">
+        <button class="rp-choice" data-on-click="openReplaceDialog('ask')">
           <span class="rp-choice-ic" aria-hidden="true">🔄</span>
           <span class="rp-choice-txt"><strong>Replace it</strong><small>The new timetable takes its place</small></span>
         </button>
-        <button class="rp-choice add" onclick="confirmProceedScan('add')">
+        <button class="rp-choice add" data-on-click="confirmProceedScan('add')">
           <span class="rp-choice-ic" aria-hidden="true">➕</span>
           <span class="rp-choice-txt"><strong>Add to it</strong><small>Keep your classes and subjects, and add the new ones</small></span>
         </button>
       </div>
-      <div class="rp-btns"><button class="aic-link" onclick="closeTtConfirmModal()">Cancel</button></div>`;
+      <div class="rp-btns"><button class="aic-link" data-on-click="closeTtConfirmModal()">Cancel</button></div>`;
   } else if (!list.length) {
     box.innerHTML = `<img class="modal-cat" src="assets/cat-worried.svg" alt="">
       <h2 id="tt-confirm-title">Replace your timetable?</h2>
       <p class="sub">Your weekly schedule will be swapped for the new one.</p>
       <div class="rp-btns">
-        <button class="btn-pri rp-wide" onclick="confirmProceedScan('all')">Replace timetable</button>
+        <button class="btn-pri rp-wide" data-on-click="confirmProceedScan('all')">Replace timetable</button>
         ${back}
       </div>`;
   } else if (step === 'pick') {
@@ -3679,8 +3680,8 @@ function openReplaceDialog(step) {
         <div class="rp-list">${list.map((sb, k) => row(sb, true, k)).join('')}</div>
       </div>
       <div class="rp-btns">
-        <button class="btn-pri rp-wide" id="rp-go" onclick="confirmProceedScan('pick')">Replace timetable</button>
-        <button class="aic-link" onclick="openReplaceDialog('ask')">Back</button>
+        <button class="btn-pri rp-wide" id="rp-go" data-on-click="confirmProceedScan('pick')">Replace timetable</button>
+        <button class="aic-link" data-on-click="openReplaceDialog('ask')">Back</button>
       </div>`;
     const tally = () => {
       const kept = box.querySelectorAll('.rp-toggle input:checked').length;
@@ -3703,8 +3704,8 @@ function openReplaceDialog(step) {
         <div class="rp-list">${list.map(sb => row(sb, false)).join('')}</div>
       </div>
       <div class="rp-btns">
-        <button class="btn-pri danger rp-wide" onclick="confirmProceedScan('all')">Start fresh, remove ${list.length === 1 ? 'it' : 'all ' + list.length}</button>
-        <button class="btn-sec rp-wide" onclick="openReplaceDialog('pick')">Keep some subjects</button>
+        <button class="btn-pri danger rp-wide" data-on-click="confirmProceedScan('all')">Start fresh, remove ${list.length === 1 ? 'it' : 'all ' + list.length}</button>
+        <button class="btn-sec rp-wide" data-on-click="openReplaceDialog('pick')">Keep some subjects</button>
         ${back}
       </div>`;
   }
@@ -4051,6 +4052,12 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     if (!window.TimetableScanner) {
       throw new Error('TimetableScanner module not initialized.');
     }
+    // the scanner's libraries load only now (actions.js): most visits never need their ~11 MB
+    if (window.loadScannerLibs) {
+      setScannerPhase('prep', 6, 'Waking up the built-in scanner 🔧');
+      const libs = await loadScannerLibs();
+      if (!libs.tesseract) throw new Error('the scanner could not load (check your connection)');
+    }
 
     // 0. Load Image
     setScannerPhase('prep', 10, 'Unboxing your timetable 📦');
@@ -4134,12 +4141,41 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     scannerState.historyIndex = 0;
     updateStudioHistoryButtons();
 
-    // Persist and render
-    timetable = opts.merge ? mergeSlots(timetable.slice(), fusedSlots) : fusedSlots;
-    await dropOldSubjects(dropIds);                 // the student's choice in the Replace dialog
+    // A reading that is mostly scraps is refused, not imported: it would fill the week with classes that don't
+    // exist (a clean photo once gave 'EC', 'Eo', 'ry' and a Saturday). Nothing changes; the student is told why.
+    const lessons = fusedSlots.filter(s => !s.isBreak);
+    const counts = new Map();
+    lessons.forEach(s => counts.set(s.subjectName, (counts.get(s.subjectName) || 0) + 1));
+    const real = lessons.filter(s => !/^period\s*\d+$/i.test(s.subjectName || '') &&
+      looksLikeSubject(s.subjectName || '', counts.get(s.subjectName) || 1, true)).length;
+    if (real < 3 || real < lessons.length / 2) {
+      if (progressBox) progressBox.style.display = 'none';
+      await askDialog({
+        title: "This photo couldn't be read reliably",
+        message: `Nothing was imported${timetable.length ? ', and your timetable is as it was' : ''}. ` +
+          `Only ${real} of the ${lessons.length} classes read looked like real subject names. ` +
+          'Try a sharper, straight-on photo in good light, or the PDF, or add your classes by hand.',
+        ok: 'OK', cancel: '', cat: 'cat-worried' });
+      return;
+    }
+
+    // Persist and render: like a BunkKro AI reading, a draft until confirmed. The old timetable is kept and the
+    // old subjects the student chose to remove are only removed on confirm (ai-confirm.js).
+    const predicted = JSON.parse(JSON.stringify(fusedSlots));
+    const previous = JSON.parse(JSON.stringify(timetable));
+    const canDefer = !!(window.BunkKroImport && BunkKroImport.holdDrops);
+    if (canDefer) BunkKroImport.holdDrops(dropIds);
+    else await dropOldSubjects(dropIds);
+    fusedSlots.forEach(s => { s.aiRef = s.id; });
+    const base = opts.merge ? timetable.slice() : null;
+    timetable = base ? mergeSlots(base, fusedSlots) : fusedSlots;
     const hadSubjects = new Set(subjects.map(s => s.id));
     await ensureSubjectsForTimetable(timetable, true);   // every class gets a subject (strict: the reading can be rough)
     saveTimetableToStorageAndDB();
+    if (window.BunkKroImport) BunkKroImport.start(predicted, timetable, {
+      engineVersion: 'browser-scanner', file, baseIds: base ? base.map(s => s.id) : [],
+      previous: { timetable: previous, dropIds: canDefer ? dropIds : [],
+                  created: subjects.filter(s => !hadSubjects.has(s.id)).map(s => s.id) } });
     renderAll();
     setTimeout(() => window.BunkGuide && BunkGuide.afterImport(subjects.filter(s => !hadSubjects.has(s.id)),
                                                              { first: firstTimetable }), 1400);
@@ -4457,7 +4493,7 @@ function updateStudioInfoBox(cell) {
           Bounds: x ${Math.round(cell.xmin)}–${Math.round(cell.xmax)}, y ${Math.round(cell.ymin)}–${Math.round(cell.ymax)} (${Math.round(cell.xmax - cell.xmin)} × ${Math.round(cell.ymax - cell.ymin)}px)
         </div>
       </div>
-      <button class="btn-pri btn-sm" onclick="openCellInspector('${cell.id}')">🔬 Open cell inspector</button>
+      <button class="btn-pri btn-sm" data-on-click="openCellInspector('${cell.id}')">🔬 Open cell inspector</button>
     </div>
     <div class="info-grid">
       <div class="info-tile">
@@ -4856,7 +4892,7 @@ function renderValidationReport() {
             <div class="disagree-title" style="color:${color}">${escapeHTML(label)}</div>
             <div class="disagree-detail">${escapeHTML(detail)}</div>
           </div>
-          ${item.cellId ? `<button class="btn-sec btn-sm" style="flex-shrink:0" onclick="switchTimetableTab('studio'); scannerState.selectedCellId = '${item.cellId}'; renderStudioCanvas();">Inspect</button>` : ''}
+          ${item.cellId ? `<button class="btn-sec btn-sm" style="flex-shrink:0" data-on-click="studioSelectCell('${item.cellId}')">Inspect</button>` : ''}
         </div>
       </div>
     `;
@@ -4940,8 +4976,8 @@ function renderTimetable() {
         <h3>No weekly schedule yet 👀</h3>
         <p>It's giving empty. Upload your timetable above, add classes by hand, or import a classmate's setup.</p>
         <div class="empty-actions">
-          <button class="btn-pri" onclick="openAddSlotModal(1, 1)">${ic('plus','ic-sm')} Add first class</button>
-          <button class="btn-sec" onclick="openSharePack('in')">${ic('users','ic-sm')} Import from a classmate</button>
+          <button class="btn-pri" data-on-click="openAddSlotModal(1, 1)">${ic('plus','ic-sm')} Add first class</button>
+          <button class="btn-sec" data-on-click="openSharePack('in')">${ic('users','ic-sm')} Import from a classmate</button>
         </div>
       </div>
     `;
@@ -4984,7 +5020,7 @@ function renderTimetable() {
 
               if (slot.isBreak) {
                 return `
-                  <button class="tt-slot-card break" data-slot-id="${slot.id}" onclick="openEditSlotModal('${slot.id}')" title="Click to edit · drag to move" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown">
+                  <button class="tt-slot-card break" data-slot-id="${slot.id}" data-on-click="openEditSlotModal('${slot.id}')" title="Click to edit · drag to move" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown">
                     <span class="tt-slot-top">
                       <span class="tt-slot-pnum">P${slot.period}</span>
                       <span class="tt-slot-time">${escapeHTML(timeDisplay || 'Break')}</span>
@@ -4997,7 +5033,7 @@ function renderTimetable() {
               const th = subjTheme(subjIdx);
               const accent = matchedSubj && !slot.isUncertain ? ` style="border-left-color:${th.c};background:linear-gradient(135deg,${th.bg},var(--surface) 85%)"` : '';
               return `
-                <button class="tt-slot-card ${slot.isUncertain ? 'uncertain' : ''}" data-slot-id="${slot.id}"${accent} onclick="openEditSlotModal('${slot.id}')" title="Click to edit · drag to move" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown">
+                <button class="tt-slot-card ${slot.isUncertain ? 'uncertain' : ''}" data-slot-id="${slot.id}"${accent} data-on-click="openEditSlotModal('${slot.id}')" title="Click to edit · drag to move" aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown">
                   <span class="tt-slot-top">
                     <span class="tt-slot-pnum">Period ${slot.period}</span>
                     <span class="tt-slot-time">${escapeHTML(timeDisplay)}</span>
@@ -5009,7 +5045,7 @@ function renderTimetable() {
                 </button>
               `;
             }).join('')}
-            <button class="tt-add-slot-btn" onclick="openAddSlotModal(${dayInfo.num}, ${(daySlots.length ? Math.max(...daySlots.map(s=>s.period)) + 1 : 1)})">+ Add class</button>
+            <button class="tt-add-slot-btn" data-on-click="openAddSlotModal(${dayInfo.num}, ${(daySlots.length ? Math.max(...daySlots.map(s=>s.period)) + 1 : 1)})">+ Add class</button>
           </div>
         </td>
       </tr>
@@ -6101,9 +6137,9 @@ function renderHolidayCalendar() {
   }
   box.innerHTML = `
     <div class="hc-head">
-      <button type="button" class="hc-nav" onclick="holShiftMonth(-1)" ${thisMonth ? 'disabled' : ''} aria-label="Previous month">${ic('chevron-left', 'ic-sm')}</button>
+      <button type="button" class="hc-nav" data-on-click="holShiftMonth(-1)" ${thisMonth ? 'disabled' : ''} aria-label="Previous month">${ic('chevron-left', 'ic-sm')}</button>
       <span class="hc-title">${title}</span>
-      <button type="button" class="hc-nav" onclick="holShiftMonth(1)" aria-label="Next month">${ic('chevron-right', 'ic-sm')}</button>
+      <button type="button" class="hc-nav" data-on-click="holShiftMonth(1)" aria-label="Next month">${ic('chevron-right', 'ic-sm')}</button>
     </div>
     <div class="hc-week" aria-hidden="true"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
     <div class="hc-grid">${cells}</div>
@@ -6165,7 +6201,7 @@ function holidayPreview() {
   const when = days.length === 1 ? fmtDate(days[0])
     : stretch ? `${days.length} days · ${fmtShort(days[0])} – ${fmtShort(days[days.length - 1])}` : `${days.length} days picked`;
   box.innerHTML = escapeHTML(when + (classes ? ` · ${classes} class${classes !== 1 ? 'es' : ''} won't count` : ' · no classes on those days'))
-    + ' · <button type="button" class="link-btn" onclick="holClear()">clear</button>';
+    + ' · <button type="button" class="link-btn" data-on-click="holClear()">clear</button>';
 }
 function holClear() { holSel = new Set(); renderHolidayCalendar(); holidayPreview(); }
 async function addPlannedHolidays() {
@@ -6215,7 +6251,7 @@ function renderHolidayList() {
       <span class="hol-ic">${ic('umbrella', 'ic-sm')}</span>
       <div class="hol-meta"><strong>${g.note && g.note !== 'College Holiday' ? escapeHTML(g.note) : 'Holiday'}</strong>
         <span>${g.start === g.end ? fmtDate(g.start) : `${fmtShort(g.start)} – ${fmtShort(g.end)} · ${g.dates.length} days`}</span></div>
-      <button class="hol-del" onclick="removePlannedHoliday(${i})" aria-label="Remove this holiday">${ic('x', 'ic-sm')}</button>
+      <button class="hol-del" data-on-click="removePlannedHoliday(${i})" aria-label="Remove this holiday">${ic('x', 'ic-sm')}</button>
     </div>`).join('');
   box._groups = groups;
 }
@@ -6554,7 +6590,7 @@ function renderTracker() {
       banner.style.display = 'flex';
     } else if (dayPlan.follows) {
       banner.className = 'date-status-banner today';
-      banner.innerHTML = `${ic('zap')} <span><strong>Follows ${DAYS_MAP.find(x => x.num === dayPlan.follows).name}'s timetable</strong> on this day. <button class="link-btn" style="padding:0" onclick="openDaySwap()">Change</button></span>`;
+      banner.innerHTML = `${ic('zap')} <span><strong>Follows ${DAYS_MAP.find(x => x.num === dayPlan.follows).name}'s timetable</strong> on this day. <button class="link-btn" style="padding:0" data-on-click="openDaySwap()">Change</button></span>`;
       banner.style.display = 'flex';
     } else if (isToday) {
       banner.className = 'date-status-banner today';
@@ -6562,7 +6598,7 @@ function renderTracker() {
       banner.style.display = 'flex';
     } else if (beforeSem) {
       banner.className = 'date-status-banner future';
-      banner.innerHTML = `${ic('calendar')} <span><strong>Before the semester started</strong> (${escapeHTML(fmtDate(semStart))}) — nothing to mark here. <button class="link-btn" style="padding:0" onclick="openSemesterDialog()">Change dates</button></span>`;
+      banner.innerHTML = `${ic('calendar')} <span><strong>Before the semester started</strong> (${escapeHTML(fmtDate(semStart))}) — nothing to mark here. <button class="link-btn" style="padding:0" data-on-click="openSemesterDialog()">Change dates</button></span>`;
       banner.style.display = 'flex';
     } else if (isFuture) {
       banner.className = 'date-status-banner future';
@@ -6640,8 +6676,8 @@ function renderTracker() {
         <h3>No classes scheduled for ${dateObj.toLocaleDateString('en-IN', { weekday: 'long' })}</h3>
         <p>${timetable.length ? 'You have no timetable classes on this day. ' + stablePick(FREE_DAY_LINES, selectedTrackerDate) : 'Set up your weekly timetable to see your daily classes automatically.'}</p>
         <div class="empty-actions">
-          <button class="btn-pri" onclick="goPage('timetable')">${ic('grid','ic-sm')} Configure Timetable</button>
-          <button class="btn-sec" onclick="openExtraClassModal()">${ic('plus','ic-sm')} Add Extra Class</button>
+          <button class="btn-pri" data-on-click="goPage('timetable')">${ic('grid','ic-sm')} Configure Timetable</button>
+          <button class="btn-sec" data-on-click="openExtraClassModal()">${ic('plus','ic-sm')} Add Extra Class</button>
         </div>
       </div>
     `;
@@ -6680,13 +6716,13 @@ function renderTracker() {
         </div>
         ${s && isPreCounted(item, selectedTrackerDate) ? `<div class="tracker-link"><span class="counted-note" title="You entered ${escapeHTML(s.name)}'s numbers counting classes up to ${escapeHTML(fmtDate(countedUpTo[s.id]))}">${ic('check','ic-sm')} Already in the numbers you entered</span></div>` : !s && !item.isExtra ? `<div class="tracker-link">
           ${item.isMakeup
-            ? `<button class="btn-sec btn-sm" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')} Remove</button>`
-            : `<button class="btn-sec btn-sm" onclick="openEditSlotModal('${item.slotId}')" title="Pick which of your subjects this class is">${ic('pen','ic-sm')} Link to a subject</button>`}
+            ? `<button class="btn-sec btn-sm" data-on-click="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')} Remove</button>`
+            : `<button class="btn-sec btn-sm" data-on-click="openEditSlotModal('${item.slotId}')" title="Pick which of your subjects this class is">${ic('pen','ic-sm')} Link to a subject</button>`}
         </div>` : `<div class="tracker-btns" role="group" aria-label="Attendance for ${escapeHTML(displayName)}">
-          <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" ${lockPA && item.status !== 'p' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
-          <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" ${lockPA && item.status !== 'a' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
-          <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" aria-pressed="${item.status === 'cancelled'}" title="The class didn't happen — it won't count as absent" onclick="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">${ic('ban','ic-sm')} No class</button>
-          ${item.isMakeup ? `<button class="tbtn rm" title="Remove this class" aria-label="Remove this class" onclick="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')}</button>` : ''}
+          <button class="tbtn p ${item.status === 'p' ? 'on' : ''}" aria-pressed="${item.status === 'p'}" ${lockPA && item.status !== 'p' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} data-on-click="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'p', ${item.period}, ${item.isExtra})">${ic('check','ic-sm')} Present</button>
+          <button class="tbtn a ${item.status === 'a' ? 'on' : ''}" aria-pressed="${item.status === 'a'}" ${lockPA && item.status !== 'a' ? `disabled title="${beforeSem ? 'Before the semester started' : 'You can mark this once the day comes'}"` : ''} data-on-click="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'a', ${item.period}, ${item.isExtra})">${ic('x','ic-sm')} Absent</button>
+          <button class="tbtn c ${item.status === 'cancelled' ? 'on' : ''}" aria-pressed="${item.status === 'cancelled'}" title="The class didn't happen — it won't count as absent" data-on-click="markPeriodAttendance('${item.slotId}', '${item.subjectId || ''}', 'cancelled', ${item.period}, ${item.isExtra})">${ic('ban','ic-sm')} No class</button>
+          ${item.isMakeup ? `<button class="tbtn rm" title="Remove this class" aria-label="Remove this class" data-on-click="removeMakeup('${selectedTrackerDate}', '${item.makeupId}')">${ic('x','ic-sm')}</button>` : ''}
         </div>`}
       </div>
     `;
@@ -6942,7 +6978,7 @@ function renderRecentHistory() {
     const lbl = dateObj.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
 
     return `
-      <button class="hist-row" onclick="onDateSelected('${d}')" title="View this day">
+      <button class="hist-row" data-on-click="onDateSelected('${d}')" title="View this day">
         <span class="hist-cal" aria-hidden="true"><b>${dateObj.getDate()}</b><i>${dateObj.toLocaleDateString('en-IN', { month: 'short' })}</i></span>
         <span class="hist-date">${dateObj.toLocaleDateString('en-IN', { weekday: 'long' })} ${dateExceptions[d]?.type === 'holiday' ? '🏖️' : ''}</span>
         <span class="hist-chip p">✓ ${p}</span>
