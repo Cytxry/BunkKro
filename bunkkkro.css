@@ -1568,9 +1568,14 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 .sp-held:empty{display:none}
 .tt-ai-status-loaded{display:block;margin-top:6px}
 .tt-ai-status-loaded:empty{display:none}
-/* how the college rounds (sidebar, under the global target) */
-.round-row{display:flex;flex-direction:column;gap:5px;margin:8px 2px 4px}
-.round-row label{font-size:.74rem;color:var(--text2);font-weight:600}
-.round-row label strong{color:var(--primary-deep)}
-.round-row select{appearance:none;-webkit-appearance:none;width:100%;font:inherit;font-size:.8rem;font-weight:700;color:var(--primary-deep);background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235E6375' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;border:1px solid var(--border);border-radius:12px;padding:7px 30px 7px 11px;cursor:pointer}
-.round-row select:hover{border-color:var(--primary-soft)}
+/* how the college rounds (sidebar, under the global target): a small three-way pill switch */
+.round-row{display:flex;flex-direction:column;gap:6px;margin:10px 2px 6px}
+.round-lbl{font-size:.76rem;color:var(--text2);font-weight:700}
+.round-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:3px;border-radius:13px;background:var(--surface2);border:1px solid var(--border-subtle)}
+.round-seg button{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 2px;border:none;border-radius:10px;background:transparent;font:inherit;font-size:.76rem;font-weight:700;color:var(--text2);cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
+.round-seg button:hover{color:var(--primary)}
+.round-seg button.on{background:var(--surface);color:var(--primary-deep);box-shadow:0 1px 2px rgba(52,63,131,.08),0 3px 10px rgba(52,63,131,.10)}
+.round-ic{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;font-size:.7rem;background:var(--primary-tint);color:var(--primary)}
+.round-seg button.on .round-ic{background:var(--primary);color:#fff}
+.round-hint{font-size:.72rem;color:var(--muted);padding-left:2px}
+@media (prefers-reduced-motion:reduce){.round-seg button{transition:none}}

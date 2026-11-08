@@ -124,13 +124,14 @@
         <span class="sym">%</span>
       </div>
     </div>
-    <div class="round-row">
-      <label for="round-mode">Your college counts <strong>83.3%</strong> as</label>
-      <select id="round-mode" onchange="updateRoundMode(this.value)">
-        <option value="down">83% · rounds down</option>
-        <option value="up">84% · rounds up</option>
-        <option value="exact">83.3% · exact</option>
-      </select>
+    <div class="round-row" role="radiogroup" aria-labelledby="round-lbl">
+      <span class="round-lbl" id="round-lbl">How does your college round?</span>
+      <div class="round-seg">
+        <button type="button" role="radio" data-r="down" onclick="updateRoundMode('down')"><span class="round-ic" aria-hidden="true">↓</span> Down</button>
+        <button type="button" role="radio" data-r="up" onclick="updateRoundMode('up')"><span class="round-ic" aria-hidden="true">↑</span> Up</button>
+        <button type="button" role="radio" data-r="exact" onclick="updateRoundMode('exact')"><span class="round-ic" aria-hidden="true">✦</span> Exact</button>
+      </div>
+      <span class="round-hint" id="round-hint" aria-live="polite"></span>
     </div>
     <button class="sem-link" id="sem-link" onclick="openSemesterDialog()"><svg class="ic ic-sm"><use href="#i-calendar"/></svg> <span id="sem-link-text">Set semester dates</span></button>
   </div>

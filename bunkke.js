@@ -1127,6 +1127,7 @@ let globalTarget = parseInt(localStorage.getItem('bk_global_target') || '75');
 // How the student's college turns attended / held into its percentage, for every subject:
 //   'down' 83.3 -> 83 (the default), 'up' 83.3 -> 84, 'exact' 83.3
 const ROUND_MODES = ['down', 'up', 'exact'];
+const ROUND_HINTS = { down: 'Decimals get dropped, always down', up: 'Any decimal nudges it up', exact: 'Decimals stay as they are' };
 let roundMode = ROUND_MODES.includes(localStorage.getItem('bk_round')) ? localStorage.getItem('bk_round') : 'down';
 let semStart = localStorage.getItem('bk_sem_start') || '';
 let examDate = localStorage.getItem('bk_exam_date') || '';
@@ -1453,8 +1454,12 @@ function toggleSidebar() {
 }
 function renderNav() {
   document.getElementById('global-target').value = globalTarget;
-  const rm = document.getElementById('round-mode');
-  if (rm) rm.value = roundMode;
+  document.querySelectorAll('.round-seg [data-r]').forEach(b => {
+    const on = b.dataset.r === roundMode;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
+  });
+  const rh = document.getElementById('round-hint');
+  if (rh) rh.textContent = ROUND_HINTS[roundMode];
   const sl = document.getElementById('sem-link-text');
   if (sl) sl.textContent = semStart && semEnd ? `Semester: ${fmtShort(semStart)} – ${fmtShort(semEnd)}`
     : semStart ? `Semester: ${fmtShort(semStart)} – ~${fmtShort(semEndInfo().date)}` : 'Set semester dates';
@@ -1473,12 +1478,14 @@ function renderNav() {
 }
 
 function updateRoundMode(v) {
+  const changed = ROUND_MODES.includes(v) && v !== roundMode;
   roundMode = ROUND_MODES.includes(v) ? v : 'down';
   savePrefs();
   renderAll();
   if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
-  toast(roundMode === 'up' ? 'Got it: 83.3% now counts as 84% ✨' : roundMode === 'exact' ? 'Got it: percentages keep their decimals ✨'
-    : 'Got it: 83.3% counts as 83% ✨');
+  if (window.BunkFx) BunkFx.pop(document.querySelector(`.round-seg [data-r="${roundMode}"]`), 1.08);
+  if (changed) toast(roundMode === 'up' ? 'Got it: your percentages round up now ✨' : roundMode === 'exact' ? 'Got it: your percentages keep their decimals ✨'
+    : 'Got it: your percentages round down now ✨');
 }
 
 function updateGlobalTarget(v) {
