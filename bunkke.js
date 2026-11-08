@@ -4789,6 +4789,7 @@ const DAYS_MAP = [
 ];
 
 function updateUploadCardState() {
+  if (window.BunkKroAI && BunkKroAI.showStatus) BunkKroAI.showStatus(false);   // the AI on/off pill (cached check), in whichever bar shows
   const dropzone = document.getElementById('tt-dropzone');
   const loadedBar = document.getElementById('tt-loaded-bar');
   if (!dropzone || !loadedBar) return;
