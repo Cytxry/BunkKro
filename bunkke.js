@@ -1578,7 +1578,8 @@ function renderHome() {
   const ov = attPct(present, total);
   const safeBunks = subjects.reduce((a,s)=>a+bunkable(s),0);
   const atRisk = subjects.filter(isAtRisk);
-  const bestBunk = [...subjects].sort((a,b)=>bunkable(b)-bunkable(a))[0];
+  // never recommend bunking a subject that is under its target right now (its bunks only work out by the sem's end)
+  const bestBunk = subjects.filter(s => !isAtRisk(s)).sort((a,b)=>bunkable(b)-bunkable(a))[0];
   const hasBest = bestBunk && bunkable(bestBunk) > 0;
   const ovCls = pctStatus(ov, globalTarget).cls;
 
@@ -5678,14 +5679,43 @@ function onSlotTypeChange(type) {
   }
 }
 
-// a chosen subject decides the name (typing one too would be ignored), so the name box only shows without one
+// a chosen subject decides the name (typing one too would be ignored), so the name box only shows without one;
+// the subject itself can be renamed from here
 function onSlotSubjectSelect(subjId) {
   const s = subjId ? subjects.find(x => x.id === subjId) : null;
+  const rn = document.getElementById('slot-rename');
+  if (rn) rn.hidden = !s || !currentUser;
   const wrap = document.getElementById('slot-name-wrap');
   const name = document.getElementById('slot-subject-name');
   if (wrap) wrap.hidden = !!s;
   if (s) name.value = s.name;
   else if (subjects.some(x => x.name === name.value)) name.value = '';   // was the linked subject's name
+}
+
+// Rename the chosen subject everywhere (timetable, Daily Classes, its page); attendance stays as it is
+async function renameSlotSubject() {
+  const sel = document.getElementById('slot-subject-select');
+  const s = subjects.find(x => x.id === sel.value);
+  if (!s) return;
+  const name = await askDialog({ title: 'Rename subject ✏️', message: 'The new name shows everywhere: your timetable, Daily Classes and its page. Attendance stays the same.',
+    ok: 'Rename', cat: 'cat-happy', input: { label: 'New name', value: s.name, placeholder: s.name } });
+  const clean = (name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  if (!clean || clean === s.name) return;
+  if (subjects.some(x => x.id !== s.id && x.name.trim().toLowerCase() === clean.toLowerCase())) {
+    toast(`You already have a subject called "${clean}"`, 'err');
+    return;
+  }
+  const before = s.name;
+  s.name = clean;
+  const ok = await updateSubject(s.id, { name: s.name, code: s.code || '', total: s.total, present: s.present, perWeek: s.perWeek,
+                                         target: s.target, semTotal: s.semTotal, mode: s.mode });
+  if (!ok) { s.name = before; return; }
+  timetable.forEach(t => { if (t.subjectId === s.id) t.subjectName = s.name; });
+  saveTimetableToStorageAndDB();
+  populateSubjectDropdown(s.id);
+  onSlotSubjectSelect(s.id);
+  renderAll();
+  toast(`Renamed to ${s.name} ✓`);
 }
 
 function slotError(msg, inputId) {

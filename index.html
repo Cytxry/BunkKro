@@ -553,7 +553,7 @@
     </div>
 
     <div class="mf" id="slot-subject-group">
-      <label for="slot-subject-select">Subject</label>
+      <div class="slot-subj-head"><label for="slot-subject-select">Subject</label><button type="button" class="link-btn" id="slot-rename" onclick="renameSlotSubject()" hidden>✏️ Rename</button></div>
       <select id="slot-subject-select" onchange="onSlotSubjectSelect(this.value)">
         <option value="">-- Choose Existing Subject --</option>
       </select>

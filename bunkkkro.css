@@ -1579,3 +1579,5 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 .round-seg button.on .round-ic{background:var(--primary);color:#fff}
 .round-hint{font-size:.72rem;color:var(--muted);padding-left:2px}
 @media (prefers-reduced-motion:reduce){.round-seg button{transition:none}}
+.slot-subj-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.slot-subj-head .link-btn{font-size:.8rem;font-weight:700}
