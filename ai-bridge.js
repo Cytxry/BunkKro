@@ -111,7 +111,8 @@
     const m = /page_(\d+)/.exec(c.file);
     const t = /table(\d+)/.exec(c.file);
     const where = (m ? `Page ${Number(m[1])}` : 'Timetable') + (t ? `, table ${t[1]}` : '');
-    const days = c.day_order ? 'Day-Order cycle' : c.days.map(d => d.slice(0, 3)).join(' ');
+    const days = c.day_order ? 'Day-Order cycle'
+      : c.days.map(d => (d === 'Unknown' ? 'day not printed' : d.slice(0, 3))).join(' ');
     const rows = c.tracks && c.tracks.length ? `, ${c.tracks.length} sections` : '';
     return `${where}: ${c.activities} classes (${days}${rows})`;
   }
@@ -274,12 +275,22 @@
       if (file2 === null) throw cancelled('No timetable chosen');
       res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(file2)}`);
     }
+    let track = null;
     if (!res.ok && res.needs_track) {
-      onPhase && onPhase('fusion', 85, 'Several class rows per day: choose yours...');
-      const track = await choose('Which row is yours?', 'This timetable prints several class rows per day (sections or batches). Pick yours.',
-        res.tracks.map(t => ({ label: t, value: t })), 'Use this row');
-      if (track === null) throw cancelled('No class row chosen');
+      onPhase && onPhase('fusion', 85, 'Several sections on this timetable: choose yours...');
+      track = await choose('Which section is yours?', 'This timetable prints a row for each section, batch, class or room. Pick the one you attend.',
+        res.tracks.map(t => ({ label: t, value: t })), 'Use this section');
+      if (track === null) throw cancelled('No section chosen');
       res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}&track=${encodeURIComponent(track)}`);
+    }
+    // a page that prints no day (it continues another page): the student names the day, it is never guessed
+    if (!res.ok && res.needs_day) {
+      onPhase && onPhase('fusion', 87, 'This page prints no day: which day is it?');
+      const day = await choose('Which day is this page?', 'This page prints no day (it continues another page). Pick the day these classes are on.',
+        (res.days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']).map(d => ({ label: d, value: d })), 'Use this day');
+      if (day === null) throw cancelled('No day chosen');
+      res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}`
+        + (track ? `&track=${encodeURIComponent(track)}` : '') + `&day=${encodeURIComponent(day)}`);
     }
     if (!res.ok) {
       const err = new Error(res.error || 'The AI could not read this timetable');
