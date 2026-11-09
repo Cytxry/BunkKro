@@ -10,6 +10,8 @@ let dailyPeriodLogs = {};
 let globalSession = null;
 let todayException = null; // holiday / makeup classes / swapped timetable for today
 let countedUpTo = {};       // subjectId -> date the typed-in numbers already include (from the account)
+let dayCycle = null;        // Day Order calendar from the account (bk_prefs), as in the web app
+let holidayDates = new Set(); // holiday dates since Day 1 (a holiday doesn't use up a Day)
 
 function escapeHTML(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -80,6 +82,9 @@ async function loadData() {
       const { data: u } = await supabaseClient.auth.getUser();
       const cu = u?.user?.user_metadata?.bk_counted_upto;
       if (cu && typeof cu === 'object') countedUpTo = cu;
+      // Day Order college (the web app's calendar): today follows Day N, not the weekday
+      const dc = u?.user?.user_metadata?.bk_prefs?.dayCycle;
+      if (dc && typeof BunkDayOrder !== 'undefined' && !BunkDayOrder.problems(dc).length) dayCycle = dc;
     } catch (e) { /* keep going without it */ }
 
     // 1. Load subjects
@@ -115,6 +120,19 @@ async function loadData() {
       .eq('user_id', currentUser.id)
       .eq('date', today);
     todayException = (exData && exData[0]) || null;
+
+    // Day Order: which Day today is depends on every holiday since Day 1 (a holiday doesn't use up a Day)
+    holidayDates = new Set();
+    if (dayCycle) {
+      const { data: hol } = await supabaseClient
+        .from('timetable_exceptions')
+        .select('date, type')
+        .eq('user_id', currentUser.id)
+        .eq('type', 'holiday')
+        .gte('date', dayCycle.start)
+        .lte('date', today);
+      (hol || []).forEach(h => holidayDates.add(h.date));
+    }
 
     if (!logsError && logsData) {
       logsData.forEach(row => {
@@ -156,13 +174,18 @@ function renderTodayClasses() {
   const summaryFill = document.getElementById('summary-fill');
 
   const plan = todayPlan();
-  const todayDay = plan.follows || getTodayDayOfWeek();
+  const todayStr = getLocalDateString();
+  // A Day Order college follows Day N from its calendar (0 = not a working day); otherwise the weekday,
+  // or the day today was switched to ("Saturday follows Monday's timetable")
+  const todayDay = dayCycle ? BunkDayOrder.dayFor(todayStr, dayCycle, ds => holidayDates.has(ds))
+    : (plan.follows || getTodayDayOfWeek());
   const isHoliday = todayException?.type === 'holiday';
   const d = new Date();
-  const dayName = d.toLocaleDateString('en-IN', { weekday: 'long' });
+  const weekdayName = d.toLocaleDateString('en-IN', { weekday: 'long' });
+  const dayName = dayCycle ? (todayDay ? `${weekdayName} · Day ${todayDay}` : weekdayName) : weekdayName;
 
-  // Filter timetable for today
-  let todayClasses = isHoliday ? [] : timetableEntries
+  // Filter timetable for today (Day Order: day 0 is not a working day, so no classes)
+  let todayClasses = (isHoliday || (dayCycle && !todayDay)) ? [] : timetableEntries
     .filter(s => s.day_of_week === todayDay && !s.is_break)
     .sort((a, b) => a.period_index - b.period_index);
   if (!isHoliday) {
@@ -195,8 +218,8 @@ function renderTodayClasses() {
   if (totalClasses === 0) {
     list.innerHTML = `
       <div class="empty-state">
-        <img src="img/${isHoliday ? 'cat-beach' : 'cat-books'}.svg" alt="" style="width:140px;margin:0 auto 6px;display:block">
-        <h3>${isHoliday ? 'Holiday today 🏖️' : 'No classes scheduled today'}</h3>
+        <img src="img/${isHoliday || (dayCycle && !todayDay) ? 'cat-beach' : 'cat-books'}.svg" alt="" style="width:140px;margin:0 auto 6px;display:block">
+        <h3>${isHoliday ? 'Holiday today 🏖️' : dayCycle && !todayDay ? 'No college today 🏖️' : 'No classes scheduled today'}</h3>
         <p style="font-size:12px;color:#5E6375">Open the full app to upload your timetable or view upcoming days.</p>
       </div>
     `;
@@ -208,7 +231,6 @@ function renderTodayClasses() {
 
   // Calculate completion
   // Only classes linked to a subject can be marked, so only they count
-  const todayStr = getLocalDateString();
   const preCounted = c => typeof countedUpTo[c.subject_id] === 'string' && todayStr <= countedUpTo[c.subject_id];
   const countable = todayClasses.filter(c => subjects.some(x => x.id === c.subject_id) && !preCounted(c));
   let markedCount = 0;
