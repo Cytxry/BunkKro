@@ -24,7 +24,19 @@
   // Only this computer's owner looks for the local AI: the site opened locally, or opted in once with ?ai=1
   // (?ai=0 turns it off). Other visitors' browsers never probe their own localhost (no "access local devices"
   // prompts, no console errors) and simply use the built-in scanner.
+  // A hosted reader (ai-config.js): on for every signed-in student, and it gets their login token (no other server does)
+  const HOSTED = !!window.BUNKKRO_AI_URL && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/.test(BASE);
+  async function authHeaders() {
+    if (!HOSTED || typeof supabaseClient === 'undefined' || !supabaseClient) return {};
+    try {
+      const { data } = await supabaseClient.auth.getSession();
+      const token = data && data.session && data.session.access_token;
+      return token ? { Authorization: `Bearer ${token}` } : {};
+    } catch (e) { return {}; }
+  }
+
   function enabled() {
+    if (HOSTED) return true;
     try {
       const q = new URLSearchParams(location.search).get('ai');
       if (q === '1') localStorage.setItem('bk_local_ai', '1');
@@ -53,7 +65,8 @@
   }
 
   async function call(method, path, body) {
-    const r = await fetch(BASE + path, { method, body: method === 'POST' ? (body || '') : undefined });
+    const r = await fetch(BASE + path, { method, headers: await authHeaders(), body: method === 'POST' ? (body || '') : undefined });
+    if (r.status === 401) return { ok: false, error: 'sign in to use BunkKro AI' };
     return r.json().catch(() => ({ ok: false, error: `server answered ${r.status}` }));
   }
 
@@ -124,7 +137,7 @@
 
   async function loadImage(path) {
     try {
-      const r = await fetch(BASE + path);
+      const r = await fetch(BASE + path, { headers: await authHeaders() });
       if (!r.ok) return null;
       const url = URL.createObjectURL(await r.blob());
       const img = await new Promise((resolve, reject) => {
