@@ -1309,7 +1309,9 @@ function bunkPlan(s, t = getTarget(s)) {
     get bunks() { return this.known ? this.semBunks : this.now; },                         // the number every view shows
   };
 }
-function bunkable(s) { return bunkPlan(s).bunks; }
+// Nothing counted yet: no bunk advice at all. A semester's projection from 0/0 would assume every class so far was
+// attended (the student just hasn't entered them), so "1 safe bunk" there is a guess dressed as advice.
+function bunkable(s) { return hasClasses(s) ? bunkPlan(s).bunks : 0; }
 // Classes to attend in a row before one bunk is safe again (at or just under the target, semester unknown)
 function bufferIn(s, t = getTarget(s)) {
   return Math.max(1, attendToMeet(s.present, s.total + 1, t));
@@ -3931,21 +3933,10 @@ function setScannerPhase(phaseName, pct, detailText) {
   }
   if (details && detailText) details.textContent = detailText;
 
-  const phases = ['prep', 'geom', 'ocr', 'fusion', 'valid'];
-  const currentIdx = phases.indexOf(phaseName);
-
-  phases.forEach((p, idx) => {
-    const el = document.getElementById(`phase-${p}`);
-    if (el) {
-      if (idx < currentIdx) {
-        el.className = 'ocr-phase-item done';
-      } else if (idx === currentIdx) {
-        el.className = 'ocr-phase-item active';
-      } else {
-        el.className = 'ocr-phase-item';
-      }
-    }
-  });
+  // the little sheet fills in, cell by cell, with the progress
+  const cells = document.querySelectorAll('#ocr-sheet .ocr-cell');
+  const filled = Math.round(Math.min(100, Math.max(0, pct)) / 100 * cells.length);
+  cells.forEach((c, i) => c.classList.toggle('on', i < filled));
 }
 
 // After a new timetable replaces an old one, the old timetable's subjects that aren't in the new one are offered

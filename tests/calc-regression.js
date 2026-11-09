@@ -39,6 +39,7 @@ window.__calcRegression = (async () => {
   // 6. no classes held yet, 60 in the semester -> 15 bunks, attend 45
   eq('6 nothing held', plan(subj('f', 0, 0, { semTotal: 60 })), [60, 15, 0, 15, 45, true, 100]);
   eq('6 nothing held, no total', bunkable(subj('f2', 0, 0)), 0);
+  eq('6 nothing counted yet: no bunk advice even with the semester known', bunkable(subj('f3', 0, 0, { semTotal: 60 })), 0);
   // 7. nothing left: 30/40 with 40 in the semester -> done at 75%
   eq('7 nothing left', plan(subj('g', 30, 40, { semTotal: 40 })), [0, 0, 0, 0, 0, true, 75]);
   // 8. semester total below what's held is not trusted: falls back (no dates, no days -> unknown)

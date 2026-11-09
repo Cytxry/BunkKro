@@ -12,12 +12,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="bunkkkro.css?v=20261108">
+<link rel="stylesheet" href="bunkkkro.css?v=20261109">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
         integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="actions.js?v=20261109"></script>
+<script src="actions.js?v=20261109b"></script>
 </head>
 <body>
 
@@ -403,17 +403,15 @@
       </div>
 
       <div class="ocr-progress-box" id="ocr-progress-box" style="display:none" role="status" aria-live="polite">
-        <img class="ocr-cat" src="assets/cat-blue-laptop.svg" alt="">
-        <div class="ocr-status-text" id="ocr-status-text">Warming up the cats 🐱</div>
-        <div class="ocr-bar"><div class="ocr-bar-fill" id="ocr-bar-fill" style="width:0%"></div></div>
-        <div class="ocr-details" id="ocr-details">Analysing layout...</div>
-        <div class="ocr-phases-grid">
-          <div class="ocr-phase-item" id="phase-prep"><span>1</span> Waking up 🐱</div>
-          <div class="ocr-phase-item" id="phase-geom"><span>2</span> Finding the grid 📐</div>
-          <div class="ocr-phase-item" id="phase-ocr"><span>3</span> Reading 👀</div>
-          <div class="ocr-phase-item" id="phase-fusion"><span>4</span> Building your week 🧩</div>
-          <div class="ocr-phase-item" id="phase-valid"><span>5</span> Vibe check ✅</div>
+        <!-- a detective cat sweeps over a little timetable whose cells fill in as the reading goes (setScannerPhase) -->
+        <div class="ocr-stage" aria-hidden="true">
+          <div class="ocr-sheet" id="ocr-sheet"><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i><i class="ocr-cell"></i></div>
+          <img class="ocr-scan-cat" src="assets/cat-blue-detective.svg" alt="">
+          <span class="ocr-sparkle s1">✦</span><span class="ocr-sparkle s2">✧</span><span class="ocr-sparkle s3">✦</span>
         </div>
+        <div class="ocr-status-text" id="ocr-status-text">Warming up the cats 🐱</div>
+        <div class="ocr-bar"><div class="ocr-bar-fill" id="ocr-bar-fill" style="width:0%"><span class="ocr-paw" aria-hidden="true">🐾</span></div></div>
+        <div class="ocr-details" id="ocr-details">Analysing layout...</div>
       </div>
     </div>
 
@@ -971,8 +969,8 @@
 <script src="fx.js?v=20261108"></script>
 <script src="guide.js?v=20261108"></script>
 <script src="clock.js?v=20261108"></script>
-<script src="ai-bridge.js?v=20261109"></script>
-<script src="bunkke.js?v=20261109"></script>
-<script src="ai-confirm.js?v=20261109"></script>
+<script src="ai-bridge.js?v=20261109b"></script>
+<script src="bunkke.js?v=20261109b"></script>
+<script src="ai-confirm.js?v=20261109b"></script>
 </body>
 </html>

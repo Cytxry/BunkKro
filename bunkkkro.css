@@ -867,6 +867,25 @@ details[open] .edit-sum{border-radius:22px 22px 0 0}
 .ocr-bar{height:8px;background:var(--surface3);border-radius:999px;overflow:hidden;max-width:360px;margin:0 auto 8px}
 .ocr-bar-fill{height:100%;background:var(--primary);border-radius:999px;transition:width .2s}
 .ocr-details{font-size:.8125rem;color:var(--text2)}
+/* reading a timetable: a detective cat sweeps over a little sheet whose cells fill in as the reading goes */
+.ocr-stage{position:relative;width:min(300px,100%);height:150px;margin:2px auto 14px}
+.ocr-sheet{position:absolute;left:50%;top:20px;transform:translateX(-50%);width:228px;display:grid;grid-template-columns:repeat(5,1fr);gap:5px;padding:9px;background:var(--surface);border:1.5px solid var(--border2);border-radius:14px;box-shadow:var(--shadow)}
+.ocr-cell{display:block;height:22px;border-radius:6px;background:var(--surface3);transition:background .35s,transform .35s}
+.ocr-cell.on{transform:scale(1);animation:ocr-pop .45s cubic-bezier(.2,.9,.3,1.4) both}
+.ocr-cell.on:nth-child(5n+1){background:#B7E4CD}.ocr-cell.on:nth-child(5n+2){background:#B9D9F2}
+.ocr-cell.on:nth-child(5n+3){background:#F7E9A2}.ocr-cell.on:nth-child(5n+4){background:#D9C3EC}
+.ocr-cell.on:nth-child(5n){background:#F6CDB0}
+@keyframes ocr-pop{0%{transform:scale(.4);opacity:.3}100%{transform:scale(1);opacity:1}}
+.ocr-scan-cat{position:absolute;top:44px;left:0;width:84px;height:auto;filter:drop-shadow(0 4px 6px rgba(40,40,80,.18));animation:ocr-sweep 3.2s ease-in-out infinite}
+@keyframes ocr-sweep{0%{transform:translateX(0) rotate(-4deg)}50%{transform:translateX(min(216px,calc(100vw - 150px))) rotate(4deg)}100%{transform:translateX(0) rotate(-4deg)}}
+.ocr-sparkle{position:absolute;color:var(--primary-soft);font-size:.9rem;opacity:0;animation:ocr-twinkle 2.4s ease-in-out infinite}
+.ocr-sparkle.s1{left:14%;top:4px}.ocr-sparkle.s2{right:12%;top:12px;animation-delay:.8s}.ocr-sparkle.s3{left:46%;top:-4px;animation-delay:1.6s}
+@keyframes ocr-twinkle{0%,100%{opacity:0;transform:scale(.6)}50%{opacity:1;transform:scale(1.15)}}
+.ocr-bar{overflow:visible;position:relative}
+.ocr-bar-fill{position:relative;background:linear-gradient(90deg,var(--primary-soft),var(--primary))}
+.ocr-paw{position:absolute;right:-9px;top:50%;transform:translateY(-50%);font-size:.85rem;animation:ocr-step .7s ease-in-out infinite alternate}
+@keyframes ocr-step{to{transform:translateY(-70%) rotate(12deg)}}
+@media (prefers-reduced-motion: reduce){.ocr-scan-cat,.ocr-sparkle,.ocr-paw,.ocr-cell.on{animation:none}.ocr-sparkle{opacity:.6}}
 .ocr-phases-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:16px}
 .ocr-phase-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 4px;font-size:.75rem;font-weight:500;color:var(--muted);text-align:center;transition:all .2s}
 .ocr-phase-item span{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--surface3);color:var(--text2);font-size:.6875rem;font-weight:700;margin-right:4px}
