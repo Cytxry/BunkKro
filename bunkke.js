@@ -47,9 +47,7 @@ function storeSession(session) {
   }
 
   try {
-    const sessionData = JSON.stringify(session);
-    localStorage.setItem('sb-session', sessionData);
-    console.log('✅ Session stored in localStorage');
+    // the session is kept by supabase-js alone (its own key, which the extension reads); no second copy here
     
     // Send to extension
     sendSessionToExtension(session);
@@ -88,6 +86,8 @@ function sendSessionToExtension(session) {
 
 // Auth state
 let currentUser = null;
+// an older version kept a second copy of the session (with its tokens) under 'sb-session': nothing reads it
+try { localStorage.removeItem('sb-session'); } catch (e) { /* private mode */ }
 let isAuthMode = 'login'; // 'login' or 'signup'
 // Check session on page load
 // ══════════════════════════════════════════════════════
@@ -101,7 +101,6 @@ async function initAuth() {
     supabaseClient.auth.onAuthStateChange((event, session) => {
       if (session) {
         currentUser = session.user;
-        localStorage.setItem('sb-session', JSON.stringify(session));
         setTimeout(() => showApp(), 0);
       } else {
         appLoadedFor = null;
@@ -116,7 +115,6 @@ async function initAuth() {
 
     if (session) {
       currentUser = session.user;
-      localStorage.setItem('sb-session', JSON.stringify(session));
       showApp();
     } else {
       showAuthModal();
@@ -537,7 +535,6 @@ async function handleAuth(event) {
         currentUser = result.data.user;
         
         // Store session
-        localStorage.setItem('sb-session', JSON.stringify(result.data.session));
         
         showAuthSuccess('Account created successfully!');
         setTimeout(() => {
@@ -560,7 +557,6 @@ if (!session) {
   showAuthError('Login worked, but no session came back. Please try again.');
   return;
 }
-localStorage.setItem('sb-session', JSON.stringify(session));
 currentUser = result.data.user;
 showAuthSuccess('Login successful!');
 // tell the browser extension before the page reloads into the signed-in app
@@ -621,8 +617,32 @@ async function deleteAllMyData() {
   timetableMeta = { id: null, title: 'Weekly Timetable', showSunday: false };
   renderAll();
   if (failed.length) toast(`Some data could not be deleted (${failed.join(', ')}). Please try again.`, 'err');
-  else await askDialog({ title: 'Your data is deleted', message: 'Everything you stored in BunkKro is gone, on every ' +
-    'device. Your login (email and password) still exists, with nothing in it; you can log out now.', ok: 'OK', cancel: '', cat: 'cat-wave' });
+  else if (await askDialog({ title: 'Your data is deleted', message: 'Everything you stored in BunkKro is gone, on every ' +
+    'device. Delete your login (email and password) too?', ok: 'Delete my login', cancel: 'Keep my login', danger: true, cat: 'cat-wave' })) {
+    await deleteMyLogin();
+  }
+}
+
+// The login itself can only be deleted by the server (supabase/functions/delete-account: it holds the key that may
+// delete users). If that function isn't deployed, the student is told so; nothing is pretended.
+async function deleteMyLogin() {
+  let res;
+  try {
+    res = await supabaseClient.functions.invoke('delete-account', { body: { confirm: 'DELETE' } });
+  } catch (e) { res = { error: e }; }
+  if (res && !res.error && res.data && res.data.ok) {
+    try { await supabaseClient.auth.signOut(); } catch (e) { /* the login is gone anyway */ }
+    currentUser = null;
+    await askDialog({ title: 'Your account is deleted', message: 'Your login and everything in it are gone. Thanks for using BunkKro 💜',
+      ok: 'OK', cancel: '', cat: 'cat-wave' });
+    location.reload();
+    return;
+  }
+  const status = res && res.error && res.error.context && res.error.context.status;
+  await askDialog({ title: "Your login wasn't deleted",
+    message: status === 404 || !status ? "Deleting logins isn't switched on yet. Your data is gone; you can log out now."
+      : 'Something went wrong deleting your login. Your data is gone; please try again later.',
+    ok: 'OK', cancel: '', cat: 'cat-worried' });
 }
 
 async function handleLogout() {
