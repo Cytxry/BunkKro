@@ -212,6 +212,7 @@
     own_time_unresolved: 'a time printed in the cell could not be read',
     own_time_unreadable: 'a time printed in the cell could not be read',
     meridiem_ambiguous: 'AM / PM is unclear',
+    ampm_corrected: 'the page prints AM / PM that does not fit the periods around it, so the time was read as the one that fits',
     multiple_times_in_text: 'the cell prints several times',
     time_in_text_not_read: 'the cell prints a time that was not read',
     text_names_other_days: 'the text mentions other days',
