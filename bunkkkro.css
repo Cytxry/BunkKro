@@ -1120,6 +1120,8 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .auth-toggle{margin-top:18px;font-size:.875rem;color:var(--text2)}
 .auth-link{background:transparent;border:none;color:var(--primary);font-weight:700;font-size:.875rem;text-decoration:underline;padding:0;margin-left:4px}
 .auth-link:hover{color:var(--primary-deep)}
+.auth-forgot-row{text-align:right;margin:-6px 0 14px}
+.auth-forgot{font-size:.8rem;font-weight:600;margin-left:0}
 .auth-error,.auth-success{font-size:.875rem;padding:10px 12px;border-radius:var(--r-sm);margin-bottom:16px;text-align:left;border:1px solid}
 .auth-error{background:var(--danger-bg);border-color:var(--danger-line);color:var(--danger)}
 .auth-success{background:var(--good-bg);border-color:var(--good-line);color:var(--good)}

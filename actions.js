@@ -23,7 +23,7 @@
     'closeReschedule', 'closeSafeBunks', 'closeSemesterDialog', 'closeSharePack', 'closeSlotEditModal',
     'closeSyncFrequenciesModal', 'closeTtConfirmModal', 'confirmAdd', 'confirmAddExtraClass', 'confirmClearTimetable',
     'confirmDaySwap', 'confirmDeleteSubject', 'confirmImportPack', 'confirmProceedScan', 'confirmReschedule',
-    'copyPackCode', 'createSubjectFromInspector', 'deleteCurrentSlot', 'deleteSubject', 'downloadPack', 'goPage',
+    'copyPackCode', 'createSubjectFromInspector', 'deleteCurrentSlot', 'deleteSubject', 'downloadPack', 'forgotPassword', 'goPage',
     'handleAuth', 'handleLogout', 'holClear', 'holShiftMonth', 'inspectorDeleteCell', 'inspectorSplitCell',
     'inspectorToggleBreak', 'markPeriodAttendance', 'markSlotFree', 'markSlotRight', 'nativeSharePack', 'navDate',
     'obAddRow', 'obBack', 'obFinish', 'obNext', 'onDateSelected', 'onDayChip', 'onInspectorSubjectChange',

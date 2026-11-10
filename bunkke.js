@@ -99,6 +99,7 @@ async function initAuth() {
     // Supabase also fires this on token refresh and when the tab regains
     // focus; showApp() only reloads data when the signed-in user changes.
     supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setTimeout(() => offerNewPassword(), 600);
       if (session) {
         currentUser = session.user;
         setTimeout(() => showApp(), 0);
@@ -484,12 +485,14 @@ function toggleAuthMode() {
     document.getElementById('auth-submit').textContent = 'Sign Up';
     document.getElementById('auth-toggle-text').textContent = 'Already have an account?';
     document.getElementById('auth-toggle-btn').textContent = 'Login';
+    document.getElementById('auth-forgot-btn').hidden = true;
   } else {
     document.getElementById('auth-title').textContent = 'Login';
     document.getElementById('auth-subtitle').textContent = 'Enter your credentials to continue';
     document.getElementById('auth-submit').textContent = 'Login';
     document.getElementById('auth-toggle-text').textContent = "Don't have an account?";
     document.getElementById('auth-toggle-btn').textContent = 'Sign Up';
+    document.getElementById('auth-forgot-btn').hidden = false;
   }
   
   hideAuthMessages();
@@ -589,6 +592,41 @@ window.location.reload();
     submitBtn.disabled = false;
     submitBtn.textContent = isAuthMode === 'login' ? 'Login' : 'Sign Up';
   }
+}
+
+// "Forgot password?": Supabase emails a reset link to this address; opening it lands back here with a
+// PASSWORD_RECOVERY session, and offerNewPassword() asks for the new one. The same message shows either way,
+// so nothing reveals whether an address has an account.
+async function forgotPassword() {
+  const email = document.getElementById('auth-email').value.trim();
+  hideAuthMessages();
+  if (!email) { showAuthError('Type your email above first, then tap "Forgot password?" again.'); return; }
+  const btn = document.getElementById('auth-forgot-btn');
+  btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) throw error;
+    showAuthSuccess('If ' + email + ' has an account, a reset link is on its way. Check your inbox.');
+  } catch (e) {
+    showAuthError('The reset email could not be sent. Wait a minute and try again.');
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 20000);   // Supabase rate-limits these anyway
+  }
+}
+
+// The student opened a reset link: a session is already there; ask for the new password (6+ characters).
+async function offerNewPassword() {
+  const v = await askDialog({ title: 'Set a new password',
+    message: 'You opened a password reset link. Choose a new password of at least 6 characters.',
+    ok: 'Save new password', cancel: 'Keep my old one', cat: 'cat-detective',
+    input: { label: 'New password', type: 'password', placeholder: '••••••••' } });
+  if (v === null || v === false) return;
+  if (String(v).length < 6) { toast('At least 6 characters — try again'); return offerNewPassword(); }
+  const { error } = await supabaseClient.auth.updateUser({ password: String(v) });
+  if (error) { toast("Couldn't change it: " + error.message); return; }
+  toast('Password changed ✓ it works from your next login');
 }
 
 // Logout
@@ -1483,6 +1521,7 @@ function askDialog({ title, message = '', ok = 'OK', cancel = 'Cancel', danger =
   document.getElementById('ask-cancel').hidden = !cancel;     // a plain notice: one button
   const wrap = document.getElementById('ask-input-wrap');
   const field = document.getElementById('ask-input');
+  field.type = (input && input.type === 'password') ? 'password' : 'text';
   wrap.hidden = !input;
   if (input) {
     document.getElementById('ask-input-label').textContent = input.label || '';
