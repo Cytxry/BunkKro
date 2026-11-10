@@ -107,6 +107,34 @@
     });
   }
 
+  // several answers at once (a daily routine runs on more than one day): checkboxes, same light flow as choose()
+  function chooseMany(title, sub, options, okLabel) {
+    return new Promise(resolve => {
+      const overlay = modal(`
+        <h2>${escapeHtml(title)}</h2>
+        <p class="sub">${escapeHtml(sub)}</p>
+        <div class="mf" style="text-align:left;display:grid;grid-template-columns:1fr 1fr;gap:6px 14px">
+          ${options.map((o, i) => `<label style="display:flex;align-items:center;gap:8px;font-weight:600">
+            <input type="checkbox" value="${i}"> ${escapeHtml(o.label)}</label>`).join('')}
+        </div>
+        <div class="modal-btns">
+          <button class="btn-sec" data-act="cancel">Cancel</button>
+          <button class="btn-pri" data-act="ok" disabled>${escapeHtml(okLabel)}</button>
+        </div>`, 440, 'cat-detective', 'cancel');
+      const okBtn = overlay.querySelector('[data-act="ok"]');
+      overlay.addEventListener('change', () => {
+        okBtn.disabled = !overlay.querySelector('input:checked');
+      });
+      overlay.addEventListener('click', e => {
+        const act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (!act) return;
+        const picked = [...overlay.querySelectorAll('input:checked')].map(x => options[Number(x.value)].value);
+        overlay.remove();
+        resolve(act === 'ok' && picked.length ? picked : null);
+      });
+    });
+  }
+
   function choiceLabel(c) {
     const m = /page_(\d+)/.exec(c.file);
     const t = /table(\d+)/.exec(c.file);
@@ -284,12 +312,21 @@
       if (track === null) throw cancelled('No section chosen');
       res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}&track=${encodeURIComponent(track)}`);
     }
-    // a page that prints no day (it continues another page): the student names the day, it is never guessed
+    // a page that prints no day: the student names the day(s), it is never guessed. A continuation page is one
+    // day; a daily routine (no day anywhere) may run on several, so that asks with checkboxes.
     if (!res.ok && res.needs_day) {
       onPhase && onPhase('fusion', 87, 'This page prints no day: which day is it?');
-      const day = await choose('Which day is this page?', 'This page prints no day (it continues another page). Pick the day these classes are on.',
-        (res.days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']).map(d => ({ label: d, value: d })), 'Use this day');
-      if (day === null) throw cancelled('No day chosen');
+      const opts = (res.days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']).map(d => ({ label: d, value: d }));
+      let day;
+      if (res.days_multi) {
+        const days = await chooseMany('Which days do these classes run?',
+          'This page prints the same routine with no day on it. Tick every day you have these classes.', opts, 'Use these days');
+        day = days && days.join(',');
+      } else {
+        day = await choose('Which day is this page?', 'This page prints no day (it continues another page). Pick the day these classes are on.',
+          opts, 'Use this day');
+      }
+      if (!day) throw cancelled('No day chosen');
       res = await call('POST', `/export?job=${res.job}&file=${encodeURIComponent(res.file)}`
         + (track ? `&track=${encodeURIComponent(track)}` : '') + `&day=${encodeURIComponent(day)}`);
     }
