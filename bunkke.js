@@ -3652,7 +3652,18 @@ async function handleTimetableFileUpload(file) {
   const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
   // the local BunkKro AI server (ai-bridge.js) also reads PDFs and other image formats
   const aiTypes = ['application/pdf', 'image/webp', 'image/bmp', 'image/tiff'];
-  const aiUp = window.BunkKroAI ? await BunkKroAI.isAvailable() : false;
+  let aiUp = window.BunkKroAI ? await BunkKroAI.isAvailable(true) : false;
+  // On this computer (the site opened from 127.0.0.1 / localhost) the AI is expected: when it isn't answering, say
+  // so plainly instead of silently falling back to the browser scanner (which can't read most timetables)
+  const onThisComputer = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  while (!aiUp && onThisComputer && window.BunkKroAI) {
+    const retry = await askDialog({ title: 'BunkKro AI isn’t running',
+      message: 'Start it with the BunkKro shortcut on your Desktop (or start_bunkkro_ai_autostart.bat in the BunkKro-AI folder), wait a few seconds, then check again.',
+      ok: 'Check again', cancel: 'Use the basic scanner', cat: 'cat-worried' });
+    if (!retry) break;
+    aiUp = await BunkKroAI.isAvailable(true);
+    if (aiUp) toast('BunkKro AI is ready ✓');
+  }
   if (!validTypes.includes(file.type) && !(aiUp && aiTypes.includes(file.type))) {
     toast(aiUp ? 'Please upload a PDF or an image' : 'Please upload a valid PNG or JPG image', 'err');
     return;
@@ -3967,6 +3978,7 @@ function showQuip() {
   if (window.BunkFx) BunkFx.pop(el, 1.03);
 }
 function setScannerPhase(phaseName, pct, detailText) {
+  pct = Math.round(Math.min(100, Math.max(0, Number(pct) || 0)));   // never past the bar, never 57.3333%
   const progressBox = document.getElementById('ocr-progress-box');
   const progressBar = document.getElementById('ocr-bar-fill');
   const statusText = document.getElementById('ocr-status-text');

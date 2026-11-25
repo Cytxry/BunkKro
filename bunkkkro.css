@@ -882,7 +882,7 @@ details[open] .edit-sum{border-radius:22px 22px 0 0}
 .ocr-sparkle.s1{left:14%;top:4px}.ocr-sparkle.s2{right:12%;top:12px;animation-delay:.8s}.ocr-sparkle.s3{left:46%;top:-4px;animation-delay:1.6s}
 @keyframes ocr-twinkle{0%,100%{opacity:0;transform:scale(.6)}50%{opacity:1;transform:scale(1.15)}}
 .ocr-bar{overflow:visible;position:relative}
-.ocr-bar-fill{position:relative;background:linear-gradient(90deg,var(--primary-soft),var(--primary))}
+.ocr-bar-fill{position:relative;max-width:100%;background:linear-gradient(90deg,var(--primary-soft),var(--primary))}
 .ocr-paw{position:absolute;right:-9px;top:50%;transform:translateY(-50%);font-size:.85rem;animation:ocr-step .7s ease-in-out infinite alternate}
 @keyframes ocr-step{to{transform:translateY(-70%) rotate(12deg)}}
 @media (prefers-reduced-motion: reduce){.ocr-scan-cat,.ocr-sparkle,.ocr-paw,.ocr-cell.on{animation:none}.ocr-sparkle{opacity:.6}}

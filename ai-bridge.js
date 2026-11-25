@@ -289,9 +289,63 @@
   }
 
   // file -> {slots, validation, studio: {canvas, cells} | null, source} or throws Error(reason)
+  // A PDF of several pages: show them and let the student tap the page(s) their timetable is on, so only those are
+  // read (a scanned page takes 1-2 minutes; a 14-page file read whole took ~25). One page: nothing to ask.
+  async function pickPages(file) {
+    const isPdf = /\.pdf$/i.test(file.name || '') || file.type === 'application/pdf';
+    if (!isPdf) return '';
+    let info;
+    try { info = await call('POST', '/pdfinfo', file); } catch (e) { return ''; }
+    if (!info || !info.ok || !(info.pages > 1)) return '';
+    return new Promise(resolve => {
+      const shown = info.thumbs.length;
+      const overlay = modal(`
+        <h2>Which page is your timetable on?</h2>
+        <p class="sub">This PDF has ${Number(info.pages)} pages. Tap yours (or a few), and only those get read — much faster.</p>
+        <div class="ai-pages" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;max-height:52vh;overflow:auto;padding:4px">
+          ${info.thumbs.map((t, i) => `
+            <button type="button" class="ai-page" data-page="${i + 1}" aria-pressed="false"
+              style="border:2px solid var(--line,#ddd);border-radius:10px;padding:4px;background:var(--surface,#fff);cursor:pointer;text-align:center">
+              <img src="${t}" alt="Page ${i + 1}" style="width:100%;display:block;border-radius:6px">
+              <span style="display:block;font-weight:700;font-size:.8rem;margin-top:4px">Page ${i + 1}</span>
+            </button>`).join('')}
+        </div>
+        ${info.pages > shown ? `<p class="sub" style="margin-top:6px">Showing the first ${shown} of ${Number(info.pages)} pages.</p>` : ''}
+        <div class="modal-btns">
+          <button class="btn-sec" data-act="cancel">Cancel</button>
+          <button class="btn-sec" data-act="all">Read all pages</button>
+          <button class="btn-pri" data-act="ok" disabled>Read this page</button>
+        </div>`, 640, 'cat-detective', 'cancel');
+      const okBtn = overlay.querySelector('[data-act="ok"]');
+      const picked = new Set();
+      overlay.addEventListener('click', e => {
+        const tile = e.target.closest && e.target.closest('.ai-page');
+        if (tile) {
+          const n = Number(tile.dataset.page);
+          if (picked.has(n)) picked.delete(n); else picked.add(n);
+          const on = picked.has(n);
+          tile.setAttribute('aria-pressed', String(on));
+          tile.style.borderColor = on ? 'var(--primary,#4f5bd5)' : 'var(--line,#ddd)';
+          tile.style.boxShadow = on ? '0 0 0 3px color-mix(in srgb, var(--primary,#4f5bd5) 25%, transparent)' : 'none';
+          okBtn.disabled = !picked.size;
+          okBtn.textContent = picked.size > 1 ? `Read these ${picked.size} pages` : 'Read this page';
+          return;
+        }
+        const act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (!act) return;
+        overlay.remove();
+        resolve(act === 'cancel' ? null : act === 'ok' ? [...picked].sort((a, b) => a - b).join(',') : '');
+      });
+    });
+  }
+
   async function read(file, subjects, onPhase) {
+    onPhase && onPhase('prep', 5, 'Opening your file 📄');
+    const pages = await pickPages(file);
+    if (pages === null) throw cancelled('No page chosen');
     onPhase && onPhase('prep', 8, 'Handing it to BunkKro AI on this computer 🤝');
-    const started = await call('POST', '/scan?filename=' + encodeURIComponent(file.name || 'upload.png'), file);
+    const started = await call('POST', '/scan?filename=' + encodeURIComponent(file.name || 'upload.png')
+      + (pages ? '&pages=' + encodeURIComponent(pages) : ''), file);
     if (!started.ok) throw new Error(started.error || 'the AI did not accept this file');
     await waitForJob(started.job, onPhase);
     // Day Order timetables are refused (Day Order is parked on the site): the server prefers a weekday timetable
