@@ -3653,12 +3653,12 @@ async function handleTimetableFileUpload(file) {
   // the local BunkKro AI server (ai-bridge.js) also reads PDFs and other image formats
   const aiTypes = ['application/pdf', 'image/webp', 'image/bmp', 'image/tiff'];
   let aiUp = window.BunkKroAI ? await BunkKroAI.isAvailable(true) : false;
-  // On this computer (the site opened from 127.0.0.1 / localhost) the AI is expected: when it isn't answering, say
-  // so plainly instead of silently falling back to the browser scanner (which can't read most timetables)
-  const onThisComputer = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-  while (!aiUp && onThisComputer && window.BunkKroAI) {
+  // When this browser uses the AI on this computer (opened once with ?ai=1, or the site run locally), a stopped AI
+  // is said plainly instead of silently falling back to the browser scanner (which can't read most timetables)
+  const wantsAi = !!(window.BunkKroAI && BunkKroAI.enabled && BunkKroAI.enabled());
+  while (!aiUp && wantsAi) {
     const retry = await askDialog({ title: 'BunkKro AI isn’t running',
-      message: 'Start it with the BunkKro shortcut on your Desktop (or start_bunkkro_ai_autostart.bat in the BunkKro-AI folder), wait a few seconds, then check again.',
+      message: 'Start it with start_bunkkro_ai_autostart.bat in the BunkKro-AI folder (it also starts by itself with Windows), wait a few seconds, then check again.',
       ok: 'Check again', cancel: 'Use the basic scanner', cat: 'cat-worried' });
     if (!retry) break;
     aiUp = await BunkKroAI.isAvailable(true);
@@ -4207,8 +4207,10 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
     const ocrResult = await TimetableScanner.OCREngine.recognizeWholeImage(
       preprocessed.canvas,
       (p) => {
-        const ocrPct = 40 + Math.round(p * 25);
-        setScannerPhase('ocr', ocrPct, `Reading every cell, no skipping 👀 (${Math.round(p * 100)}%)`);
+        // the scanner reports 0-100 (timetable-scanner.js); this used to multiply it by 100 again ("4100%")
+        const f = Math.min(1, Math.max(0, p > 1 ? p / 100 : p));
+        const ocrPct = 40 + Math.round(f * 25);
+        setScannerPhase('ocr', ocrPct, `Reading every cell, no skipping 👀 (${Math.round(f * 100)}%)`);
       }
     );
     scannerState.ocrResult = ocrResult;

@@ -595,7 +595,7 @@
     return (s.reviewReasons || [])[0] || why[0] || 'the reading was a little unclear';
   }
 
-  window.BunkKroAI = { isAvailable, read, reviewSubjects, issues, matchSubjects, reason, showStatus, BASE,
+  window.BunkKroAI = { isAvailable, enabled, read, reviewSubjects, issues, matchSubjects, reason, showStatus, BASE,
     pickBatch, batchFamilies, keepsFor, settleOverlaps, nameSessions };
   showStatus();
   // re-check only while the Smart Timetable page is open: every 10 s while the AI is on, every 45 s while it's off
