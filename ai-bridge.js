@@ -51,7 +51,8 @@
     if (!force && available !== null && Date.now() - checkedAt < 15000) return available;
     try {
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 1200);
+      // a hosted reader may be starting from zero (scaled down while nobody used it): give it time to wake up
+      const timer = setTimeout(() => ctl.abort(), HOSTED ? 20000 : 1200);
       const r = await fetch(BASE + '/health', { signal: ctl.signal });
       clearTimeout(timer);
       const h = r.ok ? await r.json() : {};
@@ -155,7 +156,7 @@
       const total = st.pages_total || 0;
       const done = st.pages_done || 0;
       const pct = st.state === 'queued' ? 12 : 15 + Math.round(65 * (total ? done / total : 0));
-      const msg = st.state === 'queued' ? 'In the queue, another timetable is being read ⏳'
+      const msg = st.state === 'queued' ? (HOSTED ? 'Waking up BunkKro AI, a few seconds ⏳' : 'In the queue, another timetable is being read ⏳')
         : total > 1 ? `Page ${Math.min(done + 1, total)} of ${total} · scans take about a minute each, worth it 🫡`
           : 'A photo or scan takes a minute or two, hang tight 🫶';
       if (onPhase && msg + pct !== last) onPhase('ocr', pct, msg);
@@ -339,11 +340,29 @@
     });
   }
 
+  // Hosted reader: the file leaves this device, so the student is told once, before the first upload (privacy.html
+  // section 5), and can use the in-browser scanner instead. Remembered on this device.
+  const NOTICE_KEY = 'bk_ai_cloud_notice_v1';
+  async function cloudNotice() {
+    if (!HOSTED) return true;
+    try { if (localStorage.getItem(NOTICE_KEY)) return true; } catch (e) { /* storage blocked: ask each time */ }
+    if (typeof askDialog !== 'function') return true;
+    const ok = await askDialog({
+      title: 'Read it with BunkKro AI?',
+      message: 'Your file is sent to BunkKro AI, which runs on Modal’s cloud servers in the United States. It is ' +
+        'read there and deleted within a day. Only the timetable you check and confirm is saved to your account. ' +
+        'The basic scanner reads photos inside your browser instead, but it gets far fewer timetables right.',
+      ok: 'Use BunkKro AI', cancel: 'Use the basic scanner', cat: 'cat-detective' });
+    if (ok) { try { localStorage.setItem(NOTICE_KEY, new Date().toISOString()); } catch (e) { /* fine */ } }
+    return !!ok;
+  }
+
   async function read(file, subjects, onPhase) {
+    if (!(await cloudNotice())) throw new Error('you chose the basic scanner (it reads PNG and JPG photos)');
     onPhase && onPhase('prep', 5, 'Opening your file 📄');
     const pages = await pickPages(file);
     if (pages === null) throw cancelled('No page chosen');
-    onPhase && onPhase('prep', 8, 'Handing it to BunkKro AI on this computer 🤝');
+    onPhase && onPhase('prep', 8, HOSTED ? 'Sending it to BunkKro AI 🤝' : 'Handing it to BunkKro AI on this computer 🤝');
     const started = await call('POST', '/scan?filename=' + encodeURIComponent(file.name || 'upload.png')
       + (pages ? '&pages=' + encodeURIComponent(pages) : ''), file);
     if (!started.ok) throw new Error(started.error || 'the AI did not accept this file');
@@ -595,11 +614,12 @@
     return (s.reviewReasons || [])[0] || why[0] || 'the reading was a little unclear';
   }
 
-  window.BunkKroAI = { isAvailable, enabled, read, reviewSubjects, issues, matchSubjects, reason, showStatus, BASE,
+  window.BunkKroAI = { hosted: HOSTED, isAvailable, enabled, read, reviewSubjects, issues, matchSubjects, reason, showStatus, BASE,
     pickBatch, batchFamilies, keepsFor, settleOverlaps, nameSessions };
   showStatus();
   // re-check only while the Smart Timetable page is open: every 10 s while the AI is on, every 45 s while it's off
-  if (enabled()) {
+  // (a hosted reader is not polled: each check would keep a cloud container awake; uploads check it themselves)
+  if (enabled() && !HOSTED) {
     const tick = async () => {
       const page = document.getElementById('page-timetable');
       if (page && page.classList.contains('active')) await showStatus();

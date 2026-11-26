@@ -3706,9 +3706,13 @@ async function handleTimetableFileUpload(file) {
   // is said plainly instead of silently falling back to the browser scanner (which can't read most timetables)
   const wantsAi = !!(window.BunkKroAI && BunkKroAI.enabled && BunkKroAI.enabled());
   while (!aiUp && wantsAi) {
-    const retry = await askDialog({ title: 'BunkKro AI isn’t running',
-      message: 'Start it with start_bunkkro_ai_autostart.bat in the BunkKro-AI folder (it also starts by itself with Windows), wait a few seconds, then check again.',
-      ok: 'Check again', cancel: 'Use the basic scanner', cat: 'cat-worried' });
+    const retry = await askDialog(BunkKroAI.hosted
+      ? { title: 'BunkKro AI can’t be reached',
+          message: 'It may be starting up, or your connection dropped. Try again in a moment, or use the basic scanner for a PNG or JPG photo.',
+          ok: 'Try again', cancel: 'Use the basic scanner', cat: 'cat-worried' }
+      : { title: 'BunkKro AI isn’t running',
+          message: 'Start it with start_bunkkro_ai_autostart.bat in the BunkKro-AI folder (it also starts by itself with Windows), wait a few seconds, then check again.',
+          ok: 'Check again', cancel: 'Use the basic scanner', cat: 'cat-worried' });
     if (!retry) break;
     aiUp = await BunkKroAI.isAvailable(true);
     if (aiUp) toast('BunkKro AI is ready ✓');
