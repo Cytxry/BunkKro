@@ -180,14 +180,15 @@
   </div>
   
   <div id="error" style="display:none;">
-    <p>❌ Failed to load data</p>
-    <button class="login-btn" onclick="location.reload()">Retry</button>
+    <img src="img/cat-peek.svg" alt="" style="width:110px;margin-bottom:8px">
+    <p>Couldn't load your classes. Check your connection, then try again.</p>
+    <button class="login-btn" id="retry">Try again</button>
   </div>
   
   <div id="not-logged-in" style="display:none;">
     <img src="img/cat-peek.svg" alt="" style="width:130px;margin-bottom:8px">
-    <h3>Not Logged In</h3>
-    <p style="color: #5E6375; font-size: 12px; margin-bottom: 4px;">Please log in to BunkKro first</p>
+    <h3>Log in on the website</h3>
+    <p style="color: #5E6375; font-size: 12px; margin-bottom: 4px;">Open BunkKro and log in. The extension picks it up by itself.</p>
     <button class="login-btn" id="open-login">Open BunkKro</button>
   </div>
   

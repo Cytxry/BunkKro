@@ -29,7 +29,6 @@ function getLocalDateString(d = new Date()) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('Extension popup loaded');
   
   // Setup button handlers
   document.getElementById('open-app').addEventListener('click', () => {
@@ -39,6 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('open-login').addEventListener('click', () => {
     chrome.tabs.create({ url: APP_URL });
   });
+  document.getElementById('retry').addEventListener('click', () => location.reload());
   
   // Initialize Supabase
   try {
@@ -46,8 +46,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       throw new Error('Supabase library not loaded');
     }
     
-    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    console.log('Supabase initialized');
+    // the login comes from the website (see background.js); this client neither stores nor refreshes it by itself
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
     
     await loadData();
   } catch (error) {
@@ -60,23 +61,10 @@ async function loadData() {
   try {
     show('loading');
 
-    const session = await getSession();
+    const session = await useSession(await getSession());
     globalSession = session;
-
-    if (!session || !session.user) {
-      console.log('No active session found');
-      show('not-logged-in');
-      return;
-    }
-
-    // Set session in Supabase client
-    await supabaseClient.auth.setSession({
-      access_token: session.access_token,
-      refresh_token: session.refresh_token
-    });
-
+    if (!session) { show('not-logged-in'); return; }
     currentUser = session.user;
-    console.log('User logged in:', currentUser.id);
     // Fresh account data: which subjects' typed-in numbers already include today
     try {
       const { data: u } = await supabaseClient.auth.getUser();
@@ -102,6 +90,7 @@ async function loadData() {
       .select('*')
       .eq('user_id', currentUser.id);
 
+    if (ttError) throw ttError;
     timetableEntries = ttData || [];
 
     // 3. Load today's attendance logs
@@ -308,7 +297,25 @@ async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
 
   const today = getLocalDateString();
   const s = subjects.find(x => x.id === subjId);
-  const prevStatus = dailyPeriodLogs[entryId] || null;
+  // Start from what's saved, not what this popup remembers: it may have been marked on the website since.
+  const seen = dailyPeriodLogs[entryId] || null;
+  let prevStatus = seen, prevSubjId = subjId;
+  try {
+    const { data, error } = await supabaseClient.from('daily_period_logs').select('status, subject_id')
+      .eq('user_id', currentUser.id).eq('date', today).eq('entry_id', entryId).limit(1);
+    if (!error) {
+      prevStatus = data?.[0]?.status || null;
+      prevSubjId = data?.[0]?.subject_id || subjId;
+      if (prevStatus) dailyPeriodLogs[entryId] = prevStatus; else delete dailyPeriodLogs[entryId];
+    }
+  } catch (e) { /* offline: the save below fails and says so */ }
+  if (prevStatus === newStatus && seen !== newStatus) {
+    // already marked this way elsewhere: show it, don't toggle it off
+    renderTodayClasses();
+    showExtMsg('Already marked in the app — updated.');
+    marking = false;
+    return;
+  }
 
   try {
     let finalStatus = newStatus;
@@ -344,27 +351,23 @@ async function markPeriodAttendance(entryId, subjId, newStatus, periodIndex) {
       dailyPeriodLogs[entryId] = newStatus;
     }
 
-    // Sync subject numbers
-    if (s) {
-      if (prevStatus === 'p') {
-        s.present = Math.max(0, s.present - 1);
-        s.total = Math.max(0, s.total - 1);
-      } else if (prevStatus === 'a') {
-        s.total = Math.max(0, s.total - 1);
-      }
-
-      if (finalStatus === 'p') {
-        s.present += 1;
-        s.total += 1;
-      } else if (finalStatus === 'a') {
-        s.total += 1;
-      }
-
-      await supabaseClient
-        .from('subjects')
-        .update({ total: s.total, present: s.present })
-        .eq('id', s.id)
-        .eq('user_id', currentUser.id);
+    // Subject numbers, as the website does it: take the old mark off the subject it was counted for, add the new
+    // one, each applied to the numbers saved now (not the ones this popup loaded)
+    const deltas = new Map();
+    const add = (subj, dt, dp) => { if (!subj) return; const d = deltas.get(subj) || [0, 0]; deltas.set(subj, [d[0] + dt, d[1] + dp]); };
+    const prevSubj = subjects.find(x => x.id === prevSubjId);
+    if (prevStatus === 'p') add(prevSubj, -1, -1); else if (prevStatus === 'a') add(prevSubj, -1, 0);
+    if (finalStatus === 'p') add(s, 1, 1); else if (finalStatus === 'a') add(s, 1, 0);
+    for (const [subj, [dt, dp]] of deltas) {
+      if (!dt && !dp) continue;
+      const { data: cur } = await supabaseClient.from('subjects').select('total,present')
+        .eq('id', subj.id).eq('user_id', currentUser.id).limit(1);
+      if (cur?.[0]) { subj.total = cur[0].total || 0; subj.present = cur[0].present || 0; }
+      subj.total = Math.max(0, subj.total + dt);
+      subj.present = Math.min(subj.total, Math.max(0, subj.present + dp));
+      const { error: upErr } = await supabaseClient.from('subjects')
+        .update({ total: subj.total, present: subj.present }).eq('id', subj.id).eq('user_id', currentUser.id);
+      if (upErr) throw upErr;
     }
 
     renderTodayClasses();
@@ -403,9 +406,26 @@ function showError() {
 
 function getSession() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'GET_SESSION' }, (res) => {
-      console.log("[Popup] Session received:", res);
-      resolve(res);
-    });
+    chrome.runtime.sendMessage({ type: 'GET_SESSION' }, (res) => resolve(chrome.runtime.lastError ? null : res));
   });
+}
+
+// Use the login the website handed over. A still-valid one is used as it is (no refresh: Supabase refresh tokens
+// work once, and the website holds the same one). An expired one is refreshed here and the new login is saved
+// back, so the next popup and the website (through content.js) carry on with it. If it can't be refreshed (the
+// student logged out, or it was ended elsewhere), the popup asks to log in again.
+async function useSession(s) {
+  if (!s?.access_token || !s?.refresh_token || !s?.user) return null;
+  const now = Math.floor(Date.now() / 1000);
+  if ((Number(s.expires_at) || 0) > now + 60) {
+    const { error } = await supabaseClient.auth.setSession({ access_token: s.access_token, refresh_token: s.refresh_token });
+    if (!error) return s;
+  }
+  const { data, error } = await supabaseClient.auth.refreshSession({ refresh_token: s.refresh_token });
+  if (error || !data?.session) {
+    chrome.runtime.sendMessage({ type: 'CLEAR_SESSION' }, () => void chrome.runtime.lastError);
+    return null;
+  }
+  await new Promise(r => chrome.runtime.sendMessage({ type: 'SET_SESSION', session: data.session }, () => r(chrome.runtime.lastError)));
+  return data.session;
 }
