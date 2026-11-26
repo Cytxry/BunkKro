@@ -33,7 +33,7 @@
     'openStreakCalendar', 'openTodayTracker', 'openTrackerOn', 'removeMakeup', 'removePlannedHoliday',
     'renameSlotSubject', 'resetSim', 'resetToToday', 'saveCellInspectorChanges', 'saveSemesterDialog', 'saveSlotModal',
     'saveSubject', 'selAddMode', 'selMode', 'setEditMode', 'setUpto', 'shiftCalMonth', 'showReschedulePick', 'signInWithGoogle',
-    'startChipEdit', 'switchShareTab', 'switchTimetableTab', 'toggleAuthMode', 'toggleDateHoliday',
+    'startChipEdit', 'switchShareTab', 'switchTimetableTab', 'toggleAuthMode', 'togglePasswordShown', 'toggleDateHoliday',
     'toggleProfileMenu', 'toggleSidebar', 'toggleSundayDisplay', 'toggleTheme', 'updateGlobalTarget',
     'updateRoundMode', 'updateSim',
     // below: the handlers that used to be more than one call

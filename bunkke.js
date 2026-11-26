@@ -120,6 +120,7 @@ async function initAuth() {
       currentUser = session.user;
       showApp();
     } else {
+      if (!isReturning()) setAuthMode('signup');
       showAuthModal();
       showAuthErrorFromUrl();
     }
@@ -480,8 +481,18 @@ async function deleteSubjectFromDB(subjectId) {
 
 // Toggle between login and signup
 function toggleAuthMode() {
-  isAuthMode = isAuthMode === 'login' ? 'signup' : 'login';
-  
+  setAuthMode(isAuthMode === 'login' ? 'signup' : 'login');
+}
+
+// Someone who has signed in on this browser before gets Login; a first-time visitor gets Sign Up.
+// (bk_returning survives logout; deleting your data clears it like every other bk_ key.)
+function rememberReturning() { try { localStorage.setItem('bk_returning', '1'); } catch (e) { /* private mode */ } }
+function isReturning() { try { return localStorage.getItem('bk_returning') === '1'; } catch (e) { return true; } }
+
+function setAuthMode(mode) {
+  isAuthMode = mode;
+  const pw = document.getElementById('auth-password');
+
   if (isAuthMode === 'signup') {
     document.getElementById('auth-title').textContent = 'Sign Up';
     document.getElementById('auth-subtitle').textContent = 'Create your account to get started';
@@ -489,6 +500,8 @@ function toggleAuthMode() {
     document.getElementById('auth-toggle-text').textContent = 'Already have an account?';
     document.getElementById('auth-toggle-btn').textContent = 'Login';
     document.getElementById('auth-forgot-btn').hidden = true;
+    pw.placeholder = 'At least 6 characters';
+    pw.autocomplete = 'new-password';
   } else {
     document.getElementById('auth-title').textContent = 'Login';
     document.getElementById('auth-subtitle').textContent = 'Enter your credentials to continue';
@@ -496,9 +509,21 @@ function toggleAuthMode() {
     document.getElementById('auth-toggle-text').textContent = "Don't have an account?";
     document.getElementById('auth-toggle-btn').textContent = 'Sign Up';
     document.getElementById('auth-forgot-btn').hidden = false;
+    pw.placeholder = 'Your password';
+    pw.autocomplete = 'current-password';
   }
-  
+
   hideAuthMessages();
+}
+
+function togglePasswordShown() {
+  const pw = document.getElementById('auth-password');
+  const eye = document.getElementById('auth-pw-eye');
+  const show = pw.type === 'password';
+  pw.type = show ? 'text' : 'password';
+  eye.setAttribute('aria-pressed', String(show));
+  eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  pw.focus();
 }
 
 // Handle auth form submission
@@ -532,7 +557,8 @@ async function handleAuth(event) {
 
       if (result.data.user && !result.data.session) {
         showAuthSuccess('Account created! Check your email to confirm.');
-        setTimeout(() => toggleAuthMode(), 2000);
+        rememberReturning();   // the confirmation link brings them back to Login, not Sign Up
+        setTimeout(() => setAuthMode('login'), 2000);
         return;
       }
 
@@ -803,6 +829,7 @@ document.addEventListener('visibilitychange', () => {
 let appLoadedFor = null;   // user id whose data is loaded
 let appLoading = null;     // in-flight load, shared by concurrent callers
 function showApp() {
+  rememberReturning();
   document.getElementById('auth-overlay').classList.remove('show');
   document.getElementById('logout-btn').style.display = 'flex';
   renderProfile();
