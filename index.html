@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" href="/favicon.jpg">
 <link rel="icon" type="image/png" href="/favicon2.jpg">
 <link rel="preload" href="assets/fonts/DMSans-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="bunkkkro.css?v=20261127e">
+<link rel="stylesheet" href="bunkkkro.css?v=20261127f">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
@@ -566,16 +566,16 @@
               <div class="set-txt"><div class="set-label">Show me around</div><div class="set-desc">A quick tour of what each page does.</div></div>
               <button class="btn-sec btn-sm" data-on-click="startTour()">Start tour</button>
             </div>
-            <div class="set-row" id="set-contact-row" hidden>
-              <div class="set-txt"><div class="set-label">Contact us</div><div class="set-desc">Report a problem or suggest something.</div></div>
-              <a class="btn-sec btn-sm" id="set-contact" href="#">Email us</a>
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Help &amp; contact</div><div class="set-desc">Answers to common questions, and how to reach us.</div></div>
+              <a class="btn-sec btn-sm" href="help.html" target="_blank" rel="noopener">Open</a>
             </div>
             <div class="set-row">
-              <div class="set-txt"><div class="set-label">Privacy policy</div><div class="set-desc">What BunkKro stores, why, and your rights.</div></div>
+              <div class="set-txt"><div class="set-label">Privacy Policy</div><div class="set-desc">What BunkKro stores, why, and your rights.</div></div>
               <a class="btn-sec btn-sm" href="privacy.html" target="_blank" rel="noopener">Read</a>
             </div>
             <div class="set-row">
-              <div class="set-txt"><div class="set-label">Terms of use</div><div class="set-desc">The rules for using BunkKro.</div></div>
+              <div class="set-txt"><div class="set-label">Terms of Service</div><div class="set-desc">The rules for using BunkKro.</div></div>
               <a class="btn-sec btn-sm" href="terms.html" target="_blank" rel="noopener">Read</a>
             </div>
           </div>
@@ -605,7 +605,7 @@
         <ul class="plan-list">
           <li>Every subject and class, on all your devices</li>
           <li>“Can I bunk today?” and the bunk calculator</li>
-          <li>Daily classes, streaks, holidays and Day Order</li>
+          <li>Daily classes, streaks and holidays</li>
           <li>Timetable by hand or from a photo</li>
           <li>The browser extension</li>
         </ul>
@@ -1042,7 +1042,8 @@
         <span id="auth-toggle-text">Don't have an account?</span>
         <button class="auth-link" id="auth-toggle-btn" data-on-click="toggleAuthMode()">Sign Up</button>
       </div>
-      <p class="auth-legal">By continuing, you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of use</a> and the <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a>. <a href="about.html" target="_blank" rel="noopener">What is BunkKro?</a></p>
+      <p class="auth-legal">By continuing, you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+      <p class="auth-links"><a href="about.html" target="_blank" rel="noopener">About BunkKro</a><a href="help.html" target="_blank" rel="noopener">Help &amp; contact</a></p>
     </div>
   </div>
 </div>
@@ -1207,7 +1208,7 @@
 <script src="ai-config.js?v=20261109"></script>
 <script src="ai-bridge.js?v=20261126b"></script>
 <script src="bunkke.js?v=20261127e"></script>
-<script src="settings.js?v=20261127e"></script>
+<script src="settings.js?v=20261127f"></script>
 <script src="ai-confirm.js?v=20261127"></script>
 </body>
 </html>

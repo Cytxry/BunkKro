@@ -3,102 +3,181 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy policy · BunkKro</title>
-<meta name="description" content="What BunkKro stores, why, who helps run it, and your rights over your data.">
+<title>Privacy Policy · BunkKro</title>
+<meta name="description" content="What information BunkKro collects, why, who it is shared with, and how to access, correct or delete it.">
+<link rel="canonical" href="https://bunkkro.vercel.app/privacy.html">
 <link rel="icon" href="favicon.jpg">
-<script src="theme-init.js?v=20261127"></script>
 <link rel="preload" href="assets/fonts/DMSans-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="legal.css?v=20261127b">
+<link rel="stylesheet" href="legal.css?v=20261127c">
 </head>
 <body>
-<main class="legal">
-  <a class="legal-back" href="./">← Back to BunkKro</a>
-  <h1>Privacy policy</h1>
-  <p class="legal-date">Last updated: [date you publish]</p>
-  <p class="legal-draft">Draft. Before publishing, fill in the parts in [brackets]: who runs BunkKro and how to reach them.</p>
+<main class="doc">
+  <nav class="doc-top" aria-label="Site"><a class="wordmark" href="about.html">bunk<span>kro</span></a><a href="./">Back to BunkKro</a></nav>
 
-  <p>BunkKro helps you track college attendance and work out which classes you can miss. This policy explains what we
-  store, why, who helps us run BunkKro, and what you can do about it. We wrote it to follow India's Digital Personal
-  Data Protection Act, 2023 and its Rules.</p>
+  <h1>Privacy Policy</h1>
+  <p class="doc-date">Last updated: 27 November 2026</p>
+  <p class="doc-intro">BunkKro is an attendance tracker for college students. This policy explains what information
+  BunkKro collects, why, who it is shared with, and the choices you have. It applies to the BunkKro website and its
+  browser extension.</p>
 
-  <h2>Who we are</h2>
-  <p>BunkKro is run by [your name or company], [city], India. For anything about your data, write to
-  [contact email]. That address is also our grievance contact: [name of the person who handles it]. We reply to
-  privacy requests and complaints within [number] days (the law allows at most 90).</p>
+  <nav class="toc" aria-labelledby="toc-h">
+    <p id="toc-h">Contents</p>
+    <ol>
+      <li><a href="#who">Who runs BunkKro</a></li>
+      <li><a href="#collect">Information we collect</a></li>
+      <li><a href="#use">How we use it</a></li>
+      <li><a href="#google">Google sign-in</a></li>
+      <li><a href="#timetables">Timetable photos and PDFs</a></li>
+      <li><a href="#device">What stays on your device</a></li>
+      <li><a href="#share">Who we share it with</a></li>
+      <li><a href="#where">Where it is stored</a></li>
+      <li><a href="#keep">How long we keep it</a></li>
+      <li><a href="#rights">Your rights</a></li>
+      <li><a href="#delete">Deleting your account</a></li>
+      <li><a href="#security">Security</a></li>
+      <li><a href="#age">Age</a></li>
+      <li><a href="#changes">Changes to this policy</a></li>
+      <li><a href="#contact">Contact and grievances</a></li>
+    </ol>
+  </nav>
 
-  <h2>What we store</h2>
+  <h2 id="who">1. Who runs BunkKro</h2>
+  <p>BunkKro is a personal project run by Charan, an individual based in Bengaluru, Karnataka, India. It is not
+  operated by a company. In this policy, “we” means Charan as the operator of BunkKro.</p>
+
+  <h2 id="collect">2. Information we collect</h2>
+  <h3>When you create an account</h3>
   <ul>
-    <li><strong>Your login.</strong> Your email address and password (kept only as a secure hash by our login
-      provider). If you log in with Google, we receive your name, email address and profile photo from Google, and
-      nothing else from your Google account. We use them only to log you in and show your name and photo in BunkKro.
-      If you change your name in Settings, we keep that name.</li>
-    <li><strong>What you put in.</strong> Your subjects, attendance numbers and marks, timetable, holidays, semester
-      dates, and settings such as your attendance target.</li>
-    <li><strong>Timetable imports.</strong> When you import a timetable, we keep a record of the import: how many
-      classes were read, how many you fixed, and when you confirmed it. The timetable photo or PDF itself is not
-      uploaded to us: the built-in scanner reads it inside your browser. [Update this when BunkKro AI runs on a
-      server: say that the file is sent to that server to be read, where the server is, and that it is deleted
-      after [how long].]</li>
-    <li><strong>Fixes you choose to share.</strong> Only if you turn on “Help the AI learn from my fixes”, we keep the
-      corrections you made to a read timetable, to improve the reader. Never your attendance. Turning it off deletes
-      them.</li>
-    <li><strong>The Pro list.</strong> If you tap “Tell me when Pro launches”, we note that and the date on your
-      account, to tell you once when Pro is ready.</li>
-    <li><strong>On your device.</strong> Your browser keeps a copy of your data and your preferences (like the
-      theme) so BunkKro opens fast, and your login so you stay logged in. These are needed for BunkKro to work. We
-      use no advertising or tracking cookies and no analytics.</li>
+    <li>Your email address and a password. The password is stored only in a protected (hashed) form; we cannot
+      read it.</li>
+    <li>If you use “Continue with Google”: your name, email address and profile photo from Google (see
+      <a href="#google">section 4</a>).</li>
+  </ul>
+  <h3>What you put into BunkKro</h3>
+  <ul>
+    <li>Your subjects, attendance numbers and the classes you mark as attended, missed or cancelled.</li>
+    <li>Your timetable, holidays, extra classes and days that follow another day's timetable.</li>
+    <li>Your settings: attendance target, how your college rounds percentages, semester dates, theme, and a display name if you set one.</li>
+  </ul>
+  <h3>When you import a timetable</h3>
+  <ul>
+    <li>A record of the import: when it happened, how many classes were read, how many you corrected, and when you
+      confirmed it. The photo or PDF itself is not uploaded (see <a href="#timetables">section 5</a>).</li>
+    <li>Only if you turn on “Help the AI learn from my fixes”: the corrections you made to a timetable BunkKro read.
+      This never includes your attendance. Turning the option off deletes what was shared.</li>
+  </ul>
+  <h3>Other</h3>
+  <ul>
+    <li>If you tap “Tell me when Pro launches”, we record that and the date on your account, so we can tell you
+      once when a paid plan is available. No payment information is collected; BunkKro has no payments.</li>
+  </ul>
+  <p>We do not use advertising, analytics or tracking tools, and we do not collect your location, contacts or
+  device identifiers.</p>
+
+  <h2 id="use">3. How we use it</h2>
+  <p>We use your information only to provide BunkKro to you:</p>
+  <ul>
+    <li>to create your account and log you in;</li>
+    <li>to calculate your attendance and how many classes you can miss;</li>
+    <li>to keep your data in sync across your devices and the browser extension;</li>
+    <li>to send account emails, such as password resets and confirmation codes;</li>
+    <li>if you have chosen to share timetable corrections, to improve how BunkKro reads timetables.</li>
+  </ul>
+  <p>We do not sell your information, use it for advertising, or share it with anyone for their own purposes. By
+  creating an account you agree to this use. You can withdraw that consent at any time by deleting your account.</p>
+
+  <h2 id="google">4. Google sign-in</h2>
+  <p>If you choose “Continue with Google”, Google shares your name, email address and profile photo with BunkKro.
+  We ask for nothing else from your Google account: not your contacts, files, calendar or email.</p>
+  <p>We use this information only to create your account, log you in, and show your name and photo inside
+  BunkKro. We do not transfer it to others except the service providers listed in
+  <a href="#share">section 7</a> that run BunkKro for us, and we do not use it for advertising. Our use of
+  information received from Google follows the
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>.
+  You can remove BunkKro's access at any time from your Google Account's security settings.</p>
+
+  <h2 id="timetables">5. Timetable photos and PDFs</h2>
+  <p>When you import a timetable from a photo or PDF, the file is read by a scanner that runs inside your own
+  browser. The file is not uploaded to BunkKro. Only the timetable you check and confirm is saved to your account.</p>
+  <p>To work, the scanner downloads its program and text-recognition files from public file-delivery services, the
+  same way a website loads its code. Those services see your IP address, but not your timetable.</p>
+  <p>We plan to add a more accurate timetable reader that runs on a server. That would mean sending the file to
+  that server. It is not in use today. Before it is, we will update this policy to say what is sent, where it is
+  processed, who can access it and when it is deleted, and we will tell you in BunkKro before your first upload.</p>
+
+  <h2 id="device">6. What stays on your device</h2>
+  <p>Your browser stores your login session, a copy of your data so BunkKro opens quickly, and preferences such as
+  the theme. These are needed for BunkKro to work, so we do not ask for consent to them and there are no optional
+  cookies to switch off. The browser extension reads your login from the BunkKro website so you can mark classes
+  from it; it keeps that login in your browser and does not read other websites.</p>
+
+  <h2 id="share">7. Who we share it with</h2>
+  <p>We share your information only with the services that run BunkKro for us, and only so they can provide that
+  service:</p>
+  <ul>
+    <li><strong>Supabase</strong> stores your account and data, handles logins, and sends account emails.</li>
+    <li><strong>Vercel</strong> hosts the website. Like any web host, it processes your IP address when you visit.</li>
+    <li><strong>Google</strong>, only if you use Google sign-in.</li>
+  </ul>
+  <p>We may disclose information if Indian law requires it, for example in response to a valid order from a court or
+  government authority.</p>
+
+  <h2 id="where">8. Where it is stored</h2>
+  <p>Your account and data are stored on servers in Australia. By using BunkKro you agree to this transfer outside
+  India, which Indian law permits. The website itself is delivered from servers in several countries.</p>
+
+  <h2 id="keep">9. How long we keep it</h2>
+  <p>We keep your information for as long as you have an account. When you delete your data or your account, it is
+  removed from our active database straight away. Copies may remain in our providers' routine backups for a limited
+  time until those backups are replaced.</p>
+
+  <h2 id="rights">10. Your rights</h2>
+  <ul>
+    <li><strong>Access:</strong> Settings → Your data → Download my data gives you a copy of everything stored in
+      your account.</li>
+    <li><strong>Correction:</strong> you can edit your information in BunkKro at any time, or ask us to correct it.</li>
+    <li><strong>Deletion:</strong> you can delete your data and your account yourself (see
+      <a href="#delete">section 11</a>), or ask us to.</li>
+    <li><strong>Withdraw consent:</strong> turn off timetable sharing in Settings, or delete your account.</li>
+    <li><strong>Nominate someone</strong> to exercise these rights for you if you die or become unable to: write
+      to us.</li>
+    <li><strong>Raise a grievance</strong> with us (see <a href="#contact">section 15</a>). If you are not satisfied
+      with our response, you may approach the Data Protection Board of India.</li>
   </ul>
 
-  <h2>Why we use it</h2>
-  <p>Only to run BunkKro for you: to log you in, keep your data in sync across your devices, and do the attendance
-  maths. We don't sell your data, show ads, or share it with anyone for their own use. By creating an account you
-  agree to this use; you can withdraw at any time by deleting your data (see below).</p>
+  <h2 id="delete">11. Deleting your account</h2>
+  <p>In Settings → Your data, choose <strong>Delete my data</strong> and type DELETE to confirm. This deletes your
+  subjects, attendance, timetable, holidays and timetable imports on every device. You are then offered to delete
+  your login as well, which removes your account completely. This cannot be undone. If you prefer, email us and we
+  will do it for you.</p>
 
-  <h2>Who helps us run BunkKro</h2>
-  <ul>
-    <li><strong>Supabase</strong>: our database and login service. Your account and data are stored in its Sydney,
-      Australia region.</li>
-    <li><strong>Vercel</strong>: hosts the website.</li>
-    <li><strong>Google</strong>: only if you choose “Continue with Google”, to log you in.</li>
-    <li><strong>jsDelivr</strong> and <strong>Project Naptha</strong>: deliver code libraries and, when you use the
-      built-in scanner, its text-recognition files. Like any website, they see your IP address when your browser
-      downloads them.</li>
-    <li><strong>[Your email provider]</strong>: sends login, password-reset and confirmation emails.</li>
-    <li>When Pro launches, a payment provider will handle payments. We will never see or store your card or UPI
-      details.</li>
+  <h2 id="security">12. Security</h2>
+  <p>Information travels over encrypted connections, and our database is set up so each account can reach only its
+  own data. We take reasonable care to protect your information, but no online service can be completely secure. If
+  a breach affects your information, we will tell you and the authorities as Indian law requires.</p>
+
+  <h2 id="age">13. Age</h2>
+  <p>BunkKro is intended for people aged 18 and over. If you are under 18, please do not use BunkKro. If we learn
+  that an account belongs to someone under 18, we will delete it.</p>
+
+  <h2 id="changes">14. Changes to this policy</h2>
+  <p>If we change this policy, we will update the date at the top. If a change affects how your information is used,
+  we will tell you in BunkKro before it takes effect.</p>
+
+  <h2 id="contact">15. Contact and grievances</h2>
+  <p>For questions about your information, requests under this policy, or complaints, contact the person
+  responsible for BunkKro:</p>
+  <ul class="contact">
+    <li><strong>Name:</strong> Charan</li>
+    <li><strong>Email:</strong> <a href="mailto:charanb2128@gmail.com">charanb2128@gmail.com</a></li>
+    <li><strong>Location:</strong> Bengaluru, Karnataka, India</li>
   </ul>
-  <p>These services may store data outside India. They process it only to provide their service to us.</p>
+  <p>Please include the email address of your BunkKro account so we can find it. We will respond within the time
+  Indian law requires.</p>
 
-  <h2>The browser extension</h2>
-  <p>The BunkKro extension reads your login from the BunkKro website so you can mark attendance from your browser.
-  It keeps that login in your browser and talks only to BunkKro's database. It does not read other websites.</p>
-
-  <h2>How long we keep it</h2>
-  <p>As long as you have an account. When you delete your data or your account in Settings, it is deleted from our
-  database straight away. [If your Supabase plan keeps backups: copies in those backups are removed as they expire,
-  within [number] days.]</p>
-
-  <h2>Your rights</h2>
-  <ul>
-    <li><strong>See your data:</strong> Settings → Your data → Download my data gives you everything in one file.</li>
-    <li><strong>Correct it:</strong> edit anything in the app, or write to us.</li>
-    <li><strong>Delete it:</strong> Settings → Your data → Delete my data. You can then delete your login too.</li>
-    <li><strong>Withdraw consent:</strong> turn off sharing in Settings, or delete your data.</li>
-    <li><strong>Nominate someone</strong> to act for you if you die or can't act yourself: write to us.</li>
-    <li><strong>Complain:</strong> write to [contact email] first. If you're not satisfied, you can go to the Data
-      Protection Board of India.</li>
-  </ul>
-
-  <h2>Keeping it safe</h2>
-  <p>Data travels encrypted (HTTPS). Every row in our database is locked to its owner, so no other account can read
-  it. If a breach ever affects your data, we will tell you and the Data Protection Board as the law requires.</p>
-
-  <h2>Age</h2>
-  <p>BunkKro is meant for college students aged 18 or over. If you're under 18, use it only with your parent's or
-  guardian's consent.</p>
-
-  <h2>Changes</h2>
-  <p>If we change this policy in a way that matters, we'll tell you in the app before it takes effect.</p>
+  <footer class="doc-foot">
+    <a href="about.html">About</a><a href="privacy.html" aria-current="page">Privacy</a><a href="terms.html">Terms</a><a href="help.html">Help &amp; contact</a>
+  </footer>
 </main>
 </body>
 </html>

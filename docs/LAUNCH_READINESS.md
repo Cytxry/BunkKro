@@ -1,5 +1,12 @@
 # BunkKro launch readiness audit (27 Nov 2026)
 
+**Update, same day:** the owner's details are in (Charan, Bengaluru, charanb2128@gmail.com, 18+), so A4 is done.
+Privacy Policy, Terms of Service, About and a new Help & contact page were rewritten as plain documents with no
+placeholders. Day Order is removed from public pages because it is switched off in the app. Still open: A1
+(custom SMTP; when you add it, change "Supabase ... sends account emails" in privacy.html §7 to your email
+provider), A6 (Google app in production), Confirm email and Secure password change, and the age gate before
+13 May 2027.
+
 How this was made: the website code, the browser extension, the Supabase project itself (tables, row-level security,
 foreign keys, storage, edge functions, auth settings, security advisor), the Vercel configuration, and the official
 or authoritative sources linked below. This is not legal advice. Laws are summarised from the sources found; check

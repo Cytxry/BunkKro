@@ -1,8 +1,6 @@
 // Settings and pricing pages. Uses the app's globals from bunkke.js (currentUser, supabaseClient, askDialog, toast,
 // globalTarget, roundMode, semStart/semEnd, updateUser...). Every handler here is on the actions.js ALLOWED list.
 
-// Shown under Help & legal as "Contact us" once set (e.g. 'support@yourdomain.in'); the row stays hidden while empty.
-const BK_SUPPORT_EMAIL = '';
 
 // ── theme: light / dark / system (theme-init.js applies it before the first paint) ───────────────────────────────
 function themeMode() {
@@ -68,12 +66,6 @@ function renderSettings() {
 
   set('set-plan-desc', m.bk_pro_waitlist ? "Everything you need to track attendance. You're on the list for Pro."
     : 'Everything you need to track attendance. Pro is on its way.');
-
-  const row = document.getElementById('set-contact-row');
-  if (row) {
-    row.hidden = !BK_SUPPORT_EMAIL;
-    if (BK_SUPPORT_EMAIL) document.getElementById('set-contact').href = 'mailto:' + BK_SUPPORT_EMAIL + '?subject=' + encodeURIComponent('BunkKro');
-  }
 }
 
 async function editDisplayName() {

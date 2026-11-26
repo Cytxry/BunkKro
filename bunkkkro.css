@@ -1738,3 +1738,5 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 @keyframes fairyHover{0%,100%{translate:0 0}50%{translate:0 -7px}}
 @media (prefers-reduced-motion:reduce){.bg-cat,.bg-card.bg-pop .bg-cat{animation:none}}
 .est-disclaimer{font-size:.78rem;color:var(--muted);text-align:center;margin:22px auto 4px;max-width:60ch;line-height:1.5}
+.auth-links{display:flex;justify-content:center;gap:16px;margin-top:6px;font-size:.75rem}
+.auth-links a{color:var(--muted)}

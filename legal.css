@@ -1,33 +1,48 @@
-/* DM Sans (SIL Open Font License, assets/fonts/OFL.txt), served from this site: no request to Google Fonts */
+/* Public documents (privacy, terms, help, about): plain, official, readable. Deliberately not the app's look. */
 @font-face{font-family:'DM Sans';src:url('assets/fonts/DMSans-latin.woff2') format('woff2');font-weight:400 800;font-style:normal;font-display:swap}
-/* Privacy policy and terms: one readable column in the app's colours */
-:root{--bg:#F6F5F0;--surface:#FFFFFF;--text:#252A3D;--text2:#5E6375;--muted:#707586;--primary:#4555A5;--primary-deep:#343F83;--border:#E7E5DF;--warn-bg:#F9EEDB;--warn:#93601F}
-:root[data-theme="dark"]{color-scheme:dark;--bg:#14151E;--surface:#1D1F2C;--text:#ECEDF5;--text2:#B3B7C9;--muted:#9A9EB2;--primary:#9AA6F0;--primary-deep:#D6DBFF;--border:#2E3146;--warn-bg:#352A18;--warn:#EDBB72}
+:root{--ink:#1F2330;--ink2:#555B6B;--rule:#E4E5EA;--link:#3949A0;--bg:#FFFFFF;--soft:#F6F7F9}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:1rem;line-height:1.65;-webkit-font-smoothing:antialiased}
-.legal{max-width:68ch;margin:0 auto;padding:40px 20px 80px}
-.legal-back{display:inline-block;color:var(--primary);font-weight:600;text-decoration:none;margin-bottom:28px}
-.legal-back:hover{text-decoration:underline}
-.legal-back:focus-visible,.legal a:focus-visible{outline:3px solid var(--primary);outline-offset:3px;border-radius:4px}
-h1{font-size:clamp(1.9rem,5vw,2.5rem);font-weight:800;letter-spacing:-.03em;line-height:1.1;color:var(--primary-deep);margin:0}
-h2{font-size:1.2rem;font-weight:800;color:var(--primary-deep);letter-spacing:-.01em;margin:36px 0 8px}
-p,li{color:var(--text)}
-ul{padding-left:1.2em}
-li{margin-bottom:8px}
-a{color:var(--primary)}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:1rem;line-height:1.7;-webkit-font-smoothing:antialiased}
+.doc{max-width:44rem;margin:0 auto;padding:28px 20px 72px}
+.doc-top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-bottom:18px;border-bottom:1px solid var(--rule);margin-bottom:36px;font-size:.92rem}
+.wordmark{font-weight:800;font-size:1.15rem;letter-spacing:-.04em;color:var(--ink);text-decoration:none}
+.wordmark span{color:#B85A31}
+.doc-top a:not(.wordmark){color:var(--link)}
+h1{font-size:clamp(1.8rem,4.5vw,2.3rem);font-weight:800;letter-spacing:-.025em;line-height:1.15;margin:0}
+.doc-date{color:var(--ink2);font-size:.92rem;margin:8px 0 0}
+.doc-intro{margin:22px 0 0}
+h2{font-size:1.2rem;font-weight:700;letter-spacing:-.01em;line-height:1.35;margin:44px 0 10px;padding-top:24px;border-top:1px solid var(--rule);scroll-margin-top:16px}
+h3{font-size:1rem;font-weight:700;margin:22px 0 4px}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:1.3em}
+li{margin-bottom:6px}
+a{color:var(--link);text-underline-offset:2px}
+a:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radius:2px}
 strong{font-weight:700}
-.legal-date{color:var(--muted);font-size:.9rem;margin:8px 0 18px}
-.legal-draft{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 14px;font-size:.9rem;font-weight:600}
-
-/* About (the public home page) and 404 */
-.about-hero{display:flex;align-items:center;gap:24px;margin-bottom:12px}
-.about-logo{font-size:1.6rem;font-weight:800;letter-spacing:-.045em;color:var(--primary-deep);margin:0 0 14px}
-.about-logo span{color:#C1643A}
-.about-lede{font-size:1.08rem;color:var(--text2);margin:12px 0 22px}
-.about-cat{width:150px;flex-shrink:0}
-.about-cta{display:inline-block;background:#4555A5;color:#fff;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:12px}
-.about-cta:hover{background:#343F83}
-.about-foot{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:44px;padding-top:18px;border-top:1px solid var(--border);font-size:.92rem}
-.notfound{text-align:center;padding-top:12vh}
-.notfound img{margin:0 auto 10px;display:block}
-@media (max-width:560px){.about-hero{flex-direction:column-reverse;align-items:flex-start}.about-cat{width:110px}}
+.toc{margin:30px 0 0;padding:18px 22px;background:var(--soft);border-radius:10px}
+.toc p{font-weight:700;margin:0 0 6px;font-size:.95rem}
+.toc ol{margin:0;columns:2;column-gap:28px;font-size:.93rem}
+.toc li{break-inside:avoid;margin-bottom:4px}
+.contact{margin:6px 0 14px;padding:0;list-style:none}
+.contact li{margin-bottom:4px}
+.faq h2{font-size:1.08rem}
+.doc-foot{display:flex;flex-wrap:wrap;gap:6px 20px;margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);font-size:.9rem;color:var(--ink2)}
+.doc-foot a{color:var(--ink2)}
+.doc-foot a[aria-current="page"]{color:var(--ink);font-weight:700;text-decoration:none}
+/* About keeps one friendly picture; the rest stays plain */
+.about-hero{display:flex;align-items:center;gap:24px}
+.about-hero img{width:130px;flex-shrink:0}
+.about-cta{display:inline-block;margin-top:6px;background:#3949A0;color:#fff;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:10px}
+.about-cta:hover{background:#2C3A86}
+.notfound{text-align:center;padding-top:10vh}
+.notfound img{display:block;margin:0 auto 8px}
+@media (max-width:600px){.toc ol{columns:1}.about-hero{flex-direction:column-reverse;align-items:flex-start}.about-hero img{width:96px}.doc-top{font-size:.88rem}}
+@media print{
+  .doc-top a:not(.wordmark),.toc,.doc-foot,.about-cta{display:none}
+  body{font-size:11pt;color:#000}
+  .doc{max-width:none;padding:0}
+  h2{break-after:avoid;border-top:none;padding-top:0}
+  a{color:#000;text-decoration:none}
+}
