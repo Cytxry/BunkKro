@@ -595,7 +595,9 @@
     const els = ['tt-ai-status', 'tt-ai-status-loaded'].map(id => document.getElementById(id)).filter(Boolean);
     if (!els.length) return;
     if (!enabled()) { els.forEach(el => { el.innerHTML = ''; }); return; }   // visitors see the upload card as before
-    const up = await isAvailable(force);
+    // a hosted reader is assumed up here (asking would wake a cloud container on every page load); the upload
+    // itself checks it, and says so if it can't be reached
+    const up = HOSTED ? true : await isAvailable(force);
     // the on/off pill is a developer aid: only on this computer (localhost), never on the live site
     const devHost = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
     const input = document.getElementById('tt-file-input');
