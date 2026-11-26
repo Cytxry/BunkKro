@@ -1725,3 +1725,8 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 }
 @media (prefers-reduced-motion:reduce){.switch span,.switch span::after,.seg button,.pm-item{transition:none}}
 #set-email{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.pw-rule{font-size:.75rem;color:var(--muted);margin-top:5px}
+.pw-code{letter-spacing:.3em;font-weight:700;font-variant-numeric:tabular-nums}
+#pw-error{margin:4px 0 0}
+#pw-error[hidden]{display:none}
+#pw-resend{margin:-4px 0 6px}

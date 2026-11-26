@@ -63,8 +63,6 @@ function renderSettings() {
 
   setSeg('set-theme', themeMode());
 
-  const ai = document.getElementById('set-local-ai');
-  if (ai) { try { ai.checked = localStorage.getItem('bk_local_ai') === '1'; } catch (e) { ai.checked = false; } }
   const share = document.getElementById('set-share-fixes');
   if (share) share.checked = !!window.BunkKroImport?.sharing?.();
 
@@ -93,15 +91,83 @@ async function editDisplayName() {
   toast('Name saved ✓');
 }
 
-async function changePassword() {
-  const v = await askDialog({ title: 'Change your password', message: 'At least 6 characters. You stay logged in here.',
-    ok: 'Save new password', cat: 'cat-detective', input: { label: 'New password', type: 'password', placeholder: '••••••••' } });
-  if (typeof v !== 'string') return;
-  if (v.length < 6) { toast('At least 6 characters — try again', 'err'); return; }
-  const { error } = await supabaseClient.auth.updateUser({ password: v });
-  if (error) { toast("Couldn't change it: " + error.message, 'err'); return; }
-  toast('Password changed ✓');
+// ── change password: current password + the new one twice, then a code Supabase emails to the account ─────────
+// 1. the current password is checked by logging in with it (a wrong one stops here);
+// 2. Supabase emails a one-time code (auth.reauthenticate);
+// 3. the code and the new password go to Supabase together (updateUser with the nonce).
+let pwNew = '';
+function pwErr(msg) { const e = document.getElementById('pw-error'); e.textContent = msg || ''; e.hidden = !msg; }
+function pwStep(n) {
+  document.getElementById('pw-step1').hidden = n !== 1;
+  document.getElementById('pw-step2').hidden = n !== 2;
+  document.getElementById('pw-ok').textContent = n === 1 ? 'Continue' : 'Change password';
+  setTimeout(() => document.getElementById(n === 1 ? 'pw-current' : 'pw-code').focus(), 30);
 }
+function changePassword() {
+  ['pw-current', 'pw-new', 'pw-new2', 'pw-code'].forEach(id => { document.getElementById(id).value = ''; });
+  pwNew = ''; pwErr(''); pwStep(1);
+  document.getElementById('pw-overlay').classList.add('show');
+}
+function closePasswordDialog() {
+  document.getElementById('pw-overlay').classList.remove('show');
+  ['pw-current', 'pw-new', 'pw-new2', 'pw-code'].forEach(id => { document.getElementById(id).value = ''; });
+  pwNew = '';
+}
+async function sendPasswordCode() {
+  const { error } = await supabaseClient.auth.reauthenticate();
+  if (error) {
+    pwErr(/rate|seconds|too many/i.test(error.message) ? 'A code was sent a moment ago. Wait a minute, then send it again.'
+      : "Couldn't send the code: " + error.message);
+    return false;
+  }
+  document.getElementById('pw-sent').textContent = `We emailed a code to ${currentUser?.email || 'you'}. Type it here to confirm the change.`;
+  return true;
+}
+async function resendPasswordCode() {
+  pwErr('');
+  const b = document.getElementById('pw-resend');
+  b.disabled = true;
+  if (await sendPasswordCode()) toast('New code sent ✉️');
+  setTimeout(() => { b.disabled = false; }, 30000);
+}
+async function submitPasswordChange(event) {
+  event?.preventDefault?.();
+  const ok = document.getElementById('pw-ok');
+  if (ok.disabled) return;
+  pwErr('');
+  ok.disabled = true;
+  try {
+    if (!document.getElementById('pw-step1').hidden) {
+      const cur = document.getElementById('pw-current').value;
+      const nw = document.getElementById('pw-new').value, nw2 = document.getElementById('pw-new2').value;
+      if (!cur) { pwErr('Type your current password.'); return; }
+      if (nw.length < 8 || !/[A-Za-z]/.test(nw) || !/\d/.test(nw)) { pwErr('The new password needs at least 8 characters, with a letter and a number.'); return; }
+      if (nw !== nw2) { pwErr("The two new passwords don't match."); return; }
+      if (nw === cur) { pwErr("That's your current password. Choose a different one."); return; }
+      const { error } = await supabaseClient.auth.signInWithPassword({ email: currentUser.email, password: cur });
+      if (error) { pwErr(/invalid/i.test(error.message) ? "Your current password isn't right." : 'Could not check it: ' + error.message); return; }
+      pwNew = nw;
+      document.getElementById('pw-current').value = '';
+      if (await sendPasswordCode()) pwStep(2);
+    } else {
+      const code = document.getElementById('pw-code').value.trim();
+      if (!/^\d{6,10}$/.test(code)) { pwErr('Type the code from the email (numbers only).'); return; }
+      const { error } = await supabaseClient.auth.updateUser({ password: pwNew, nonce: code });
+      if (error) {
+        pwErr(/nonce|otp|token|expired|invalid/i.test(error.message) ? "That code didn't work or has expired. Check the email, or send a new one."
+          : /same|different/i.test(error.message) ? 'Choose a password you haven’t used here before.'
+          : "Couldn't change it: " + error.message);
+        return;
+      }
+      closePasswordDialog();
+      toast('Password changed ✓ Use it next time you log in');
+    }
+  } finally { ok.disabled = false; }
+}
+document.getElementById('pw-overlay')?.addEventListener('click', e => { if (e.target === e.currentTarget) closePasswordDialog(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('pw-overlay')?.classList.contains('show')) closePasswordDialog();
+});
 
 async function logoutEverywhere() {
   const ok = await askDialog({ title: 'Log out everywhere?', message: 'Your login ends on every device and in the extension. ' +
@@ -110,12 +176,6 @@ async function logoutEverywhere() {
   const { error } = await supabaseClient.auth.signOut({ scope: 'global' });
   if (error) { toast("Couldn't log out everywhere: " + error.message, 'err'); return; }
   location.reload();
-}
-
-function setLocalAi(on) {
-  try { if (on) localStorage.setItem('bk_local_ai', '1'); else localStorage.removeItem('bk_local_ai'); } catch (e) { /* private mode */ }
-  toast(on ? 'BunkKro AI on: start it on this computer to read timetables' : 'Using the built-in scanner');
-  window.BunkKroAI?.showStatus?.();
 }
 
 async function setFixSharing(on) {

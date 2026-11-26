@@ -12,12 +12,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="bunkkkro.css?v=20261127">
+<link rel="stylesheet" href="bunkkkro.css?v=20261127b">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
         integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="actions.js?v=20261127"></script>
+<script src="actions.js?v=20261127b"></script>
 </head>
 <body>
 
@@ -64,6 +64,7 @@
     <symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2.5"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
     <symbol id="i-cap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m2 9 10-5 10 5-10 5Z"/><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5"/><path d="M22 9v6"/></symbol>
     <symbol id="i-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/><path d="m14.5 5.5 3 3"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></symbol>
     <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2.5 9.5 5L12 12.5 2.5 7.5Z"/><path d="m2.5 12 9.5 5 9.5-5"/><path d="m2.5 16.5 9.5 5 9.5-5"/></symbol>
     <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
     <symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
@@ -162,7 +163,7 @@
             <div style="min-width:0"><div class="pm-name" id="pm-name">Account</div><div class="user-email" id="user-email"></div></div>
           </div>
           <div class="pm-list">
-            <button class="pm-item" data-on-click="goPage('settings')"><svg class="ic ic-sm"><use href="#i-layers"/></svg><span>Settings</span></button>
+            <button class="pm-item" data-on-click="goPage('settings')"><svg class="ic ic-sm"><use href="#i-gear"/></svg><span>Settings</span></button>
             <button class="pm-item" data-on-click="goPage('pricing')"><svg class="ic ic-sm"><use href="#i-star"/></svg><span>Plans &amp; pricing</span><span class="pm-badge">Pro soon</span></button>
             <div class="pm-sep" role="separator"></div>
             <button class="pm-item pm-out" id="logout-btn" data-on-click="handleLogout()" style="display:none"><svg class="ic ic-sm"><use href="#i-logout"/></svg><span>Log out</span></button>
@@ -472,7 +473,7 @@
               <div class="set-txt"><div class="set-label">How you log in</div><div class="set-desc" id="set-method">Email and password</div></div>
             </div>
             <div class="set-row" id="set-password-row">
-              <div class="set-txt"><div class="set-label">Password</div><div class="set-desc">Choose a new one, at least 6 characters.</div></div>
+              <div class="set-txt"><div class="set-label">Password</div><div class="set-desc">Needs your current password and a code we email you.</div></div>
               <button class="btn-sec btn-sm" data-on-click="changePassword()">Change password</button>
             </div>
             <div class="set-row">
@@ -522,11 +523,7 @@
           <h3 id="sg-ai">Timetable AI</h3>
           <div class="set-card">
             <div class="set-row">
-              <div class="set-txt"><label class="set-label" for="set-local-ai">Use BunkKro AI on this computer</label><div class="set-desc">Reads timetable photos and PDFs with the AI running on your computer. Off: the built-in scanner reads them in your browser.</div></div>
-              <span class="switch"><input type="checkbox" role="switch" id="set-local-ai" data-on-change="setLocalAi(this.checked)"><span aria-hidden="true"></span></span>
-            </div>
-            <div class="set-row">
-              <div class="set-txt"><label class="set-label" for="set-share-fixes">Help the AI learn from my fixes</label><div class="set-desc">Shares the corrections you make to a read timetable, never your attendance. Turning it off deletes what was shared.</div></div>
+              <div class="set-txt"><label class="set-label" for="set-share-fixes">Help the AI learn from my fixes</label><div class="set-desc">When you fix a timetable BunkKro read, it shares those corrections (never your attendance) to make the reader better. Turning it off deletes what was shared.</div></div>
               <span class="switch"><input type="checkbox" role="switch" id="set-share-fixes" data-on-change="setFixSharing(this.checked)"><span aria-hidden="true"></span></span>
             </div>
           </div>
@@ -798,6 +795,32 @@
       <button class="btn-sec" data-on-click="closeSemesterDialog()">Cancel</button>
       <button class="btn-pri" data-on-click="saveSemesterDialog()">Save</button>
     </div>
+  </div>
+</div>
+
+<!-- ══════ CHANGE PASSWORD (settings.js) ══════ -->
+<div class="overlay" id="pw-overlay" role="dialog" aria-modal="true" aria-labelledby="pw-title">
+  <div class="modal modal-center" style="max-width:420px">
+    <img class="modal-cat" src="assets/cat-detective.svg" alt="">
+    <h2 id="pw-title">Change your password</h2>
+    <form id="pw-form" data-on-submit="submitPasswordChange(event)" novalidate>
+      <div id="pw-step1">
+        <p class="sub">First your current password, then the new one twice.</p>
+        <div class="mf" style="text-align:left"><label for="pw-current">Current password</label><input type="password" id="pw-current" autocomplete="current-password" maxlength="72"></div>
+        <div class="mf" style="text-align:left"><label for="pw-new">New password</label><input type="password" id="pw-new" autocomplete="new-password" maxlength="72" aria-describedby="pw-rule"><div class="pw-rule" id="pw-rule">At least 8 characters, with a letter and a number.</div></div>
+        <div class="mf" style="text-align:left"><label for="pw-new2">New password again</label><input type="password" id="pw-new2" autocomplete="new-password" maxlength="72"></div>
+      </div>
+      <div id="pw-step2" hidden>
+        <p class="sub" id="pw-sent">We emailed you a code. Type it here to confirm the change.</p>
+        <div class="mf" style="text-align:left"><label for="pw-code">Code from the email</label><input type="text" id="pw-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="pw-code"></div>
+        <button type="button" class="link-btn" id="pw-resend" data-on-click="resendPasswordCode()">Send the code again</button>
+      </div>
+      <div class="auth-error" id="pw-error" role="alert" hidden></div>
+      <div class="modal-btns">
+        <button type="button" class="btn-sec" data-on-click="closePasswordDialog()">Cancel</button>
+        <button type="submit" class="btn-pri" id="pw-ok">Continue</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -1178,7 +1201,7 @@
 <script src="ai-config.js?v=20261109"></script>
 <script src="ai-bridge.js?v=20261126b"></script>
 <script src="bunkke.js?v=20261127"></script>
-<script src="settings.js?v=20261127"></script>
+<script src="settings.js?v=20261127b"></script>
 <script src="ai-confirm.js?v=20261127"></script>
 </body>
 </html>

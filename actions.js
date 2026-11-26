@@ -39,8 +39,8 @@
     // below: the handlers that used to be more than one call
     'pickTimetableFile', 'openTimetablePicker', 'keyActivate', 'closeSafeBunksAndGo', 'removeSetupRow',
     'studioSelectCell', 'openDayOrderSetup', 'deleteAllMyData',
-    'editDisplayName', 'changePassword', 'logoutEverywhere', 'setThemeMode', 'setLocalAi', 'setFixSharing', 'downloadMyData',
-    'startTour', 'setPricePeriod', 'joinProWaitlist'
+    'editDisplayName', 'changePassword', 'logoutEverywhere', 'setThemeMode', 'setFixSharing', 'downloadMyData',
+    'startTour', 'setPricePeriod', 'joinProWaitlist', 'submitPasswordChange', 'closePasswordDialog', 'resendPasswordCode'
   ]);
 
   // ── the call parser ──────────────────────────────────────────────────────────────────────────────────────────
