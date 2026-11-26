@@ -94,6 +94,13 @@ let isAuthMode = 'login'; // 'login' or 'signup'
 //  INIT AUTH - FIXED TO PREVENT DUPLICATE LISTENERS
 // ══════════════════════════════════════════════════════
 async function initAuth() {
+  // back from "Login with Google": keep the login card up (waiting) until googleLoginAllowed has decided,
+  // so an account that turns out not to exist never shows the app
+  try {
+    if (sessionStorage.getItem('bk_google_intent') === 'login') {
+      setAuthMode('login'); showAuthModal(); googleButtonWaiting('Checking your account…');
+    }
+  } catch (e) { /* private mode */ }
   try {
     // 🔥 listen for auth changes (this is the real source of truth)
     // Supabase also fires this on token refresh and when the tab regains
@@ -125,6 +132,8 @@ async function initAuth() {
       currentUser = session.user;
       showApp();
     } else {
+      try { sessionStorage.removeItem('bk_google_intent'); } catch (e) { /* private mode */ }
+      googleButtonWaiting(null);   // back from Google without a session (cancelled): the button works again
       if (!isReturning()) setAuthMode('signup');
       showAuthModal();
       showAuthErrorFromUrl();
@@ -683,11 +692,17 @@ async function signInWithGoogle() {
   // on success the browser is already leaving for Google; the button stays in its waiting state
 }
 
-// Login with Google must not create accounts, but Google sign-in makes one for any Google user it hasn't seen.
-// So, back from Google: if the trip started on Login and the account was created just now, delete that empty
-// login again (delete-account deletes only the caller's own login), sign out, and send them to Sign Up.
-// Sign Up with Google, and Google logins for accounts that already exist, go through unchanged.
+// Login with Google must not create accounts, but Google sign-in makes one for any Google user Supabase hasn't
+// seen, whichever button was pressed. So, back from Google after Login: the database function
+// discard_new_google_login removes the caller's login if this very sign-in just created it (Google-only, nothing
+// saved; anything else is 'kept'), then the card switches to Sign Up. The login card stays up the whole time, so
+// the app never opens for it. Sign Up with Google, and Google logins for existing accounts, go through unchanged.
 // Checked once per page load; every caller gets the same answer.
+function googleButtonWaiting(text) {
+  const btn = document.getElementById('auth-google-btn'), label = document.getElementById('auth-google-label');
+  if (text) { btn.disabled = true; btn.classList.add('busy'); label.textContent = text; }
+  else { btn.disabled = false; btn.classList.remove('busy'); label.textContent = 'Continue with Google'; }
+}
 let googleCheck = null;
 function googleLoginAllowed(session) {
   if (!googleCheck) googleCheck = (async () => {
@@ -696,12 +711,19 @@ function googleLoginAllowed(session) {
     const u = session && session.user;
     const viaGoogle = u && ((u.app_metadata && u.app_metadata.provider === 'google')
       || (u.identities || []).some(i => i.provider === 'google'));
-    if (intent !== 'login' || !viaGoogle) return true;
+    if (intent !== 'login' || !viaGoogle) { googleButtonWaiting(null); return true; }
     const created = Date.parse(u.created_at), last = Date.parse(u.last_sign_in_at || u.created_at);
-    const brandNew = Math.abs(last - created) < 60000 && Date.now() - created < 15 * 60000;
-    if (!brandNew) return true;
-    try { await supabaseClient.functions.invoke('delete-account', { body: { confirm: 'DELETE' } }); } catch (e) { /* signed out below anyway */ }
-    try { await supabaseClient.auth.signOut(); } catch (e) { /* the session is dropped either way */ }
+    const brandNew = Math.abs(last - created) < 60000 && Date.now() - created < 10 * 60000;
+    let outcome = 'kept';
+    if (brandNew) {
+      try {
+        const { data, error } = await supabaseClient.rpc('discard_new_google_login');
+        if (!error && data) outcome = data;
+      } catch (e) { /* treated as kept */ }
+    }
+    googleButtonWaiting(null);
+    if (outcome !== 'discarded') return true;
+    try { await supabaseClient.auth.signOut({ scope: 'local' }); } catch (e) { /* the login is gone anyway */ }
     currentUser = null; appLoadedFor = null;
     setAuthMode('signup');
     showAuthModal();
