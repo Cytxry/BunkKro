@@ -384,7 +384,7 @@
     continueWalk();
   }
 
-  window.BunkKroImport = { start, render, confirm, checkNext, setSharing, putBack, pendingDrops, holdDrops,
+  window.BunkKroImport = { start, render, confirm, checkNext, setSharing, sharing, putBack, pendingDrops, holdDrops,
     corrections: () => { const i = active(); return i ? corrections(i) : []; } };
   document.addEventListener('DOMContentLoaded', () => { render(); flush(); });
 })();

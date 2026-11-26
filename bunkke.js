@@ -767,7 +767,6 @@ async function handleLogout() {
 function showAuthModal() {
   document.getElementById('auth-overlay').classList.add('show');
   document.getElementById('logout-btn').style.display = 'none';
-  document.getElementById('delete-data-btn').style.display = 'none';
   toggleProfileMenu(false);
 }
 
@@ -803,7 +802,6 @@ let appLoading = null;     // in-flight load, shared by concurrent callers
 function showApp() {
   document.getElementById('auth-overlay').classList.remove('show');
   document.getElementById('logout-btn').style.display = 'flex';
-  document.getElementById('delete-data-btn').style.display = 'flex';
   renderProfile();
   const uid = currentUser?.id;
   if (!uid) return Promise.resolve();
@@ -1642,6 +1640,7 @@ function updateGlobalTarget(v) {
   savePrefs();
   renderNav();
   if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
+  else if (currPage === 'settings') renderSettings();
   else renderHome();
 }
  
@@ -1664,6 +1663,8 @@ function goPage(page, id) {
     if (nv) nv.classList.add('active');
     if (page === 'tracker') renderTracker();
     else if (page === 'timetable') renderTimetable();
+    else if (page === 'settings') renderSettings();
+    else if (page === 'pricing') renderPricing();
     else renderHome();
   }
   document.getElementById('sidebar').classList.remove('open');
@@ -2700,6 +2701,7 @@ function saveSemesterDialog() {
   const err = checkSemester(start, end);
   if (err) { semesterPreview(); return; }
   semStart = start; semEnd = end;
+  if (currPage === 'settings') setTimeout(renderSettings, 0);
   semWeeks = parseInt(document.getElementById('sem-weeks').value) || semWeeks;
   savePrefs();
   closeSemesterDialog();
@@ -3529,6 +3531,7 @@ function renderAll() {
   renderHome();
   if (currPage === 'tracker') renderTracker();
   else if (currPage === 'timetable') renderTimetable();
+  else if (currPage === 'settings' && typeof renderSettings === 'function') renderSettings();
 }
 
 // Never auto-open onboarding. User adds subjects manually.

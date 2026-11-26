@@ -5,19 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google-site-verification" content="Ylj4ZEzMzvJr5QHzrJykHBRpF_MoIkcetgFTRNO_b64" />
 <meta name="theme-color" content="#F6F5F0">
-<script src="theme-init.js?v=20261109"></script>
+<script src="theme-init.js?v=20261127"></script>
 <title>BunkKro — Can I bunk today?</title>
 <link rel="icon" type="image/png" href="/favicon.jpg">
 <link rel="icon" type="image/png" href="/favicon2.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="bunkkkro.css?v=20261126c">
+<link rel="stylesheet" href="bunkkkro.css?v=20261127">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
         integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
-<script src="actions.js?v=20261126c"></script>
+<script src="actions.js?v=20261127"></script>
 </head>
 <body>
 
@@ -161,8 +161,12 @@
             <span class="user-avatar lg" id="pm-avatar" aria-hidden="true">?</span>
             <div style="min-width:0"><div class="pm-name" id="pm-name">Account</div><div class="user-email" id="user-email"></div></div>
           </div>
-          <button class="logout-btn" id="logout-btn" data-on-click="handleLogout()" style="display:none"><svg class="ic ic-sm"><use href="#i-logout"/></svg> Logout</button>
-          <button class="logout-btn" id="delete-data-btn" data-on-click="deleteAllMyData()" style="display:none;color:var(--danger)">Delete all my data</button>
+          <div class="pm-list">
+            <button class="pm-item" data-on-click="goPage('settings')"><svg class="ic ic-sm"><use href="#i-layers"/></svg><span>Settings</span></button>
+            <button class="pm-item" data-on-click="goPage('pricing')"><svg class="ic ic-sm"><use href="#i-star"/></svg><span>Plans &amp; pricing</span><span class="pm-badge">Pro soon</span></button>
+            <div class="pm-sep" role="separator"></div>
+            <button class="pm-item pm-out" id="logout-btn" data-on-click="handleLogout()" style="display:none"><svg class="ic ic-sm"><use href="#i-logout"/></svg><span>Log out</span></button>
+          </div>
         </div>
       </div>
     </div>
@@ -436,6 +440,200 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- ░░ SETTINGS ░░ -->
+  <div class="page" id="page-settings">
+    <div class="ph">
+      <h2>Settings</h2>
+      <p>Your account, how BunkKro counts your attendance, and what happens to your data.</p>
+    </div>
+    <div class="set-layout">
+      <nav class="set-index" aria-label="Settings sections">
+        <a href="#set-account">Account</a>
+        <a href="#set-attendance">Attendance</a>
+        <a href="#set-look">Appearance</a>
+        <a href="#set-ai">Timetable AI</a>
+        <a href="#set-plan">Plan</a>
+        <a href="#set-data">Your data</a>
+        <a href="#set-help">Help &amp; legal</a>
+      </nav>
+      <div class="set-body">
+
+        <section class="set-group" id="set-account" aria-labelledby="sg-account">
+          <h3 id="sg-account">Account</h3>
+          <div class="set-card">
+            <div class="set-row set-who">
+              <span class="user-avatar lg" id="set-avatar" aria-hidden="true">?</span>
+              <div class="set-txt"><div class="set-label" id="set-name">Account</div><div class="set-desc" id="set-email"></div></div>
+              <button class="btn-sec btn-sm" data-on-click="editDisplayName()">Edit name</button>
+            </div>
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">How you log in</div><div class="set-desc" id="set-method">Email and password</div></div>
+            </div>
+            <div class="set-row" id="set-password-row">
+              <div class="set-txt"><div class="set-label">Password</div><div class="set-desc">Choose a new one, at least 6 characters.</div></div>
+              <button class="btn-sec btn-sm" data-on-click="changePassword()">Change password</button>
+            </div>
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Log out everywhere</div><div class="set-desc">Ends your login on every phone, laptop and the browser extension.</div></div>
+              <button class="btn-sec btn-sm" data-on-click="logoutEverywhere()">Log out everywhere</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-attendance" aria-labelledby="sg-att">
+          <h3 id="sg-att">Attendance</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <div class="set-txt"><label class="set-label" for="set-target">Attendance target</label><div class="set-desc">The percentage you need. A subject can still have its own.</div></div>
+              <div class="target-wrap"><input type="number" id="set-target" min="1" max="100" value="75" data-on-change="updateGlobalTarget(this.value)"><span class="sym">%</span></div>
+            </div>
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label" id="set-round-lbl">How your college rounds</div><div class="set-desc" id="set-round-hint">74.6% counts as 74%.</div></div>
+              <div class="seg" role="radiogroup" aria-labelledby="set-round-lbl" id="set-round">
+                <button type="button" role="radio" data-v="down" data-on-click="updateRoundMode('down')">Down</button>
+                <button type="button" role="radio" data-v="up" data-on-click="updateRoundMode('up')">Up</button>
+                <button type="button" role="radio" data-v="exact" data-on-click="updateRoundMode('exact')">Exact</button>
+              </div>
+            </div>
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Semester dates</div><div class="set-desc" id="set-sem">Not set yet</div></div>
+              <button class="btn-sec btn-sm" data-on-click="openSemesterDialog()">Set dates</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-look" aria-labelledby="sg-look">
+          <h3 id="sg-look">Appearance</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label" id="set-theme-lbl">Theme</div><div class="set-desc">System follows your phone or computer.</div></div>
+              <div class="seg" role="radiogroup" aria-labelledby="set-theme-lbl" id="set-theme">
+                <button type="button" role="radio" data-v="light" data-on-click="setThemeMode('light')">Light</button>
+                <button type="button" role="radio" data-v="dark" data-on-click="setThemeMode('dark')">Dark</button>
+                <button type="button" role="radio" data-v="system" data-on-click="setThemeMode('system')">System</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-ai" aria-labelledby="sg-ai">
+          <h3 id="sg-ai">Timetable AI</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <div class="set-txt"><label class="set-label" for="set-local-ai">Use BunkKro AI on this computer</label><div class="set-desc">Reads timetable photos and PDFs with the AI running on your computer. Off: the built-in scanner reads them in your browser.</div></div>
+              <span class="switch"><input type="checkbox" role="switch" id="set-local-ai" data-on-change="setLocalAi(this.checked)"><span aria-hidden="true"></span></span>
+            </div>
+            <div class="set-row">
+              <div class="set-txt"><label class="set-label" for="set-share-fixes">Help the AI learn from my fixes</label><div class="set-desc">Shares the corrections you make to a read timetable, never your attendance. Turning it off deletes what was shared.</div></div>
+              <span class="switch"><input type="checkbox" role="switch" id="set-share-fixes" data-on-change="setFixSharing(this.checked)"><span aria-hidden="true"></span></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-plan" aria-labelledby="sg-plan">
+          <h3 id="sg-plan">Plan</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Free plan</div><div class="set-desc" id="set-plan-desc">Everything you need to track attendance. Pro is on its way.</div></div>
+              <button class="btn-pri btn-sm" data-on-click="goPage('pricing')">See plans</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-data" aria-labelledby="sg-data">
+          <h3 id="sg-data">Your data</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Download my data</div><div class="set-desc">Your subjects, attendance, timetable and holidays as one file.</div></div>
+              <button class="btn-sec btn-sm" id="set-export" data-on-click="downloadMyData()"><svg class="ic ic-sm"><use href="#i-download"/></svg> Download</button>
+            </div>
+            <div class="set-row set-danger">
+              <div class="set-txt"><div class="set-label">Delete my data</div><div class="set-desc">Deletes everything you stored, on every device. You can delete your login afterwards too. This can't be undone.</div></div>
+              <button class="del-btn btn-sm" data-on-click="deleteAllMyData()"><svg class="ic ic-sm"><use href="#i-trash"/></svg> Delete…</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-group" id="set-help" aria-labelledby="sg-help">
+          <h3 id="sg-help">Help &amp; legal</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Show me around</div><div class="set-desc">A quick tour of what each page does.</div></div>
+              <button class="btn-sec btn-sm" data-on-click="startTour()">Start tour</button>
+            </div>
+            <div class="set-row" id="set-contact-row" hidden>
+              <div class="set-txt"><div class="set-label">Contact us</div><div class="set-desc">Report a problem or suggest something.</div></div>
+              <a class="btn-sec btn-sm" id="set-contact" href="#">Email us</a>
+            </div>
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Privacy policy</div><div class="set-desc">What BunkKro stores, why, and your rights.</div></div>
+              <a class="btn-sec btn-sm" href="privacy.html" target="_blank" rel="noopener">Read</a>
+            </div>
+            <div class="set-row">
+              <div class="set-txt"><div class="set-label">Terms of use</div><div class="set-desc">The rules for using BunkKro.</div></div>
+              <a class="btn-sec btn-sm" href="terms.html" target="_blank" rel="noopener">Read</a>
+            </div>
+          </div>
+          <p class="set-foot">BunkKro · made for students who'd rather plan than panic</p>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ░░ PRICING ░░ -->
+  <div class="page" id="page-pricing">
+    <div class="price-head">
+      <h2>Free covers the bunking. Pro does the busywork.</h2>
+      <p>Tracking your attendance is free, and stays free. Pro adds an AI that reads any timetable for you, and a few comforts.</p>
+      <div class="seg price-period" role="radiogroup" aria-label="Billing period" id="price-period">
+        <button type="button" role="radio" data-v="month" data-on-click="setPricePeriod('month')">Monthly</button>
+        <button type="button" role="radio" data-v="sem" data-on-click="setPricePeriod('sem')">Per semester <span class="price-save">save 32%</span></button>
+      </div>
+    </div>
+
+    <div class="price-grid">
+      <article class="plan" aria-labelledby="plan-free">
+        <h3 id="plan-free">Free</h3>
+        <p class="plan-for">For every student, forever.</p>
+        <div class="plan-price"><span class="plan-amt">₹0</span></div>
+        <ul class="plan-list">
+          <li>Every subject and class, on all your devices</li>
+          <li>“Can I bunk today?” and the bunk calculator</li>
+          <li>Daily classes, streaks, holidays and Day Order</li>
+          <li>Timetable by hand or from a photo</li>
+          <li>The browser extension</li>
+        </ul>
+        <button class="btn-sec plan-cta" disabled>Your plan</button>
+      </article>
+
+      <article class="plan plan-pro" aria-labelledby="plan-pro">
+        <img class="plan-cat" src="assets/cat-trophy.svg" alt="">
+        <h3 id="plan-pro">Pro</h3>
+        <p class="plan-for">For a semester on autopilot.</p>
+        <div class="plan-price"><span class="plan-amt" id="pro-amt">₹49</span><span class="plan-per" id="pro-per">a month</span></div>
+        <p class="plan-note" id="pro-note">Billed monthly. Cancel any time.</p>
+        <ul class="plan-list">
+          <li>Everything in Free</li>
+          <li>BunkKro AI reads any timetable: photos, scans, multi-page PDFs. Nothing to install</li>
+          <li>Class reminders before each period</li>
+          <li>Attendance reports as PDF</li>
+          <li>Extra themes and cat companions</li>
+        </ul>
+        <button class="btn-pri plan-cta" id="pro-cta" data-on-click="joinProWaitlist()">Tell me when Pro launches</button>
+        <p class="plan-fine" id="pro-fine">No payment now. We'll email you once.</p>
+      </article>
+    </div>
+
+    <section class="price-faq" aria-labelledby="faq-h">
+      <h3 id="faq-h">Questions</h3>
+      <details><summary>Will the free plan stay free?</summary><p>Yes. Tracking attendance, the bunk calculator, the timetable and the extension stay free.</p></details>
+      <details><summary>What happens to my data if I stop paying?</summary><p>Nothing is lost. You go back to Free and keep every subject, mark and timetable.</p></details>
+      <details><summary>How will I pay?</summary><p>UPI, cards and net banking, once Pro launches. Nothing is charged before then.</p></details>
+      <details><summary>Is there a price for a whole class?</summary><p>Not yet. If your class or college wants it, tell us and we'll work something out.</p></details>
+    </section>
   </div>
 
 </main>
@@ -815,6 +1013,7 @@
         <span id="auth-toggle-text">Don't have an account?</span>
         <button class="auth-link" id="auth-toggle-btn" data-on-click="toggleAuthMode()">Sign Up</button>
       </div>
+      <p class="auth-legal">By continuing, you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of use</a> and the <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a>.</p>
     </div>
   </div>
 </div>
@@ -978,7 +1177,8 @@
 <script src="clock.js?v=20261108"></script>
 <script src="ai-config.js?v=20261109"></script>
 <script src="ai-bridge.js?v=20261126b"></script>
-<script src="bunkke.js?v=20261126c"></script>
-<script src="ai-confirm.js?v=20261109b"></script>
+<script src="bunkke.js?v=20261127"></script>
+<script src="settings.js?v=20261127"></script>
+<script src="ai-confirm.js?v=20261127"></script>
 </body>
 </html>

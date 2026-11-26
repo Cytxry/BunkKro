@@ -1,0 +1,18 @@
+/* Privacy policy and terms: one readable column in the app's colours */
+:root{--bg:#F6F5F0;--surface:#FFFFFF;--text:#252A3D;--text2:#5E6375;--muted:#707586;--primary:#4555A5;--primary-deep:#343F83;--border:#E7E5DF;--warn-bg:#F9EEDB;--warn:#93601F}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#14151E;--surface:#1D1F2C;--text:#ECEDF5;--text2:#B3B7C9;--muted:#9A9EB2;--primary:#9AA6F0;--primary-deep:#D6DBFF;--border:#2E3146;--warn-bg:#352A18;--warn:#EDBB72}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:1rem;line-height:1.65;-webkit-font-smoothing:antialiased}
+.legal{max-width:68ch;margin:0 auto;padding:40px 20px 80px}
+.legal-back{display:inline-block;color:var(--primary);font-weight:600;text-decoration:none;margin-bottom:28px}
+.legal-back:hover{text-decoration:underline}
+.legal-back:focus-visible,.legal a:focus-visible{outline:3px solid var(--primary);outline-offset:3px;border-radius:4px}
+h1{font-size:clamp(1.9rem,5vw,2.5rem);font-weight:800;letter-spacing:-.03em;line-height:1.1;color:var(--primary-deep);margin:0}
+h2{font-size:1.2rem;font-weight:800;color:var(--primary-deep);letter-spacing:-.01em;margin:36px 0 8px}
+p,li{color:var(--text)}
+ul{padding-left:1.2em}
+li{margin-bottom:8px}
+a{color:var(--primary)}
+strong{font-weight:700}
+.legal-date{color:var(--muted);font-size:.9rem;margin:8px 0 18px}
+.legal-draft{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 14px;font-size:.9rem;font-weight:600}
