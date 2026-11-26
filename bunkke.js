@@ -103,8 +103,12 @@ async function initAuth() {
       if (location.href.endsWith('#')) history.replaceState(null, '', location.pathname + location.search);
       if (event === 'PASSWORD_RECOVERY') setTimeout(() => offerNewPassword(), 600);
       if (session) {
-        currentUser = session.user;
-        setTimeout(() => showApp(), 0);
+        // (no awaiting Supabase inside this callback: it would deadlock; the check runs right after it)
+        setTimeout(async () => {
+          if (!(await googleLoginAllowed(session))) return;
+          currentUser = session.user;
+          showApp();
+        }, 0);
       } else {
         appLoadedFor = null;
         showAuthModal();
@@ -117,6 +121,7 @@ async function initAuth() {
     // (the session is not logged: it holds the access token)
 
     if (session) {
+      if (!(await googleLoginAllowed(session))) return;
       currentUser = session.user;
       showApp();
     } else {
@@ -668,12 +673,42 @@ async function signInWithGoogle() {
     showAuthError("Google sign-in isn't switched on yet. Use your email for now.");
     return;
   }
+  // remember which button started it: Google makes an account for anyone, so Login has to undo a new one (see below)
+  try { sessionStorage.setItem('bk_google_intent', isAuthMode); } catch (e) { /* private mode */ }
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: window.location.origin + window.location.pathname, queryParams: { prompt: 'select_account' } }
   });
   if (error) { reset(); showAuthError("Couldn't open Google sign-in: " + error.message); }
   // on success the browser is already leaving for Google; the button stays in its waiting state
+}
+
+// Login with Google must not create accounts, but Google sign-in makes one for any Google user it hasn't seen.
+// So, back from Google: if the trip started on Login and the account was created just now, delete that empty
+// login again (delete-account deletes only the caller's own login), sign out, and send them to Sign Up.
+// Sign Up with Google, and Google logins for accounts that already exist, go through unchanged.
+// Checked once per page load; every caller gets the same answer.
+let googleCheck = null;
+function googleLoginAllowed(session) {
+  if (!googleCheck) googleCheck = (async () => {
+    let intent = null;
+    try { intent = sessionStorage.getItem('bk_google_intent'); sessionStorage.removeItem('bk_google_intent'); } catch (e) { /* private mode */ }
+    const u = session && session.user;
+    const viaGoogle = u && ((u.app_metadata && u.app_metadata.provider === 'google')
+      || (u.identities || []).some(i => i.provider === 'google'));
+    if (intent !== 'login' || !viaGoogle) return true;
+    const created = Date.parse(u.created_at), last = Date.parse(u.last_sign_in_at || u.created_at);
+    const brandNew = Math.abs(last - created) < 60000 && Date.now() - created < 15 * 60000;
+    if (!brandNew) return true;
+    try { await supabaseClient.functions.invoke('delete-account', { body: { confirm: 'DELETE' } }); } catch (e) { /* signed out below anyway */ }
+    try { await supabaseClient.auth.signOut(); } catch (e) { /* the session is dropped either way */ }
+    currentUser = null; appLoadedFor = null;
+    setAuthMode('signup');
+    showAuthModal();
+    showAuthError("There's no BunkKro account for that Google account yet. Sign up first.");
+    return false;
+  })();
+  return googleCheck;
 }
 
 // Back from Google (or a reset/confirm link) with an error in the address: say it on the login card, then

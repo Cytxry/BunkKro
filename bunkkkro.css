@@ -1218,7 +1218,7 @@ html.auth-open,html.auth-open body{overflow:hidden}   /* the empty app behind th
   .toast{left:16px;right:16px;bottom:16px;max-width:none}
   .verdict-illus{display:none}
   .auth-modal{grid-template-columns:1fr;max-width:440px}
-  .auth-art{min-height:230px;padding:20px 22px;background-size:auto 44%,auto}   /* trees start below the quote */
+  .auth-art{min-height:240px;padding:20px 22px;background-size:auto 130px,auto}   /* trees start below the quote; tall enough that the meadow's own laptop cat (right end of the picture) stays out of view */
   .auth-art-quote{font-size:1.15rem;margin-top:8px}
   .auth-art .auth-art-cats{position:absolute;right:10px;bottom:-4px;margin:0}
   .auth-art-cats .auth-art-cat{width:110px}
