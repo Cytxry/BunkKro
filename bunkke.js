@@ -795,6 +795,7 @@ async function handleLogout() {
 // Show/hide functions remain the same
 function showAuthModal() {
   document.getElementById('auth-overlay').classList.add('show');
+  document.documentElement.classList.add('auth-open');
   document.getElementById('logout-btn').style.display = 'none';
   toggleProfileMenu(false);
 }
@@ -831,6 +832,7 @@ let appLoading = null;     // in-flight load, shared by concurrent callers
 function showApp() {
   rememberReturning();
   document.getElementById('auth-overlay').classList.remove('show');
+  document.documentElement.classList.remove('auth-open');
   document.getElementById('logout-btn').style.display = 'flex';
   renderProfile();
   const uid = currentUser?.id;

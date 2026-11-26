@@ -1102,6 +1102,8 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
     var(--bg);
 }
 .auth-overlay.show{display:flex}
+.auth-overlay .auth-modal{margin:auto}   /* centred, and never clipped at the top when taller than the screen */
+html.auth-open,html.auth-open body{overflow:hidden}   /* the empty app behind the login card doesn't scroll */
 .auth-modal{display:grid;grid-template-columns:1fr 1fr;background:var(--surface);border:1px solid var(--border);border-radius:30px;box-shadow:var(--shadow-lg);max-width:900px;width:100%;overflow:hidden;animation:modalin .3s cubic-bezier(.34,1.4,.64,1) both}
 .auth-art{position:relative;min-height:520px;padding:34px;display:flex;flex-direction:column;background:url('assets/banner-meadow.svg') left bottom/auto 72% no-repeat,linear-gradient(180deg,#FDF3E7,#FBEFE2)}
 .auth-art::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(253,243,231,.95) 0%,rgba(253,243,231,.6) 40%,rgba(253,243,231,0) 62%);pointer-events:none}
@@ -1749,3 +1751,16 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 .est-disclaimer{font-size:.78rem;color:var(--muted);text-align:center;margin:22px auto 4px;max-width:60ch;line-height:1.5}
 .auth-links{display:flex;justify-content:center;gap:16px;margin-top:6px;font-size:.75rem}
 .auth-links a{color:var(--muted)}
+/* login card on short laptop screens (or zoomed in): tighter, so it fits without scrolling */
+@media (min-width:861px) and (max-height:760px){
+  .auth-overlay{padding:12px}
+  .auth-art{min-height:0;padding:28px 30px}
+  .auth-form-side{padding:26px 36px 22px}
+  .auth-sub{margin-bottom:16px}
+  .auth-or{margin:12px 0 10px}
+  .auth-field{margin-bottom:10px}
+  .auth-toggle{margin-top:12px}
+  .auth-legal{margin-top:10px}
+  .auth-art-cats .auth-art-cat{width:180px}
+  .auth-art-cats .auth-art-cat2{width:120px}
+}
