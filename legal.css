@@ -36,7 +36,6 @@ strong{font-weight:700}
 .about-hero img{width:130px;flex-shrink:0}
 .about-cta{display:inline-block;margin-top:6px;background:#3949A0;color:#fff;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:10px}
 .about-cta:hover{background:#2C3A86}
-.about-trust{margin:10px 0 0;font-size:.88rem;font-weight:600;color:#5B6070}
 .notfound{text-align:center;padding-top:10vh}
 .notfound img{display:block;margin:0 auto 8px}
 @media (max-width:600px){.toc ol{columns:1}.about-hero{flex-direction:column-reverse;align-items:flex-start}.about-hero img{width:96px}.doc-top{font-size:.88rem}}

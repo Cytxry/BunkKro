@@ -495,7 +495,7 @@ function setAuthMode(mode) {
 
   if (isAuthMode === 'signup') {
     document.getElementById('auth-title').textContent = 'Sign Up';
-    document.getElementById('auth-subtitle').textContent = "Free · no ads · we don't sell your data";
+    document.getElementById('auth-subtitle').textContent = 'Create your account to get started';
     document.getElementById('auth-submit').textContent = 'Sign Up';
     document.getElementById('auth-toggle-text').textContent = 'Already have an account?';
     document.getElementById('auth-toggle-btn').textContent = 'Login';
