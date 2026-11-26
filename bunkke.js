@@ -3708,12 +3708,15 @@ async function handleTimetableFileUpload(file) {
   while (!aiUp && wantsAi) {
     const retry = await askDialog(BunkKroAI.hosted
       ? { title: 'BunkKro AI can’t be reached',
-          message: 'It may be starting up, or your connection dropped. Try again in a moment, or use the basic scanner for a PNG or JPG photo.',
-          ok: 'Try again', cancel: 'Use the basic scanner', cat: 'cat-worried' }
+          message: 'It may be starting up, or your connection dropped. Try again in a moment.',
+          ok: 'Try again', cancel: 'Cancel', cat: 'cat-worried' }
       : { title: 'BunkKro AI isn’t running',
           message: 'Start it with start_bunkkro_ai_autostart.bat in the BunkKro-AI folder (it also starts by itself with Windows), wait a few seconds, then check again.',
           ok: 'Check again', cancel: 'Use the basic scanner', cat: 'cat-worried' });
-    if (!retry) break;
+    if (!retry) {
+      if (BunkKroAI.hosted) return;          // hosted: the AI is the reader; no fallback is offered
+      break;
+    }
     aiUp = await BunkKroAI.isAvailable(true);
     if (aiUp) toast('BunkKro AI is ready ✓');
   }
@@ -4181,7 +4184,8 @@ async function processTimetableImage(file, dropIds = [], opts = {}) {
         toast('Upload cancelled');
         return;
       }
-      const isImage = ['image/png', 'image/jpeg', 'image/jpg'].includes(file.type);
+      // the built-in scanner is only a fallback for the AI on this computer; the hosted AI never hands over to it
+      const isImage = ['image/png', 'image/jpeg', 'image/jpg'].includes(file.type) && !BunkKroAI.hosted;
       if (aiErr.refused) {                   // judged not understood: importing it would invent free periods
         if (progressBox) progressBox.style.display = 'none';
         const why = (aiErr.reasons || []).slice(0, 3).join('; ');

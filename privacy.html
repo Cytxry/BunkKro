@@ -63,8 +63,7 @@
   <ul>
     <li>A record of the import: when it happened, how many classes were read, how many you corrected, and when you
       confirmed it.</li>
-    <li>Only if you choose BunkKro AI: the photo or PDF you upload, kept for at most a day (see
-      <a href="#timetables">section 5</a>). With the basic scanner, the file is not uploaded.</li>
+    <li>The photo or PDF you upload, kept for at most a day (see <a href="#timetables">section 5</a>).</li>
     <li>Only if you turn on “Help the AI learn from my fixes”: the corrections you made to a timetable BunkKro read.
       This never includes your attendance. Turning the option off deletes what was shared.</li>
   </ul>
@@ -99,22 +98,13 @@
   You can remove BunkKro's access at any time from your Google Account's security settings.</p>
 
   <h2 id="timetables">5. Timetable photos and PDFs</h2>
-  <p>When you import a timetable from a photo or PDF, BunkKro asks you once on each device, before your first upload,
-  which of two readers to use:</p>
-  <ul>
-    <li><strong>BunkKro AI</strong> (reads PDFs, scans and photos). The file is sent over an encrypted connection to
-      our timetable reader, which runs on servers rented from Modal Labs, a cloud provider. It is processed on servers
-      in the United States. Your login is checked with each request, so only you can see the reading. The file, the
-      page images made from it and the reading are kept so you can choose another page or section of the same file,
-      then deleted automatically within 25 hours of the last change. While they are kept, they are in Modal's cloud
-      storage, linked to your account ID. We use them only to read your timetable: not for training, advertising or
-      anything else.</li>
-    <li><strong>The basic scanner</strong> (PNG and JPG photos only) reads the file inside your own browser. The file
-      is not uploaded. To work, it downloads its program and text-recognition files from public file-delivery
-      services, the same way a website loads its code. Those services see your IP address, but not your
-      timetable.</li>
-  </ul>
-  <p>Either way, only the timetable you check and confirm is saved to your account.</p>
+  <p>When you import a timetable from a photo or PDF, the file is sent over an encrypted connection to BunkKro AI,
+  our timetable reader, which runs on servers rented from Modal Labs, a cloud provider. It is processed on servers in
+  the United States. Your login is checked with each request, so only you can see the reading.</p>
+  <p>The file, the page images made from it and the reading are kept so you can choose another page or section of
+  the same file, then deleted automatically within 25 hours of the last change. While they are kept, they are in
+  Modal's cloud storage, linked to your account ID. We use them only to read your timetable: not for training,
+  advertising or anything else. Only the timetable you check and confirm is saved to your account.</p>
 
   <h2 id="device">6. What stays on your device</h2>
   <p>Your browser stores your login session, a copy of your data so BunkKro opens quickly, and preferences such as
@@ -129,8 +119,8 @@
     <li><strong>Supabase</strong> stores your account and data, handles logins, and sends account emails.</li>
     <li><strong>Vercel</strong> hosts the website. Like any web host, it processes your IP address when you visit.</li>
     <li><strong>Google</strong>, only if you use Google sign-in.</li>
-    <li><strong>Modal Labs</strong> runs BunkKro AI, only if you choose it to read a timetable: it receives the file
-      you upload and your account ID (see <a href="#timetables">section 5</a>).</li>
+    <li><strong>Modal Labs</strong> runs BunkKro AI, the timetable reader: it receives the timetable files you upload
+      and your account ID (see <a href="#timetables">section 5</a>).</li>
   </ul>
   <p>We may disclose information if Indian law requires it, for example in response to a valid order from a court or
   government authority.</p>

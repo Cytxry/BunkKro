@@ -340,25 +340,7 @@
     });
   }
 
-  // Hosted reader: the file leaves this device, so the student is told once, before the first upload (privacy.html
-  // section 5), and can use the in-browser scanner instead. Remembered on this device.
-  const NOTICE_KEY = 'bk_ai_cloud_notice_v1';
-  async function cloudNotice() {
-    if (!HOSTED) return true;
-    try { if (localStorage.getItem(NOTICE_KEY)) return true; } catch (e) { /* storage blocked: ask each time */ }
-    if (typeof askDialog !== 'function') return true;
-    const ok = await askDialog({
-      title: 'Read it with BunkKro AI?',
-      message: 'Your file is sent to BunkKro AI, which runs on Modal’s cloud servers in the United States. It is ' +
-        'read there and deleted within a day. Only the timetable you check and confirm is saved to your account. ' +
-        'The basic scanner reads photos inside your browser instead, but it gets far fewer timetables right.',
-      ok: 'Use BunkKro AI', cancel: 'Use the basic scanner', cat: 'cat-detective' });
-    if (ok) { try { localStorage.setItem(NOTICE_KEY, new Date().toISOString()); } catch (e) { /* fine */ } }
-    return !!ok;
-  }
-
   async function read(file, subjects, onPhase) {
-    if (!(await cloudNotice())) throw new Error('you chose the basic scanner (it reads PNG and JPG photos)');
     onPhase && onPhase('prep', 5, 'Opening your file 📄');
     const pages = await pickPages(file);
     if (pages === null) throw cancelled('No page chosen');
