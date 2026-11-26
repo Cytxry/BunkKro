@@ -99,6 +99,8 @@ async function initAuth() {
     // Supabase also fires this on token refresh and when the tab regains
     // focus; showApp() only reloads data when the signed-in user changes.
     supabaseClient.auth.onAuthStateChange((event, session) => {
+      // back from Google: Supabase empties the #access_token=… part but leaves a bare '#' in the address
+      if (location.href.endsWith('#')) history.replaceState(null, '', location.pathname + location.search);
       if (event === 'PASSWORD_RECOVERY') setTimeout(() => offerNewPassword(), 600);
       if (session) {
         currentUser = session.user;
