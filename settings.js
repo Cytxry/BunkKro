@@ -199,7 +199,7 @@ async function downloadMyData() {
   const btn = document.getElementById('set-export');
   if (btn) btn.disabled = true;
   const tables = ['subjects', 'timetables', 'timetable_entries', 'daily_period_logs', 'tracker_logs', 'timetable_exceptions',
-                  'timetable_imports', 'timetable_feedback'];
+                  'timetable_imports', 'timetable_feedback', 'Subjects_backup'];
   const out = { exported_at: new Date().toISOString(), account: { id: currentUser.id, email: currentUser.email,
     created_at: currentUser.created_at, settings: currentUser.user_metadata || {} } };
   const failed = [];

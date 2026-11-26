@@ -1,6 +1,8 @@
 // Supabase Edge Function: delete-account. Deletes the CALLER's data and then their login.
 //
-// Deploy (owner, once):  supabase functions deploy delete-account --project-ref mvlyeygitnnuksuxmcsy
+// Deploy (owner, once):  supabase functions deploy delete-account --project-ref mvlyeygitnnuksuxmcsy --no-verify-jwt
+// (the project signs logins with ES256 keys, which the gateway's legacy JWT check rejects; the caller's token is
+// verified below instead, with auth.getUser, which works with every signing key)
 // The service-role key is provided to the function by Supabase itself (SUPABASE_SERVICE_ROLE_KEY): it never leaves
 // the server and is never in the website.
 //
@@ -16,7 +18,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 const ORIGINS = new Set(["https://bunkkro.vercel.app", "http://localhost:5520", "http://localhost:5530",
   "http://127.0.0.1:5520", "http://localhost:5500", "http://127.0.0.1:5500"]);
 const TABLES = ["timetable_feedback", "timetable_imports", "daily_period_logs", "tracker_logs",
-  "timetable_exceptions", "timetable_entries", "timetables", "subjects"];
+  "timetable_exceptions", "timetable_entries", "timetables", "subjects", "Subjects_backup"];
 
 function cors(origin: string | null): Record<string, string> {
   const ok = origin && (ORIGINS.has(origin) || /^https:\/\/bunkkro-[a-z0-9-]+\.vercel\.app$/.test(origin));

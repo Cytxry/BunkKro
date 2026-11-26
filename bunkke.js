@@ -687,8 +687,9 @@ async function deleteAllMyData() {
     ok: 'Delete everything', danger: true, cat: 'cat-worried', input: { label: 'Type DELETE', placeholder: 'DELETE' } });
   if (typeof ok !== 'string' || ok.trim() !== 'DELETE') { if (ok) toast('Nothing deleted: type DELETE to confirm'); return; }
   const uid = currentUser.id;
+  // Subjects_backup: an old copy of the subjects table that still holds some students' rows; theirs go too
   const tables = ['timetable_feedback', 'timetable_imports', 'daily_period_logs', 'tracker_logs', 'timetable_exceptions',
-                  'timetable_entries', 'timetables', 'subjects'];
+                  'timetable_entries', 'timetables', 'subjects', 'Subjects_backup'];
   const failed = [];
   for (const t of tables) {
     const { error } = await supabaseClient.from(t).delete().eq('user_id', uid);

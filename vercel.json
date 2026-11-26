@@ -5,7 +5,11 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://lh3.googleusercontent.com; connect-src 'self' https://mvlyeygitnnuksuxmcsy.supabase.co wss://mvlyeygitnnuksuxmcsy.supabase.co https://cdn.jsdelivr.net https://tessdata.projectnaptha.com data: blob: http://127.0.0.1:8765 http://localhost:8765; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://lh3.googleusercontent.com; connect-src 'self' https://mvlyeygitnnuksuxmcsy.supabase.co wss://mvlyeygitnnuksuxmcsy.supabase.co https://cdn.jsdelivr.net https://tessdata.projectnaptha.com data: blob: http://127.0.0.1:8765 http://localhost:8765; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
         },
         {
           "key": "X-Content-Type-Options",

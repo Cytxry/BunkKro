@@ -5,14 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google-site-verification" content="Ylj4ZEzMzvJr5QHzrJykHBRpF_MoIkcetgFTRNO_b64" />
 <meta name="theme-color" content="#F6F5F0">
+<meta name="description" content="BunkKro is a free attendance tracker for college students: mark your classes, and it works out how many you can still skip without falling below your target.">
+<meta property="og:title" content="BunkKro · Can I bunk today?">
+<meta property="og:description" content="A free attendance tracker for college students. Mark your classes; BunkKro works out how many you can still skip.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://bunkkro.vercel.app/">
+<link rel="canonical" href="https://bunkkro.vercel.app/">
 <script src="theme-init.js?v=20261127"></script>
 <title>BunkKro — Can I bunk today?</title>
 <link rel="icon" type="image/png" href="/favicon.jpg">
 <link rel="icon" type="image/png" href="/favicon2.jpg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="bunkkkro.css?v=20261127d">
+<link rel="preload" href="assets/fonts/DMSans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="bunkkkro.css?v=20261127e">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
@@ -209,7 +213,9 @@
         </section>
       </div>
     </div>
+    <p class="est-disclaimer">BunkKro's numbers are estimates from what you enter. Your college's records are what count, so check them before you rely on a bunk.</p>
   </div>
+
 
   <!-- ░░ SUBJECT PAGE ░░ -->
   <div class="page" id="page-subject">
@@ -1036,7 +1042,7 @@
         <span id="auth-toggle-text">Don't have an account?</span>
         <button class="auth-link" id="auth-toggle-btn" data-on-click="toggleAuthMode()">Sign Up</button>
       </div>
-      <p class="auth-legal">By continuing, you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of use</a> and the <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a>.</p>
+      <p class="auth-legal">By continuing, you agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of use</a> and the <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a>. <a href="about.html" target="_blank" rel="noopener">What is BunkKro?</a></p>
     </div>
   </div>
 </div>
@@ -1200,8 +1206,8 @@
 <script src="clock.js?v=20261108"></script>
 <script src="ai-config.js?v=20261109"></script>
 <script src="ai-bridge.js?v=20261126b"></script>
-<script src="bunkke.js?v=20261127"></script>
-<script src="settings.js?v=20261127c"></script>
+<script src="bunkke.js?v=20261127e"></script>
+<script src="settings.js?v=20261127e"></script>
 <script src="ai-confirm.js?v=20261127"></script>
 </body>
 </html>

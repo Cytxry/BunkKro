@@ -7,10 +7,8 @@
 <meta name="description" content="What BunkKro stores, why, who helps run it, and your rights over your data.">
 <link rel="icon" href="favicon.jpg">
 <script src="theme-init.js?v=20261127"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="legal.css?v=20261127">
+<link rel="preload" href="assets/fonts/DMSans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="legal.css?v=20261127b">
 </head>
 <body>
 <main class="legal">
@@ -25,24 +23,30 @@
 
   <h2>Who we are</h2>
   <p>BunkKro is run by [your name or company], [city], India. For anything about your data, write to
-  [contact email]. That address is also our grievance contact; we reply within 7 days and resolve complaints within
-  30 days.</p>
+  [contact email]. That address is also our grievance contact: [name of the person who handles it]. We reply to
+  privacy requests and complaints within [number] days (the law allows at most 90).</p>
 
   <h2>What we store</h2>
   <ul>
     <li><strong>Your login.</strong> Your email address and password (kept only as a secure hash by our login
-      provider). If you log in with Google, we receive your name, email address and profile photo from Google.</li>
+      provider). If you log in with Google, we receive your name, email address and profile photo from Google, and
+      nothing else from your Google account. We use them only to log you in and show your name and photo in BunkKro.
+      If you change your name in Settings, we keep that name.</li>
     <li><strong>What you put in.</strong> Your subjects, attendance numbers and marks, timetable, holidays, semester
       dates, and settings such as your attendance target.</li>
     <li><strong>Timetable imports.</strong> When you import a timetable, we keep a record of the import: how many
       classes were read, how many you fixed, and when you confirmed it. The timetable photo or PDF itself is not
-      uploaded to us: the built-in scanner reads it inside your browser, and BunkKro AI reads it on your own
-      computer.</li>
+      uploaded to us: the built-in scanner reads it inside your browser. [Update this when BunkKro AI runs on a
+      server: say that the file is sent to that server to be read, where the server is, and that it is deleted
+      after [how long].]</li>
     <li><strong>Fixes you choose to share.</strong> Only if you turn on “Help the AI learn from my fixes”, we keep the
       corrections you made to a read timetable, to improve the reader. Never your attendance. Turning it off deletes
       them.</li>
+    <li><strong>The Pro list.</strong> If you tap “Tell me when Pro launches”, we note that and the date on your
+      account, to tell you once when Pro is ready.</li>
     <li><strong>On your device.</strong> Your browser keeps a copy of your data and your preferences (like the
-      theme) so BunkKro opens fast and works offline. We use no advertising or tracking cookies and no analytics.</li>
+      theme) so BunkKro opens fast, and your login so you stay logged in. These are needed for BunkKro to work. We
+      use no advertising or tracking cookies and no analytics.</li>
   </ul>
 
   <h2>Why we use it</h2>
@@ -52,11 +56,14 @@
 
   <h2>Who helps us run BunkKro</h2>
   <ul>
-    <li><strong>Supabase</strong>: our database and login service, where your account and data are stored.</li>
+    <li><strong>Supabase</strong>: our database and login service. Your account and data are stored in its Sydney,
+      Australia region.</li>
     <li><strong>Vercel</strong>: hosts the website.</li>
-    <li><strong>Google</strong>: only if you choose “Continue with Google”, to log you in. The site's font is also
-      loaded from Google Fonts, which sees your IP address.</li>
-    <li><strong>jsDelivr</strong>: delivers some of the website's code libraries.</li>
+    <li><strong>Google</strong>: only if you choose “Continue with Google”, to log you in.</li>
+    <li><strong>jsDelivr</strong> and <strong>Project Naptha</strong>: deliver code libraries and, when you use the
+      built-in scanner, its text-recognition files. Like any website, they see your IP address when your browser
+      downloads them.</li>
+    <li><strong>[Your email provider]</strong>: sends login, password-reset and confirmation emails.</li>
     <li>When Pro launches, a payment provider will handle payments. We will never see or store your card or UPI
       details.</li>
   </ul>
@@ -68,7 +75,8 @@
 
   <h2>How long we keep it</h2>
   <p>As long as you have an account. When you delete your data or your account in Settings, it is deleted from our
-  database straight away. Copies in our providers' backups are removed as those backups expire, within [30] days.</p>
+  database straight away. [If your Supabase plan keeps backups: copies in those backups are removed as they expire,
+  within [number] days.]</p>
 
   <h2>Your rights</h2>
   <ul>
