@@ -85,6 +85,7 @@
 
     const show = () => {
       const s = steps[i];
+      if (s.before) s.before();                                  // e.g. open the page this step talks about
       const el = s.target ? s.target() : null;
       if (el) reveal(el);
       card.innerHTML = `<img class="bg-cat" src="assets/${esc(s.cat || 'cat-fairy-wave')}.svg" alt="">
@@ -203,5 +204,43 @@
     tour([semStep()], runAfterTour);
   }
 
-  window.BunkGuide = { tour, afterImport, nudge, close };
+  // "Show me around" (Settings → Help & legal): Fairy visits every page and says in a line or two what it's for
+  function appTour() {
+    const go = page => () => { if (typeof goPage === 'function') goPage(page); };
+    const $ = id => () => document.getElementById(id);
+    const sideClose = () => {
+      const side = document.getElementById('sidebar');
+      if (side && side.classList.contains('open') && typeof toggleSidebar === 'function') toggleSidebar();
+    };
+    const steps = [
+      { before: go('home'), target: null, cat: 'cat-fairy-wave', title: "Hi, I'm Fairy 🧚",
+        text: "Let me show you around BunkKro. It takes about a minute, and you can skip any time.", ok: "Let's go" },
+      { before: go('home'), target: $('stats-grid'), cat: 'cat-fairy-happy', title: 'Home: your attendance at a glance',
+        text: 'Your overall percentage, how many classes you can still skip, and which subjects need you in class.' },
+      { before: go('home'), target: $('subject-cards'), cat: 'cat-fairy-peek', title: 'Your subjects',
+        text: "Every subject with its percentage. Tap one to see its numbers and how many classes you can bunk." },
+      { before: () => { go('home')(); }, target: $('home-today'), cat: 'cat-fairy-wave', title: "Today's classes",
+        text: "What's on today, from your timetable. Tap “Mark attendance” to tick them off." },
+      { before: go('tracker'), target: $('nav-tracker'), cat: 'cat-fairy-happy', title: 'Daily Classes',
+        text: 'Mark each class Present, Absent or Cancelled, for today or any day you missed. Your percentages update straight away.' },
+      { before: () => { go('tracker')(); sideClose(); }, target: () => document.querySelector('.tracker-actions-row'), cat: 'cat-fairy-confused', title: 'Days that are different',
+        text: 'Holidays, an extra class, or “Saturday follows Monday”: set them here so the counts stay right.' },
+      { before: go('timetable'), target: $('nav-timetable'), cat: 'cat-fairy-peek', title: 'Smart Timetable',
+        text: 'Upload a photo or PDF of your timetable and BunkKro reads it for you, or build it by hand. You check it before it’s saved.' },
+      { before: go('home'), target: () => document.querySelector('.nav-add'), cat: 'cat-fairy-wave', title: 'Add a subject',
+        text: 'Subjects come from your timetable, or add one yourself. Already had classes? Put in how many you attended.' },
+      { before: () => { go('home')(); }, target: () => document.querySelector('.target-row'), cat: 'cat-fairy-confused', title: 'Your target and your college’s rules',
+        text: 'The percentage you need, how your college rounds it, and your semester dates. They decide every bunk count.' },
+      { before: () => { go('home')(); sideClose(); }, target: $('streak-card'), cat: 'cat-fairy-happy', title: 'Your streak 🔥',
+        text: 'Days in a row you marked your classes. Tap it to see your calendar.' },
+      { before: () => { go('home')(); sideClose(); }, target: $('profile-btn'), cat: 'cat-fairy-peek', title: 'Your account',
+        text: 'Settings, plans, and logging out live here. Settings also has your data: download it or delete it.' },
+      { before: go('home'), target: null, cat: 'cat-fairy-happy', title: "That's everything! 🎉",
+        text: 'Mark your classes as they happen and BunkKro does the bunk maths. Bunk wisely 😼', ok: 'Done',
+        onShow: c => { if (window.BunkFx) setTimeout(() => BunkFx.confetti(c.querySelector('.bg-cat'), 22), 320); } }
+    ];
+    tour(steps.filter(s => !s.target || s.target()), () => { if (typeof goPage === 'function') goPage('home'); });
+  }
+
+  window.BunkGuide = { tour, afterImport, nudge, close, appTour };
 })();

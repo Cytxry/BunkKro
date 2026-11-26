@@ -101,6 +101,8 @@ function pwStep(n) {
   document.getElementById('pw-step1').hidden = n !== 1;
   document.getElementById('pw-step2').hidden = n !== 2;
   document.getElementById('pw-ok').textContent = n === 1 ? 'Continue' : 'Change password';
+  const code = document.getElementById('pw-code');
+  if (n === 2) { code.value = ''; setTimeout(() => { if (/\D/.test(code.value)) code.value = ''; }, 300); }
   setTimeout(() => document.getElementById(n === 1 ? 'pw-current' : 'pw-code').focus(), 30);
 }
 function changePassword() {
@@ -164,6 +166,11 @@ async function submitPasswordChange(event) {
     }
   } finally { ok.disabled = false; }
 }
+document.getElementById('pw-code')?.addEventListener('input', e => {
+  const v = e.target.value, d = v.replace(/\D/g, '').slice(0, 10);
+  // a typed or pasted code keeps its digits ('123 456' -> '123456'); text the browser autofilled (a username) is cleared
+  if (v !== d) e.target.value = (e.inputType === 'insertText' || /^[\d\s-]+$/.test(v)) ? d : '';
+});
 document.getElementById('pw-overlay')?.addEventListener('click', e => { if (e.target === e.currentTarget) closePasswordDialog(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('pw-overlay')?.classList.contains('show')) closePasswordDialog();
@@ -213,8 +220,8 @@ async function downloadMyData() {
 }
 
 function startTour() {
-  goPage('home');
-  setTimeout(() => window.BunkGuide?.tour?.(), 300);
+  if (window.BunkGuide?.appTour) window.BunkGuide.appTour();
+  else toast("The tour couldn't start. Reload the page and try again.", 'err');
 }
 
 // ── pricing page ────────────────────────────────────────────────────────────────────────────────────────────────

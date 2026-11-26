@@ -1730,3 +1730,8 @@ input.auto-sum{background:var(--surface2) !important;border-style:dashed !import
 #pw-error{margin:4px 0 0}
 #pw-error[hidden]{display:none}
 #pw-resend{margin:-4px 0 6px}
+/* Fairy hovers gently beside her speech bubble (the separate translate property composes with the pop-in) */
+.bg-cat{animation:fairyHover 3.2s ease-in-out infinite}
+.bg-card.bg-pop .bg-cat{animation:catPop .45s cubic-bezier(.34,1.56,.64,1),fairyHover 3.2s ease-in-out .45s infinite}
+@keyframes fairyHover{0%,100%{translate:0 0}50%{translate:0 -7px}}
+@media (prefers-reduced-motion:reduce){.bg-cat,.bg-card.bg-pop .bg-cat{animation:none}}

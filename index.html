@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="bunkkkro.css?v=20261127b">
+<link rel="stylesheet" href="bunkkkro.css?v=20261127d">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
@@ -812,7 +812,7 @@
       </div>
       <div id="pw-step2" hidden>
         <p class="sub" id="pw-sent">We emailed you a code. Type it here to confirm the change.</p>
-        <div class="mf" style="text-align:left"><label for="pw-code">Code from the email</label><input type="text" id="pw-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="pw-code"></div>
+        <div class="mf" style="text-align:left"><label for="pw-code">Code from the email</label><input type="text" id="pw-code" name="one-time-code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" autocorrect="off" spellcheck="false" maxlength="10" class="pw-code" placeholder="123456" data-lpignore="true" data-1p-ignore data-bwignore></div>
         <button type="button" class="link-btn" id="pw-resend" data-on-click="resendPasswordCode()">Send the code again</button>
       </div>
       <div class="auth-error" id="pw-error" role="alert" hidden></div>
@@ -1196,12 +1196,12 @@
 <script src="day-order.js?v=20261109"></script>
 <script src="timetable-scanner.js?v=20261109"></script>
 <script src="fx.js?v=20261108"></script>
-<script src="guide.js?v=20261108"></script>
+<script src="guide.js?v=20261127c"></script>
 <script src="clock.js?v=20261108"></script>
 <script src="ai-config.js?v=20261109"></script>
 <script src="ai-bridge.js?v=20261126b"></script>
 <script src="bunkke.js?v=20261127"></script>
-<script src="settings.js?v=20261127b"></script>
+<script src="settings.js?v=20261127c"></script>
 <script src="ai-confirm.js?v=20261127"></script>
 </body>
 </html>
