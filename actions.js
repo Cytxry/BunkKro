@@ -32,7 +32,7 @@
     'openHolidayPlanner', 'openReplaceDialog', 'openSafeBunks', 'openSemesterDialog', 'openSharePack',
     'openStreakCalendar', 'openTodayTracker', 'openTrackerOn', 'removeMakeup', 'removePlannedHoliday',
     'renameSlotSubject', 'resetSim', 'resetToToday', 'saveCellInspectorChanges', 'saveSemesterDialog', 'saveSlotModal',
-    'saveSubject', 'selAddMode', 'selMode', 'setEditMode', 'setUpto', 'shiftCalMonth', 'showReschedulePick',
+    'saveSubject', 'selAddMode', 'selMode', 'setEditMode', 'setUpto', 'shiftCalMonth', 'showReschedulePick', 'signInWithGoogle',
     'startChipEdit', 'switchShareTab', 'switchTimetableTab', 'toggleAuthMode', 'toggleDateHoliday',
     'toggleProfileMenu', 'toggleSidebar', 'toggleSundayDisplay', 'toggleTheme', 'updateGlobalTarget',
     'updateRoundMode', 'updateSim',

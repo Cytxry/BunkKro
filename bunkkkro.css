@@ -1120,6 +1120,22 @@ body.tt-dragging .tt-slot-card.is-swap-target{transform:scale(1.03)}
 .auth-toggle{margin-top:18px;font-size:.875rem;color:var(--text2)}
 .auth-link{background:transparent;border:none;color:var(--primary);font-weight:700;font-size:.875rem;text-decoration:underline;padding:0;margin-left:4px}
 .auth-link:hover{color:var(--primary-deep)}
+/* Continue with Google: same height, radius and border as the fields below it, so it reads as part of the form */
+.auth-google{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+  background:var(--surface);color:var(--text);border:1.5px solid var(--border2);border-radius:var(--r-sm);
+  padding:11px 14px;font-weight:600;font-size:.9375rem;line-height:1.2;cursor:pointer;
+  transition:border-color .15s,background .15s,box-shadow .15s
+}
+.auth-google:hover{border-color:var(--primary-soft);background:var(--surface2)}
+.auth-google:focus-visible{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint)}
+.auth-google:active{transform:translateY(1px)}
+.auth-google:disabled{cursor:progress;transform:none}
+.auth-google-g{width:20px;height:20px;flex-shrink:0}
+.auth-google.busy .auth-google-g{animation:spin 1.1s linear infinite}
+@media (prefers-reduced-motion: reduce){.auth-google.busy .auth-google-g{animation:none}}
+.auth-or{display:flex;align-items:center;gap:12px;margin:18px 0 16px;color:var(--muted);font-size:.8125rem;font-weight:600}
+.auth-or::before,.auth-or::after{content:'';flex:1;height:1px;background:var(--border2)}
 .auth-forgot-row{text-align:right;margin:-6px 0 14px}
 .auth-forgot{font-size:.8rem;font-weight:600;margin-left:0}
 .auth-error,.auth-success{font-size:.875rem;padding:10px 12px;border-radius:var(--r-sm);margin-bottom:16px;text-align:left;border:1px solid}

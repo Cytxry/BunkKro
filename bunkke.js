@@ -119,6 +119,7 @@ async function initAuth() {
       showApp();
     } else {
       showAuthModal();
+      showAuthErrorFromUrl();
     }
 
   } catch (error) {
@@ -614,6 +615,50 @@ async function forgotPassword() {
   } finally {
     setTimeout(() => { btn.disabled = false; }, 20000);   // Supabase rate-limits these anyway
   }
+}
+
+// "Continue with Google": Supabase sends the student to Google and back here with a session in the URL, which
+// detectSessionInUrl picks up (then onAuthStateChange shows the app; the extension reads the session as usual).
+// Works for login and sign-up alike. If Google sign-in isn't switched on in Supabase yet, that is said here,
+// instead of sending the student to Supabase's raw error page.
+async function googleSignInEnabled() {
+  try {
+    const r = await fetch(SUPABASE_URL + '/auth/v1/settings', { headers: { apikey: SUPABASE_ANON_KEY } });
+    if (!r.ok) return true;                       // can't tell: let Supabase answer
+    return !!(await r.json())?.external?.google;
+  } catch (e) { return true; }
+}
+
+async function signInWithGoogle() {
+  const btn = document.getElementById('auth-google-btn');
+  const label = document.getElementById('auth-google-label');
+  hideAuthMessages();
+  btn.disabled = true; btn.classList.add('busy'); label.textContent = 'Opening Google…';
+  const reset = () => { btn.disabled = false; btn.classList.remove('busy'); label.textContent = 'Continue with Google'; };
+  if (!(await googleSignInEnabled())) {
+    reset();
+    showAuthError("Google sign-in isn't switched on yet. Use your email for now.");
+    return;
+  }
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin + window.location.pathname, queryParams: { prompt: 'select_account' } }
+  });
+  if (error) { reset(); showAuthError("Couldn't open Google sign-in: " + error.message); }
+  // on success the browser is already leaving for Google; the button stays in its waiting state
+}
+
+// Back from Google (or a reset/confirm link) with an error in the address: say it on the login card, then
+// clean the address so a reload doesn't show it again.
+function showAuthErrorFromUrl() {
+  const params = new URLSearchParams(window.location.hash.slice(1) + '&' + window.location.search.slice(1));
+  const desc = params.get('error_description') || params.get('error');
+  if (!desc) return;
+  const text = desc.replace(/\+/g, ' ');
+  showAuthError(/access_denied|cancel/i.test(params.get('error') || '') && !/expired/i.test(text)
+    ? 'Google sign-in was cancelled. Try again, or use your email.'
+    : 'Sign-in didn’t finish: ' + text);
+  history.replaceState(null, '', window.location.pathname);
 }
 
 // The student opened a reset link: a session is already there; ask for the new password (6+ characters).
