@@ -1565,23 +1565,59 @@ function semEndInfo() {
 }
 function estimateTotalFrom(start, pw) { return Math.round(weeksSince(start) * (pw || 0)); }
 function estimateTotal(pw) { return estimateTotalFrom(semStart, pw); }
-// With known class days: count the real class days from the semester start up
-// to yesterday, skipping days marked as holidays.
-function estimateHeldByDays(start, counts) {
-  if (!start || !DATE_RE.test(start)) return { held: 0, holidays: 0 };
-  const [y, m, d] = start.split('-').map(Number);
-  const day = new Date(y, m - 1, d), today = getLocalDateString();
-  let held = 0, holidays = 0;
-  const cycle = dayOrderOn() ? BunkDayOrder.range(dayCycle, today, isHolidayDate) : null;
-  for (let i = 0; i < 400; i++, day.setDate(day.getDate() + 1)) {
-    const ds = getLocalDateString(day);
-    if (ds >= today) break;
-    const n = cycle ? (counts[cycle.get(ds) || 0] || 0) : (counts[day.getDay() || 7] || 0);
-    if (!n) continue;
-    if (dateExceptions[ds]?.type === 'holiday') { holidays += n; continue; }
-    held += n;
+// With known class days: the subject's classes that really took place from the semester start up to `upTo`
+// (default yesterday; never past the last day of classes). College holidays (Daily Classes or the Estimate form's
+// past-holiday calendar) and the subject's own cancelled classes don't count: see estimate.js.
+// -> { held, holidays, cancelled, scheduled }
+function estimateHeldByDays(start, counts, subjId = null, upTo = dayOffset(-1)) {
+  const none = { held: 0, holidays: 0, cancelled: 0, scheduled: 0 };
+  if (!start || !DATE_RE.test(start)) return none;
+  let end = upTo;
+  if (semEnd && DATE_RE.test(semEnd) && semEnd < end) end = semEnd;
+  if (dayOrderOn()) {                       // Day Order (parked): a holiday doesn't use up a Day
+    const cycle = BunkDayOrder.range(dayCycle, getLocalDateString(), isHolidayDate);
+    const out = { ...none };
+    for (const ds of BunkEstimate.dates(start, end)) {
+      const n = counts[cycle.get(ds) || 0] || 0;
+      if (!n) continue;
+      out.scheduled += n;
+      if (isHolidayDate(ds)) { out.holidays += n; continue; }
+      const c = Math.min(n, subjId ? cancelledClassesOn(subjId, ds) : 0);
+      out.cancelled += c; out.held += n - c;
+    }
+    return out;
   }
-  return { held, holidays };
+  return BunkEstimate.countHeld({ start, end, counts, isHoliday: isHolidayDate,
+    cancelledOn: ds => (subjId ? cancelledClassesOn(subjId, ds) : 0) });
+}
+// A subject's timetable classes marked "No class" on a date (makeups and extra classes are not timetable classes)
+function cancelledClassesOn(subjId, ds) {
+  const logs = dailyPeriodLogs[ds];
+  if (!logs) return 0;
+  return Object.entries(logs).filter(([k, v]) => v?.status === 'cancelled' && v.subjectId === subjId && !v.isExtra
+    && !k.startsWith('makeup_') && !k.startsWith('extra_')).length;
+}
+// The classes held inside a saved estimate: from the semester start to the day its numbers were counted up to
+function estimateHeldFor(s) {
+  return estimateHeldByDays(semStart, subjectDayCounts(s.id), s.id, countedUpTo[s.id]).held;
+}
+// Run a change to the calendar (holidays, cancellations, the first day of classes) and move every saved estimate
+// with it: the classes held change, the classes missed stay as entered. Exact subjects are never touched.
+// exclude: a subject whose numbers are being saved from its form right now (they're worked out fresh there).
+async function keepEstimatesInStep(change, exclude = null) {
+  const list = subjects.filter(s => s.mode === 'estimate' && s.id !== exclude && countedUpTo[s.id]
+    && dayTotal(subjectDayCounts(s.id)) > 0);
+  const before = new Map(list.map(s => [s.id, estimateHeldFor(s)]));
+  const result = await change();
+  const tooMany = [];
+  for (const s of list) {
+    const after = estimateHeldFor(s), b = before.get(s.id);
+    if (after === b) continue;
+    if (BunkEstimate.shift(s, b, after).missedTooHigh) tooMany.push(s.name);
+    await applySubjectDelta(s, after - b, after - b);
+  }
+  if (tooMany.length) toast(`${tooMany.join(', ')}: fewer classes held now than the classes you said you missed — check ${tooMany.length > 1 ? 'them' : 'it'}`, 'err');
+  return result;
 }
 function fmtShort(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -2517,7 +2553,7 @@ function checkSubjectForm(f, excludeId) {
   if (start > getLocalDateString()) return { error: "The semester start can't be in the future.", field: ids.semStart };
   if (!f.perWeek || bad(f.perWeek, 1, 30)) return { error: 'Pick the days this subject is on — the estimate counts its classes from them.', field: ids.perWeek };
   if (bad(f.missed, 0, 5000)) return { error: 'Classes missed must be a whole number (0 or more).', field: ids.missed };
-  const byDays = f.days && dayTotal(f.days) ? estimateHeldByDays(start, f.days) : null;
+  const byDays = f.days && dayTotal(f.days) ? estimateHeldByDays(start, f.days, excludeId) : null;
   const total = byDays ? byDays.held : estimateTotalFrom(start, f.perWeek), missed = f.missed ?? 0;
   if (missed > total) {
     return { error: `You've entered ${missed} missed, but only about ${total} class${total !== 1 ? 'es have' : ' has'} happened since ${fmtDate(start)}.`, field: ids.missed };
@@ -2528,14 +2564,15 @@ function checkSubjectForm(f, excludeId) {
   if (semTotal != null && semTotal < total) {
     return { error: `Total classes this semester (${semTotal}) can't be fewer than the ~${total} already held.`, field: ids.semTotal };
   }
-  return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: semTotal ?? null, mode: 'estimate', semStart: start, days: byDays ? f.days : null, holidays: byDays?.holidays || 0 } };
+  return { values: { name, total, present: total - missed, perWeek: f.perWeek, target, semTotal: semTotal ?? null, mode: 'estimate', semStart: start, days: byDays ? f.days : null, holidays: byDays?.holidays || 0, cancelled: byDays?.cancelled || 0 } };
 }
 
 // One friendly line describing what will be saved.
 function subjectPreviewHTML(v) {
   let html = '';
   if (v.mode === 'estimate' && v.days) {
-    html += `Since ${escapeHTML(fmtDate(v.semStart))}, ${escapeHTML(dayList(v.days))} classes: <strong>${v.total}</strong> held${v.holidays ? ` (${v.holidays} skipped for holidays)` : ''}. `;
+    const off = [v.holidays && `${v.holidays} on holidays`, v.cancelled && `${v.cancelled} cancelled`].filter(Boolean).join(', ');
+    html += `Since ${escapeHTML(fmtDate(v.semStart))}, ${escapeHTML(dayList(v.days))} classes: <strong>${v.total}</strong> held${off ? ` (not counted: ${off})` : ''}. `;
   } else if (v.mode === 'estimate') {
     const w = weeksSince(v.semStart);
     html += `Since ${escapeHTML(fmtDate(v.semStart))}: ${w} week${w !== 1 ? 's' : ''} × ${v.perWeek}/week ≈ <strong>${v.total}</strong> class${v.total !== 1 ? 'es' : ''} held. `;
@@ -2558,6 +2595,12 @@ function subjectPreviewHTML(v) {
     html += `<br>${nWord(b.left, 'class', 'classes')} left this semester: ` + (b.left === 0 ? 'that was the last one.'
       : b.reachable ? `skip up to <strong>${b.semBunks}</strong> of them and you still finish at ${t}%.`
         : `even attending all of them, you'd finish at <strong>${b.finishAll}%</strong>.`);
+  }
+  // Estimate: say which semester total is used, so a holiday is never taken off twice
+  if (v.mode === 'estimate' && v.days) {
+    html += '<br><span class="prev-note">' + (v.semTotal
+      ? `${v.present} attended + ${v.total - v.present} missed + ${v.semTotal - v.total} left = the ${v.semTotal} you typed. Holidays aren't taken off your total again.`
+      : 'Classes left are counted from its days up to your last day of classes, skipping holidays.') + '</span>';
   }
   return html;
 }
@@ -2785,11 +2828,12 @@ function semesterPreview() {
   }
   box.textContent = bits.join(' · ');
 }
-function saveSemesterDialog() {
+async function saveSemesterDialog() {
   const start = document.getElementById('sem-start').value, end = document.getElementById('sem-end').value;
   const err = checkSemester(start, end);
   if (err) { semesterPreview(); return; }
-  semStart = start; semEnd = end;
+  // estimated subjects count their classes from the first day (and up to the last): they move with the dates
+  await keepEstimatesInStep(() => { semStart = start; semEnd = end; });
   if (currPage === 'settings') setTimeout(renderSettings, 0);
   semWeeks = parseInt(document.getElementById('sem-weeks').value) || semWeeks;
   savePrefs();
@@ -2884,7 +2928,7 @@ function outlook(s, tgt, skip = 0) {
 function statTiles(items) {
   const xs = items.filter(Boolean);
   return xs.length ? '<div class="mini-stats">' + xs.map(([cls, icon, label, value]) =>
-    `<div class="chip mini ${cls}"><span class="chip-lbl">${ic(icon, 'ic-sm')} ${label}</span><span class="cv">${value}</span></div>`).join('') + '</div>' : '';
+    `<div class="chip mini ${cls}"><span class="chip-lbl">${ic(icon, 'ic-sm')}<span>${label}</span></span><span class="cv">${value}</span></div>`).join('') + '</div>' : '';
 }
 function needTile(o, tgt, label) {
   if (o.lost) return ['pink', 'target', `Reach ${tgt}%`, 'Not this sem'];
@@ -2969,6 +3013,7 @@ function fillEditForm(s) {
   if (err) err.hidden = true;
   setUpto('edit-upto', 'today');
   setEditMode(editMode);
+  renderPastRow('edit');
 }
 
 function onEditInput(e) {
@@ -2981,6 +3026,7 @@ function onEditInput(e) {
   }
   syncSemPairs(id);
   showClassesLeft();
+  if (id === 'inp-semstart') renderPastRow('edit');
   e.target.classList.remove('invalid');
   e.target.removeAttribute('aria-invalid');
   updateEditPreview();
@@ -3084,7 +3130,7 @@ async function saveSubject() {
   });
 
   if (success) {
-    if (v.mode === 'estimate' && v.semStart !== semStart) { semStart = v.semStart; savePrefs(); }
+    if (v.mode === 'estimate' && v.semStart !== semStart) await keepEstimatesInStep(() => { semStart = v.semStart; savePrefs(); }, s.id);
     // New numbers typed in: they cover classes up to today (or yesterday)
     const numbersChanged = v.total !== before.total || v.present !== before.present || v.mode !== before.mode;
     if (v.total === 0) { if (countedUpTo[s.id]) setCountedUpTo(s.id, null); }
@@ -3516,6 +3562,7 @@ function openAddModal() {
         document.getElementById('as-total').value = Number.isInteger(p) || Number.isInteger(a) ? (p || 0) + (a || 0) : '';
       }
       syncSemPairs(e.target.id);
+      if (e.target.id === 'as-semstart') renderPastRow('add');
       const sem = numField('as-semtotal-x'), held = numField('as-total') || 0, left = document.getElementById('as-left');
       if (left) {
         left.hidden = !held && !Number.isInteger(sem);
@@ -3535,6 +3582,7 @@ function openAddModal() {
   }
   // Without a semester start date, official numbers are the easier start
   selAddMode(semStart ? 'estimate' : 'exact');
+  renderPastRow('add');
   setTimeout(() => document.getElementById('as-name')?.focus(), 50);
 }
 function closeAddModal() { document.getElementById('add-overlay').classList.remove('show'); }
@@ -3594,7 +3642,7 @@ async function confirmAdd() {
       target: v.target, semTotal: v.semTotal, mode: v.mode
     });
     if (success) {
-      if (v.mode === 'estimate' && v.semStart !== semStart) { semStart = v.semStart; savePrefs(); }
+      if (v.mode === 'estimate' && v.semStart !== semStart) await keepEstimatesInStep(() => { semStart = v.semStart; savePrefs(); });
       const created = subjects[subjects.length - 1];
       const plan = planSubjectDays(created.id, created.name, pickerDays('as-days'));
       await applySubjectDays(created.id, created.name, plan);
@@ -6299,8 +6347,7 @@ function resetToToday() {
 async function toggleDateHoliday() {
   const date = selectedTrackerDate;
   if (dateExceptions[date] && dateExceptions[date].type === 'holiday') {
-    delete dateExceptions[date];
-    saveDateExceptionToDB(date, null);
+    await keepEstimatesInStep(() => { delete dateExceptions[date]; saveDateExceptionToDB(date, null); });
     toast('Holiday removed for ' + date);
   } else {
     // A holiday doesn't count, so marks already made that day must be undone,
@@ -6313,10 +6360,14 @@ async function toggleDateHoliday() {
     if (plan.follows) parts.push('the timetable swap');
     if (parts.length) {
       if (!(await askDialog({ title: 'Make it a holiday?', message: `This day has ${parts.join(' and ')}. A holiday doesn't count, so ${parts.length > 1 || marked.length + plan.makeups.length > 1 ? 'they' : 'it'} will be cleared and your totals adjusted.`, ok: 'Mark as holiday', cat: 'cat-beach' }))) return;
-      if (!(await clearMarksForDate(date))) { toast('Could not clear marks for this day', 'err'); renderTracker(); return; }
     }
-    dateExceptions[date] = { type: 'holiday', note: 'College Holiday' };
-    saveDateExceptionToDB(date, 'holiday');
+    const ok = await keepEstimatesInStep(async () => {
+      if (parts.length && !(await clearMarksForDate(date))) return false;
+      dateExceptions[date] = { type: 'holiday', note: 'College Holiday' };
+      saveDateExceptionToDB(date, 'holiday');
+      return true;
+    });
+    if (!ok) { toast('Could not clear marks for this day', 'err'); renderTracker(); return; }
     toast('Marked as Holiday 🏖️');
   }
   renderTracker();
@@ -6518,6 +6569,278 @@ function removePlannedHoliday(i) {
   renderTracker();
   if (currPage === 'subject' && currSubjId) renderSubject(currSubjId, true);
   toast('Holiday removed');
+}
+
+// ══════════════════════════════════════════════════════
+//  PAST HOLIDAYS & CANCELLATIONS (Estimate mode) — someone who starts using BunkKro weeks into the semester picks
+//  the days classes didn't happen, so the estimate stops counting them as held. Optional.
+//    college  the college was shut: the same holidays Daily Classes uses (timetable_exceptions), every subject
+//    subject  only this subject's classes were called off: "No class" marks on Daily Classes (daily_period_logs)
+//  Saving moves every saved estimate with the calendar (keepEstimatesInStep); exact numbers are never touched.
+// ══════════════════════════════════════════════════════
+let pastCal = null;   // { form, subjId, kind, start, end, view, sel: {college, subject}, orig: {...}, drag }
+function pastFormStart(form) { return textField(form === 'edit' ? 'inp-semstart' : 'as-semstart'); }
+function pastFormDays(form) { return pickerDays(form === 'edit' ? 'edit-days' : 'as-days'); }
+// the days that already count as past holidays / this subject's cancellations, from the semester start to yesterday
+function pastSaved(kind, subjId, start, end) {
+  return new Set(BunkEstimate.dates(start, end).filter(ds => kind === 'college' ? isHolidayDate(ds)
+    : !isHolidayDate(ds) && cancelledClassesOn(subjId, ds) > 0));
+}
+function pastWindow(start) {
+  let end = dayOffset(-1);
+  if (semEnd && DATE_RE.test(semEnd) && semEnd < end) end = semEnd;
+  return start && DATE_RE.test(start) && start <= end ? end : null;
+}
+// The small "Past holidays" line in both Estimate forms: how many days are already counted out
+function renderPastRow(form) {
+  const out = document.getElementById(form === 'edit' ? 'edit-past-count' : 'as-past-count');
+  if (!out) return;
+  const start = pastFormStart(form), end = pastWindow(start);
+  const subjId = form === 'edit' ? currSubjId : null;
+  const n = end ? pastSaved('college', null, start, end).size : 0;
+  const c = end && subjId ? pastSaved('subject', subjId, start, end).size : 0;
+  out.textContent = !end ? 'Pick dates' : n || c ? [n && nWord(n, 'holiday', 'holidays'), c && `${c} cancelled`].filter(Boolean).join(' · ') : 'Pick dates';
+}
+function openPastDays(form) {
+  const start = pastFormStart(form), end = pastWindow(start);
+  if (!end) {
+    const id = form === 'edit' ? 'inp-semstart' : 'as-semstart';
+    showFormProblem(form === 'edit' ? 'edit-preview' : 'as-preview',
+      { error: start ? 'The semester started today: there are no past days to pick yet.' : 'Pick the semester start first: past holidays are the days since then.', field: id });
+    return;
+  }
+  const subjId = form === 'edit' ? currSubjId : null;
+  const s = subjects.find(x => x.id === subjId);
+  const orig = { college: pastSaved('college', null, start, end), subject: subjId ? pastSaved('subject', subjId, start, end) : new Set() };
+  pastCal = { form, subjId, name: s?.name || textField('as-name'), kind: 'college', start, end,
+    view: { y: +end.slice(0, 4), m: +end.slice(5, 7) - 1 },
+    sel: { college: new Set(orig.college), subject: new Set(orig.subject) }, orig, drag: null };
+  const subjBtn = document.getElementById('past-kind-subject');
+  const hasDays = subjId && dayTotal(subjectDayCounts(subjId)) > 0;
+  subjBtn.hidden = !subjId;                                     // a new subject has no classes to cancel yet
+  subjBtn.disabled = !hasDays;
+  subjBtn.title = hasDays ? '' : 'Save its days first';
+  subjBtn.textContent = `Only ${pastCal.name || 'this subject'} cancelled`;
+  const ov = document.getElementById('past-overlay');
+  if (!ov.dataset.wired) { ov.dataset.wired = '1'; wirePastCalendar(); }
+  pastKind('college');
+  ov.classList.add('show');
+}
+function closePastDays() { if (pastCal) pastCal.drag = null; document.getElementById('past-overlay').classList.remove('show'); }
+function pastKind(kind) {
+  if (!pastCal) return;
+  pastCal.kind = kind;
+  for (const ds of pastCal.sel.college) pastCal.sel.subject.delete(ds);   // a holiday already covers that day
+  document.querySelectorAll('#past-overlay .past-kind [data-k]').forEach(b => {
+    const on = b.dataset.k === kind;
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on));
+  });
+  renderPastCalendar();
+  pastPreview();
+}
+// the timetable's classes per weekday the picked days are judged against
+function pastCounts() {
+  if (pastCal.kind === 'subject') return subjectDayCounts(pastCal.subjId);
+  const own = pastFormDays(pastCal.form);
+  return dayTotal(own) ? own : (pastCal.subjId ? subjectDayCounts(pastCal.subjId) : own);
+}
+function pastAnyClasses(ds) { return timetable.some(t => !t.isBreak && t.day === BunkEstimate.weekday(ds)); }
+// why a day can't be picked ('' = it can)
+function pastBlocked(ds) {
+  const { kind, start, end, subjId } = pastCal;
+  if (ds < start || ds > end) return 'outside';
+  if (kind === 'college') {
+    if (isHolidayDate(ds)) return '';
+    if (dateExceptions[ds]?.type === 'custom_day') return 'This day has a timetable swap: change it on Daily Classes';
+    const marked = Object.values(dailyPeriodLogs[ds] || {}).some(v => v?.status === 'p' || v?.status === 'a');
+    return marked ? 'Classes are marked that day: make it a holiday on Daily Classes' : '';
+  }
+  if (pastCal.sel.college.has(ds)) return 'College holiday';     // saved, or just picked under "College closed"
+  if (!subjectDayCounts(subjId)[BunkEstimate.weekday(ds)]) return 'No class that day';
+  const marked = Object.values(dailyPeriodLogs[ds] || {}).some(v => v?.subjectId === subjId && (v.status === 'p' || v.status === 'a'));
+  return marked ? 'Already marked that day on Daily Classes' : '';
+}
+function pastShiftMonth(step) {
+  const d = new Date(pastCal.view.y, pastCal.view.m + step, 1);
+  pastCal.view = { y: d.getFullYear(), m: d.getMonth() };
+  renderPastCalendar();
+}
+function renderPastCalendar() {
+  const box = document.getElementById('past-cal');
+  const { view: { y, m }, start, end, kind } = pastCal;
+  const sel = pastCal.sel[kind];
+  const first = new Date(y, m, 1), lead = (first.getDay() + 6) % 7, n = new Date(y, m + 1, 0).getDate();
+  const ym = (yy, mm) => yy * 12 + mm;
+  const atStart = ym(y, m) <= ym(+start.slice(0, 4), +start.slice(5, 7) - 1);
+  const atEnd = ym(y, m) >= ym(+end.slice(0, 4), +end.slice(5, 7) - 1);
+  const counts = kind === 'subject' ? subjectDayCounts(pastCal.subjId) : null;
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<span class="hc-day hc-blank" aria-hidden="true"></span>';
+  for (let d = 1; d <= n; d++) {
+    const ds = getLocalDateString(new Date(y, m, d));
+    const why = pastBlocked(ds), out = why === 'outside';
+    const hol = kind === 'subject' && pastCal.sel.college.has(ds);
+    const has = counts ? !!counts[BunkEstimate.weekday(ds)] : pastAnyClasses(ds);
+    const on = sel.has(ds);
+    const cls = ['hc-day', (out || (why && !hol)) && 'hc-past', hol && 'hc-hol', on && 'hc-sel', has && !out && 'hc-class'].filter(Boolean).join(' ');
+    const label = fmtDate(ds) + (out ? ' (outside the semester so far)' : why ? ` (${why})` : has ? '' : ' (no classes)');
+    cells += `<button type="button" class="${cls}" data-date="${ds}" ${why ? 'disabled' : ''} aria-pressed="${on}" aria-label="${escapeHTML(label)}"${why && !out ? ` title="${escapeHTML(why)}"` : ''}>${d}</button>`;
+  }
+  box.innerHTML = `
+    <div class="hc-head">
+      <button type="button" class="hc-nav" data-on-click="pastShiftMonth(-1)" ${atStart ? 'disabled' : ''} aria-label="Previous month">${ic('chevron-left', 'ic-sm')}</button>
+      <span class="hc-title">${first.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+      <button type="button" class="hc-nav" data-on-click="pastShiftMonth(1)" ${atEnd ? 'disabled' : ''} aria-label="Next month">${ic('chevron-right', 'ic-sm')}</button>
+    </div>
+    <div class="hc-week" aria-hidden="true"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+    <div class="hc-grid">${cells}</div>
+    <div class="hc-legend"><span><i class="hc-dot"></i> ${kind === 'subject' ? `${escapeHTML(pastCal.name)} that day` : 'has classes'}</span>${kind === 'subject' ? '<span><i class="hc-swatch"></i> college holiday</span>' : ''}</div>`;
+}
+function wirePastCalendar() {
+  const box = document.getElementById('past-cal');
+  const dayAt = e => {
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('.hc-day[data-date]');
+    return el && !el.disabled && box.contains(el) ? el.dataset.date : null;
+  };
+  const paint = to => {
+    const d = pastCal.drag, sel = new Set(d.base);
+    for (const ds of BunkEstimate.dates(...[d.anchor, to].sort())) if (!pastBlocked(ds)) d.add ? sel.add(ds) : sel.delete(ds);
+    pastCal.sel[pastCal.kind] = sel;
+    box.querySelectorAll('.hc-day[data-date]').forEach(el => {
+      el.classList.toggle('hc-sel', sel.has(el.dataset.date));
+      el.setAttribute('aria-pressed', String(sel.has(el.dataset.date)));
+    });
+    pastPreview();
+  };
+  box.addEventListener('pointerdown', e => {
+    const ds = dayAt(e);
+    if (!ds || !pastCal) return;
+    e.preventDefault();
+    const sel = pastCal.sel[pastCal.kind];
+    pastCal.drag = { anchor: ds, add: !sel.has(ds), base: new Set(sel), last: ds };
+    paint(ds);
+  });
+  box.addEventListener('pointermove', e => {
+    if (!pastCal?.drag) return;
+    const ds = dayAt(e);
+    if (ds && ds !== pastCal.drag.last) { pastCal.drag.last = ds; paint(ds); }
+  });
+  const end = () => { if (pastCal) pastCal.drag = null; };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  box.addEventListener('keydown', e => {
+    const el = e.target.closest?.('.hc-day[data-date]');
+    if (!el || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    pastToggle(el.dataset.date);
+    el.classList.toggle('hc-sel', pastCal.sel[pastCal.kind].has(el.dataset.date));
+    el.setAttribute('aria-pressed', String(pastCal.sel[pastCal.kind].has(el.dataset.date)));
+  });
+}
+function pastToggle(ds) {
+  const sel = pastCal.sel[pastCal.kind];
+  sel.has(ds) ? sel.delete(ds) : sel.add(ds);
+  pastPreview();
+}
+// drop one stretch from the picked list
+function pastDrop(start, end) {
+  const sel = pastCal.sel[pastCal.kind];
+  for (const ds of BunkEstimate.dates(start, end)) sel.delete(ds);
+  renderPastCalendar();
+  pastPreview();
+}
+function pastChanges() {
+  const diff = (a, b) => [...a].filter(x => !b.has(x)).sort();
+  const { sel, orig } = pastCal;
+  return { addH: diff(sel.college, orig.college), delH: diff(orig.college, sel.college),
+           addC: diff(sel.subject, orig.subject), delC: diff(orig.subject, sel.subject) };
+}
+function pastPreview() {
+  const { kind } = pastCal, sel = pastCal.sel[kind];
+  const list = document.getElementById('past-list');
+  const groups = BunkEstimate.stretches([...sel]);
+  list.innerHTML = groups.length ? '<div class="past-chips">' + groups.map(g =>
+    `<button type="button" class="past-chip" data-on-click="pastDrop('${g.start}','${g.end}')" aria-label="Remove ${escapeHTML(g.start === g.end ? fmtDate(g.start) : `${fmtShort(g.start)} to ${fmtShort(g.end)}`)}">`
+    + `${escapeHTML(g.start === g.end ? fmtShort(g.start) : `${fmtShort(g.start)} – ${fmtShort(g.end)}`)} ${ic('x', 'ic-sm')}</button>`).join('') + '</div>' : '';
+  const box = document.getElementById('past-preview');
+  box.classList.remove('is-error');
+  const counts = pastCounts();
+  const lost = [...sel].reduce((n, ds) => n + (counts[BunkEstimate.weekday(ds)] || 0), 0);
+  const who = pastCal.name || 'this subject';
+  const ch = pastChanges(), changed = ch.addH.length + ch.delH.length + ch.addC.length + ch.delC.length;
+  const head = !sel.size ? (kind === 'college' ? 'No holidays picked. Tap a day, or drag across a few.' : `No cancelled ${escapeHTML(who)} classes picked.`)
+    : `${nWord(sel.size, 'day', 'days')} · ${dayTotal(counts) ? `${nWord(lost, 'class', 'classes')} of ${escapeHTML(who)} not counted` : 'pick its days to see its classes'}`;
+  box.innerHTML = head + (kind === 'college' && sel.size ? '<br><span class="prev-note">Every subject skips its classes on these days.</span>' : '');
+  const btn = document.getElementById('past-save');
+  btn.disabled = !changed;
+  btn.textContent = changed ? 'Save' : 'No changes';
+}
+async function savePastDays() {
+  if (!pastCal) return;
+  const { addH, delH, addC, delC } = pastChanges();
+  const { subjId, form } = pastCal;
+  const btn = document.getElementById('past-save');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  let failed = false;
+  await keepEstimatesInStep(async () => {
+    for (const ds of addH) { dateExceptions[ds] = { type: 'holiday', note: 'College Holiday' }; saveDateExceptionToDB(ds, 'holiday'); }
+    for (const ds of delH) { delete dateExceptions[ds]; saveDateExceptionToDB(ds, null); }
+    // a cancelled day: every timetable class of the subject that day gets "No class" (Thursday x2 = both)
+    const rows = [];
+    for (const ds of addC) {
+      for (const t of timetable.filter(t => t.subjectId === subjId && !t.isBreak && t.day === BunkEstimate.weekday(ds))) {
+        (dailyPeriodLogs[ds] ||= {})[t.id] = { status: 'cancelled', subjectId: subjId, periodIndex: t.period, entryId: t.id };
+        rows.push({ user_id: currentUser?.id, date: ds, entry_id: t.id, subject_id: subjId, period_index: t.period, status: 'cancelled' });
+      }
+    }
+    const drop = [];
+    for (const ds of delC) {
+      for (const [k, v] of Object.entries(dailyPeriodLogs[ds] || {})) {
+        if (v?.status === 'cancelled' && v.subjectId === subjId && !k.startsWith('makeup_') && !k.startsWith('extra_')) {
+          delete dailyPeriodLogs[ds][k]; drop.push([ds, k]);
+        }
+      }
+    }
+    if (!currentUser) return;
+    try {
+      if (rows.length) {
+        const { error } = await supabaseClient.from('daily_period_logs').upsert(rows, { onConflict: 'user_id,date,entry_id' });
+        if (error) throw error;
+      }
+      for (const [ds, k] of drop) {
+        const { error } = await supabaseClient.from('daily_period_logs').delete()
+          .eq('user_id', currentUser.id).eq('date', ds).eq('entry_id', k);
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.warn('Cancelled classes sync warning:', err.message);
+      failed = true;
+    }
+    localStorage.setItem('bk_daily_period_logs_' + currentUser.id, JSON.stringify(dailyPeriodLogs));
+  });
+  closePastDays();
+  refreshAfterCalendarChange(form);
+  const n = addH.length + addC.length, r = delH.length + delC.length;
+  toast(failed ? 'Saved on this device, but the cancelled classes could not sync' : [n && `${nWord(n, 'day', 'days')} added`, r && `${r} removed`].filter(Boolean).join(' · ') + ' · estimates updated 🏖️', failed ? 'err' : 'ok');
+}
+// Redraw what the calendar change moved, keeping whatever is typed into the open subject form
+function refreshAfterCalendarChange(form) {
+  if (form === 'edit' && currPage === 'subject' && currSubjId) {
+    const body = document.querySelector('#edit-card .edit-body');
+    const typed = [...body.querySelectorAll('input[id]')].map(el => [el.id, el.value, el.dataset.typed]);
+    const mode = editMode, days = dayPickers['edit-days'] ? JSON.parse(JSON.stringify(dayPickers['edit-days'])) : null;
+    renderSubject(currSubjId, true);
+    for (const [id, v, t] of typed) { const el = document.getElementById(id); if (el) { el.value = v; if (t !== undefined) el.dataset.typed = t; } }
+    if (days) { dayPickers['edit-days'] = days; renderDayPicker('edit-days'); }
+    syncSemPairs();
+    setEditMode(mode);
+  } else if (form === 'add') {
+    updateAddPreview();
+  }
+  renderPastRow(form);
+  renderNav();
+  if (currPage === 'home') renderHome();
+  if (currPage === 'tracker') renderTracker();
 }
 
 // Remove every mark on a date and take it back out of the subject totals.

@@ -40,7 +40,9 @@
     'pickTimetableFile', 'openTimetablePicker', 'keyActivate', 'closeSafeBunksAndGo', 'removeSetupRow',
     'studioSelectCell', 'openDayOrderSetup', 'deleteAllMyData',
     'editDisplayName', 'changePassword', 'logoutEverywhere', 'setThemeMode', 'setFixSharing', 'downloadMyData',
-    'startTour', 'setPricePeriod', 'joinProWaitlist', 'submitPasswordChange', 'closePasswordDialog', 'resendPasswordCode'
+    'startTour', 'setPricePeriod', 'joinProWaitlist', 'submitPasswordChange', 'closePasswordDialog', 'resendPasswordCode',
+    // Estimate mode: past holidays & cancellations
+    'openPastDays', 'closePastDays', 'pastKind', 'pastShiftMonth', 'pastDrop', 'savePastDays'
   ]);
 
   // ── the call parser ──────────────────────────────────────────────────────────────────────────────────────────
