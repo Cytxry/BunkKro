@@ -2596,12 +2596,6 @@ function subjectPreviewHTML(v) {
       : b.reachable ? `skip up to <strong>${b.semBunks}</strong> of them and you still finish at ${t}%.`
         : `even attending all of them, you'd finish at <strong>${b.finishAll}%</strong>.`);
   }
-  // Estimate: say which semester total is used, so a holiday is never taken off twice
-  if (v.mode === 'estimate' && v.days) {
-    html += '<br><span class="prev-note">' + (v.semTotal
-      ? `${v.present} attended + ${v.total - v.present} missed + ${v.semTotal - v.total} left = the ${v.semTotal} you typed. Holidays aren't taken off your total again.`
-      : 'Classes left are counted from its days up to your last day of classes, skipping holidays.') + '</span>';
-  }
   return html;
 }
 
@@ -6599,7 +6593,8 @@ function renderPastRow(form) {
   const subjId = form === 'edit' ? currSubjId : null;
   const n = end ? pastSaved('college', null, start, end).size : 0;
   const c = end && subjId ? pastSaved('subject', subjId, start, end).size : 0;
-  out.textContent = !end ? 'Pick dates' : n || c ? [n && nWord(n, 'holiday', 'holidays'), c && `${c} cancelled`].filter(Boolean).join(' · ') : 'Pick dates';
+  out.textContent = n || c ? [n && nWord(n, 'holiday', 'holidays'), c && `${c} cancelled`].filter(Boolean).join(' · ') + ' · tap to change'
+    : "Optional · pick the days classes didn't happen";
 }
 function openPastDays(form) {
   const start = pastFormStart(form), end = pastWindow(start);

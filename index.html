@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" href="/favicon.jpg">
 <link rel="icon" type="image/png" href="/favicon2.jpg">
 <link rel="preload" href="assets/fonts/DMSans-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="bunkkkro.css?v=20261127q">
+<link rel="stylesheet" href="bunkkkro.css?v=20261127r">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
@@ -315,8 +315,10 @@
           <div class="edit-grid">
             <div class="field"><label for="inp-semstart">Semester start <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="inp-semstart"></div>
             <div class="field"><label for="inp-est-absent">Classes missed so far</label><input type="number" id="inp-est-absent" placeholder="e.g. 5" min="0" inputmode="numeric"></div>
-            <div class="past-row"><div class="past-head"><span class="past-lbl">Past holidays &amp; cancellations <span class="field-hint">(optional)</span></span>
-              <button type="button" class="past-btn" data-on-click="openPastDays('edit')"><svg class="ic ic-sm"><use href="#i-calendar"/></svg> <span id="edit-past-count">Pick dates</span></button></div>
+            <div class="past-row"><button type="button" class="past-card" data-on-click="openPastDays('edit')">
+              <span class="past-ic"><svg class="ic"><use href="#i-calendar"/></svg></span>
+              <span class="past-txt"><strong>Past holidays &amp; cancellations</strong><span class="past-sub" id="edit-past-count">Optional · pick the days classes didn't happen</span></span>
+              <svg class="ic ic-sm past-go" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
               <details class="past-why"><summary>Why are we asking this?</summary><p>Select holidays that occurred after your semester started. BunkKro will exclude classes scheduled on those dates so your estimated attendance is more accurate.</p></details></div>
             <div class="field"><label for="inp-est-target">Target % <span class="field-hint">(blank = global)</span></label><input type="number" id="inp-est-target" placeholder="e.g. 75" min="1" max="100" inputmode="numeric"></div>
             <div class="field">
@@ -1193,8 +1195,10 @@
     <div id="add-est-fields" style="display:none">
       <div class="mf"><label for="as-semstart">Semester start date <span class="field-hint">(shared by all subjects)</span></label><input type="date" id="as-semstart"></div>
       <div class="mf"><label for="as-missed">Classes missed so far</label><input type="number" id="as-missed" placeholder="0" min="0" inputmode="numeric"></div>
-      <div class="past-row"><div class="past-head"><span class="past-lbl">Past holidays &amp; cancellations <span class="field-hint">(optional)</span></span>
-              <button type="button" class="past-btn" data-on-click="openPastDays('add')"><svg class="ic ic-sm"><use href="#i-calendar"/></svg> <span id="as-past-count">Pick dates</span></button></div>
+      <div class="past-row"><button type="button" class="past-card" data-on-click="openPastDays('add')">
+              <span class="past-ic"><svg class="ic"><use href="#i-calendar"/></svg></span>
+              <span class="past-txt"><strong>Past holidays &amp; cancellations</strong><span class="past-sub" id="as-past-count">Optional · pick the days classes didn't happen</span></span>
+              <svg class="ic ic-sm past-go" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
               <details class="past-why"><summary>Why are we asking this?</summary><p>Select holidays that occurred after your semester started. BunkKro will exclude classes scheduled on those dates so your estimated attendance is more accurate.</p></details></div>
       <div class="form-grid-2">
         <div class="mf"><label for="as-semtotal">Total classes this semester</label><input type="number" id="as-semtotal" placeholder="e.g. 60" min="0" inputmode="numeric"></div>
@@ -1239,7 +1243,7 @@
 <script src="clock.js?v=20261108"></script>
 <script src="ai-config.js?v=20261126m"></script>
 <script src="ai-bridge.js?v=20261126p"></script>
-<script src="bunkke.js?v=20261127q"></script>
+<script src="bunkke.js?v=20261127r"></script>
 <script src="settings.js?v=20261127f"></script>
 <script src="ai-confirm.js?v=20261127"></script>
 </body>
