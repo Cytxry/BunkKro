@@ -16,7 +16,7 @@
 <link rel="icon" type="image/png" href="/favicon.jpg">
 <link rel="icon" type="image/png" href="/favicon2.jpg">
 <link rel="preload" href="assets/fonts/DMSans-latin.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="bunkkkro.css?v=20261127r">
+<link rel="stylesheet" href="bunkkkro.css?v=20261127s">
 <!-- Supabase, pinned and checked by hash. The built-in scanner's Tesseract.js and OpenCV.js (~11 MB) load only when
      the scanner runs (actions.js: loadScannerLibs), also pinned and hash-checked. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
@@ -974,8 +974,9 @@
 
 <!-- ══════ UPCOMING HOLIDAYS (from a circular, ahead of time) ══════ -->
 <div class="overlay" id="hol-overlay" role="dialog" aria-modal="true" aria-labelledby="hol-title">
-  <div class="modal" style="max-width:460px;position:relative">
+  <div class="modal cal-modal">
     <button class="modal-x" data-on-click="closeHolidayPlanner()" aria-label="Close">&times;</button>
+    <div class="cal-modal-body">
     <div class="modal-hero">
       <div><h2 id="hol-title">Upcoming holidays 🗓️</h2>
       <p class="sub">Got a circular? Tap the days (or drag across a few) — they won't count as absent, and BunkKro plans around them.</p></div>
@@ -983,19 +984,21 @@
     </div>
     <div class="hol-cal" id="hol-cal" aria-label="Pick holiday days"></div>
     <div class="mf"><label for="hol-name">Name <span class="field-hint">(optional)</span></label><input type="text" id="hol-name" maxlength="40" placeholder="e.g. Diwali break, Sports day"></div>
-    <div class="hol-foot">
-      <div class="form-preview" id="hol-preview" aria-live="polite"></div>
-      <div class="modal-btns"><button class="btn-pri" id="hol-add" data-on-click="addPlannedHolidays()">Add holiday</button></div>
-    </div>
     <div class="hol-list-title">Coming up</div>
     <div id="hol-list"></div>
+    </div>
+    <div class="cal-modal-foot">
+      <div class="form-preview" id="hol-preview" aria-live="polite"></div>
+      <button class="btn-pri" id="hol-add" data-on-click="addPlannedHolidays()">Add holiday</button>
+    </div>
   </div>
 </div>
 
 <!-- ══════ PAST HOLIDAYS & CANCELLATIONS (Estimate mode) ══════ -->
 <div class="overlay" id="past-overlay" role="dialog" aria-modal="true" aria-labelledby="past-title">
-  <div class="modal" style="max-width:460px;position:relative">
+  <div class="modal cal-modal">
     <button class="modal-x" data-on-click="closePastDays()" aria-label="Close">&times;</button>
+    <div class="cal-modal-body">
     <div class="modal-hero">
       <div><h2 id="past-title">Past holidays 🏖️</h2>
       <p class="sub">Days since your semester started when classes didn't happen. Tap a day, or drag across a few.</p></div>
@@ -1007,9 +1010,10 @@
     </div>
     <div class="hol-cal" id="past-cal" aria-label="Pick past days"></div>
     <div id="past-list"></div>
-    <div class="hol-foot">
+    </div>
+    <div class="cal-modal-foot">
       <div class="form-preview" id="past-preview" aria-live="polite"></div>
-      <div class="modal-btns"><button class="btn-sec" data-on-click="closePastDays()">Cancel</button><button class="btn-pri" id="past-save" data-on-click="savePastDays()">Save</button></div>
+      <button class="btn-pri" id="past-save" data-on-click="savePastDays()">Save</button>
     </div>
   </div>
 </div>
@@ -1243,7 +1247,7 @@
 <script src="clock.js?v=20261108"></script>
 <script src="ai-config.js?v=20261126m"></script>
 <script src="ai-bridge.js?v=20261126p"></script>
-<script src="bunkke.js?v=20261127r"></script>
+<script src="bunkke.js?v=20261127s"></script>
 <script src="settings.js?v=20261127f"></script>
 <script src="ai-confirm.js?v=20261127"></script>
 </body>

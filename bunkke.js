@@ -6441,7 +6441,7 @@ function renderHolidayCalendar() {
     </div>
     <div class="hc-week" aria-hidden="true"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
     <div class="hc-grid">${cells}</div>
-    <div class="hc-legend"><span><i class="hc-dot"></i> has classes</span><span><i class="hc-swatch"></i> already a holiday</span></div>`;
+    <div class="hc-legend"><span><i class="hc-dot"></i> has classes</span><span><i class="hc-swatch picked"></i> picked</span><span><i class="hc-swatch"></i> already a holiday</span></div>`;
 }
 function wireHolidayCalendar() {
   const box = document.getElementById('hol-cal');
@@ -6689,7 +6689,7 @@ function renderPastCalendar() {
     </div>
     <div class="hc-week" aria-hidden="true"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
     <div class="hc-grid">${cells}</div>
-    <div class="hc-legend"><span><i class="hc-dot"></i> ${kind === 'subject' ? `${escapeHTML(pastCal.name)} that day` : 'has classes'}</span>${kind === 'subject' ? '<span><i class="hc-swatch"></i> college holiday</span>' : ''}</div>`;
+    <div class="hc-legend"><span><i class="hc-dot"></i> ${kind === 'subject' ? `${escapeHTML(pastCal.name)} that day` : 'has classes'}</span><span><i class="hc-swatch picked"></i> picked</span>${kind === 'subject' ? '<span><i class="hc-swatch"></i> college holiday</span>' : ''}</div>`;
 }
 function wirePastCalendar() {
   const box = document.getElementById('past-cal');
